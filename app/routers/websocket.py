@@ -3,6 +3,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.models import Auction
@@ -23,9 +24,10 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
 
-                db = SessionLocal()
-                try:
-                    auction = db.query(Auction).filter(Auction.id == auction_id).first()
+                async with SessionLocal() as db:
+                    auction = (
+                        await db.execute(select(Auction).where(Auction.id == auction_id))
+                    ).scalar_one_or_none()
                     if auction:
                         time_remaining = int((auction.end_time - utcnow()).total_seconds())
                         await websocket.send_json({
@@ -33,8 +35,6 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
                             "time_remaining": max(0, time_remaining),
                             "current_price": float(auction.current_price),
                         })
-                finally:
-                    db.close()
 
             except asyncio.TimeoutError:
                 try:

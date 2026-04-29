@@ -1,5 +1,5 @@
-def test_register_creates_user_and_returns_token(client):
-    response = client.post("/api/register", json={
+async def test_register_creates_user_and_returns_token(client):
+    response = await client.post("/api/register", json={
         "username": "newuser",
         "email": "new@example.com",
         "password": "secret123",
@@ -12,8 +12,8 @@ def test_register_creates_user_and_returns_token(client):
     assert body["user"]["balance"] == 1000.0
 
 
-def test_register_duplicate_username_rejected(client, registered_user):
-    response = client.post("/api/register", json={
+async def test_register_duplicate_username_rejected(client, registered_user):
+    response = await client.post("/api/register", json={
         "username": registered_user["user"]["username"],
         "email": "different@example.com",
         "password": "whatever",
@@ -22,8 +22,8 @@ def test_register_duplicate_username_rejected(client, registered_user):
     assert "Username" in response.json()["detail"]
 
 
-def test_register_duplicate_email_rejected(client, registered_user):
-    response = client.post("/api/register", json={
+async def test_register_duplicate_email_rejected(client, registered_user):
+    response = await client.post("/api/register", json={
         "username": "different",
         "email": registered_user["user"]["email"],
         "password": "whatever",
@@ -32,8 +32,8 @@ def test_register_duplicate_email_rejected(client, registered_user):
     assert "Email" in response.json()["detail"]
 
 
-def test_login_with_correct_password(client, registered_user):
-    response = client.post("/api/login", json={
+async def test_login_with_correct_password(client, registered_user):
+    response = await client.post("/api/login", json={
         "username": registered_user["user"]["username"],
         "password": registered_user["password"],
     })
@@ -41,20 +41,20 @@ def test_login_with_correct_password(client, registered_user):
     assert "token" in response.json()
 
 
-def test_login_with_wrong_password_returns_401(client, registered_user):
-    response = client.post("/api/login", json={
+async def test_login_with_wrong_password_returns_401(client, registered_user):
+    response = await client.post("/api/login", json={
         "username": registered_user["user"]["username"],
         "password": "wrong-password",
     })
     assert response.status_code == 401
 
 
-def test_me_returns_current_user(client, registered_user):
-    response = client.get("/api/me", headers=registered_user["headers"])
+async def test_me_returns_current_user(client, registered_user):
+    response = await client.get("/api/me", headers=registered_user["headers"])
     assert response.status_code == 200
     assert response.json()["username"] == registered_user["user"]["username"]
 
 
-def test_me_without_token_rejected(client):
-    response = client.get("/api/me")
+async def test_me_without_token_rejected(client):
+    response = await client.get("/api/me")
     assert response.status_code == 403  # HTTPBearer returns 403 when no token

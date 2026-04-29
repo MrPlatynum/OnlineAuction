@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Auction, Review, User
@@ -10,13 +11,14 @@ router = APIRouter(prefix="/api", tags=["reviews"])
 
 
 @router.get("/sellers/{seller_id}/reviews")
-def get_seller_reviews(seller_id: int, db: Session = Depends(get_db)):
+async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db)):
     reviews = (
-        db.query(Review)
-        .filter(Review.seller_id == seller_id)
-        .order_by(Review.created_at.desc())
-        .all()
-    )
+        await db.execute(
+            select(Review)
+            .where(Review.seller_id == seller_id)
+            .order_by(Review.created_at.desc())
+        )
+    ).scalars().all()
     total = len(reviews)
     avg = round(sum(r.rating for r in reviews) / total, 1) if total else 0
     dist = {i: 0 for i in range(1, 6)}
@@ -24,18 +26,22 @@ def get_seller_reviews(seller_id: int, db: Session = Depends(get_db)):
         dist[r.rating] = dist.get(r.rating, 0) + 1
 
     reviewer_ids = [r.reviewer_id for r in reviews]
-    reviewers = (
-        {u.id: u for u in db.query(User).filter(User.id.in_(reviewer_ids)).all()}
-        if reviewer_ids
-        else {}
-    )
+    if reviewer_ids:
+        users = (
+            await db.execute(select(User).where(User.id.in_(reviewer_ids)))
+        ).scalars().all()
+        reviewers = {u.id: u for u in users}
+    else:
+        reviewers = {}
 
     auction_ids = [r.auction_id for r in reviews if r.auction_id]
-    auctions_map = (
-        {a.id: a for a in db.query(Auction).filter(Auction.id.in_(auction_ids)).all()}
-        if auction_ids
-        else {}
-    )
+    if auction_ids:
+        auctions = (
+            await db.execute(select(Auction).where(Auction.id.in_(auction_ids)))
+        ).scalars().all()
+        auctions_map = {a.id: a for a in auctions}
+    else:
+        auctions_map = {}
 
     return {
         "stats": {"total": total, "avg": avg, "distribution": dist},
@@ -56,25 +62,27 @@ def get_seller_reviews(seller_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/reviews")
-def create_review(
+async def create_review(
     data: ReviewCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     if data.seller_id == current_user.id:
         raise HTTPException(400, "Нельзя оставить отзыв о себе")
-    seller = db.query(User).filter(User.id == data.seller_id).first()
+    seller = (
+        await db.execute(select(User).where(User.id == data.seller_id))
+    ).scalar_one_or_none()
     if not seller:
         raise HTTPException(404, "Продавец не найден")
     if data.auction_id:
         exists = (
-            db.query(Review)
-            .filter(
-                Review.reviewer_id == current_user.id,
-                Review.auction_id == data.auction_id,
+            await db.execute(
+                select(Review).where(
+                    Review.reviewer_id == current_user.id,
+                    Review.auction_id == data.auction_id,
+                )
             )
-            .first()
-        )
+        ).scalar_one_or_none()
         if exists:
             raise HTTPException(400, "Вы уже оставили отзыв на этот аукцион")
     review = Review(
@@ -85,21 +93,23 @@ def create_review(
         comment=data.comment,
     )
     db.add(review)
-    db.commit()
+    await db.commit()
     return {"message": "Отзыв добавлен", "id": review.id}
 
 
 @router.delete("/reviews/{review_id}")
-def delete_review(
+async def delete_review(
     review_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    review = db.query(Review).filter(Review.id == review_id).first()
+    review = (
+        await db.execute(select(Review).where(Review.id == review_id))
+    ).scalar_one_or_none()
     if not review:
         raise HTTPException(404, "Отзыв не найден")
     if review.reviewer_id != current_user.id:
         raise HTTPException(403, "Нельзя удалить чужой отзыв")
-    db.delete(review)
-    db.commit()
+    await db.delete(review)
+    await db.commit()
     return {"message": "Отзыв удалён"}

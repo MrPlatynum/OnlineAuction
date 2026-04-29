@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Auction, Bid, User
@@ -10,10 +11,10 @@ router = APIRouter(prefix="/api", tags=["users"])
 
 
 @router.put("/notification-settings")
-def update_notification_settings(
+async def update_notification_settings(
     settings: NotificationSettings,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     current_user.email_notifications = settings.email_notifications
     current_user.notify_outbid = settings.notify_outbid
@@ -21,44 +22,51 @@ def update_notification_settings(
     current_user.notify_ending = settings.notify_ending
     current_user.notify_sold = settings.notify_sold
 
-    db.commit()
+    await db.commit()
     return {"message": "Settings updated successfully"}
 
 
 @router.get("/users/{username}")
-def get_user_profile(username: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
+async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
+    user = (
+        await db.execute(select(User).where(User.username == username))
+    ).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     auctions = (
-        db.query(Auction)
-        .filter(Auction.created_by == user.id)
-        .order_by(Auction.start_time.desc())
-        .all()
-    )
-    my_bids = db.query(Bid).filter(Bid.user_id == user.id).all()
-    bid_auction_ids = list(set(b.auction_id for b in my_bids))
-
-    won_count = (
-        db.query(Auction)
-        .filter(Auction.winner_id == user.id, Auction.is_completed == True)
-        .count()
-    )
-
-    lost_count = (
-        db.query(Auction)
-        .filter(
-            Auction.id.in_(bid_auction_ids),
-            Auction.is_completed == True,
-            Auction.winner_id != user.id,
+        await db.execute(
+            select(Auction)
+            .where(Auction.created_by == user.id)
+            .order_by(Auction.start_time.desc())
         )
-        .count()
+    ).scalars().all()
+    my_bids = (
+        await db.execute(select(Bid).where(Bid.user_id == user.id))
+    ).scalars().all()
+    bid_auction_ids = list({b.auction_id for b in my_bids})
+
+    won_count = await db.scalar(
+        select(func.count())
+        .select_from(Auction)
+        .where(Auction.winner_id == user.id, Auction.is_completed == True)
     )
 
-    auction_list = []
-    for a in auctions:
-        auction_list.append({
+    if bid_auction_ids:
+        lost_count = await db.scalar(
+            select(func.count())
+            .select_from(Auction)
+            .where(
+                Auction.id.in_(bid_auction_ids),
+                Auction.is_completed == True,
+                Auction.winner_id != user.id,
+            )
+        )
+    else:
+        lost_count = 0
+
+    auction_list = [
+        {
             "id": a.id,
             "title": a.title,
             "current_price": float(a.current_price),
@@ -67,7 +75,9 @@ def get_user_profile(username: str, db: Session = Depends(get_db)):
             "is_completed": a.is_completed,
             "end_time": a.end_time.isoformat(),
             "winner_id": a.winner_id,
-        })
+        }
+        for a in auctions
+    ]
 
     return {
         "user": {

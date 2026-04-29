@@ -1,10 +1,10 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Transaction, User
 
 
 def add_transaction(
-    db: Session,
+    db: AsyncSession,
     user: User,
     tx_type: str,
     amount: float,

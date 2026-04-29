@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Notification, NotificationType, User
 from app.services.email import build_notification_email_html, send_email_notification
@@ -21,8 +21,8 @@ def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
     task.add_done_callback(_pending_email_tasks.discard)
 
 
-def create_notification(
-    db: Session,
+async def create_notification(
+    db: AsyncSession,
     user_id: int,
     notification_type: NotificationType,
     title: str,
@@ -40,13 +40,13 @@ def create_notification(
         auction_title=auction_title,
     )
     db.add(notification)
-    db.commit()
-    db.refresh(notification)
+    await db.commit()
+    await db.refresh(notification)
     return notification
 
 
 async def notify_user(
-    db: Session,
+    db: AsyncSession,
     user: User,
     notification_type: NotificationType,
     title: str,
@@ -57,7 +57,7 @@ async def notify_user(
 ):
     """In-app + email уведомление пользователя."""
 
-    notification = create_notification(
+    notification = await create_notification(
         db, user.id, notification_type, title, message, auction_id, auction_title
     )
 

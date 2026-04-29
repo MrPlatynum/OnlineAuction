@@ -2,7 +2,8 @@ from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select, delete as sql_delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import (
@@ -26,10 +27,10 @@ router = APIRouter(prefix="/api", tags=["auctions"])
 
 
 @router.post("/auctions", response_model=AuctionResponse)
-def create_auction(
+async def create_auction(
     auction: AuctionCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     start_time = utcnow()
     end_time = start_time + timedelta(minutes=auction.duration_minutes)
@@ -48,22 +49,22 @@ def create_auction(
         bin_price=auction.bin_price,
     )
     db.add(db_auction)
-    db.commit()
-    db.refresh(db_auction)
+    await db.commit()
+    await db.refresh(db_auction)
 
     all_urls = auction.image_urls or ([auction.image_url] if auction.image_url else [])
     for i, url in enumerate(all_urls):
         db.add(AuctionImage(auction_id=db_auction.id, url=url, order=i))
     if all_urls:
-        db.commit()
+        await db.commit()
 
     subscribers = (
-        db.query(Subscription)
-        .filter(Subscription.seller_id == current_user.id)
-        .all()
-    )
+        await db.execute(
+            select(Subscription).where(Subscription.seller_id == current_user.id)
+        )
+    ).scalars().all()
     for sub in subscribers:
-        create_notification(
+        await create_notification(
             db=db,
             user_id=sub.subscriber_id,
             notification_type=NotificationType.NEW_LOT,
@@ -73,11 +74,14 @@ def create_auction(
             auction_title=db_auction.title,
         )
 
-    cat = (
-        db.query(Category).filter(Category.id == db_auction.category_id).first()
-        if db_auction.category_id
-        else None
-    )
+    cat = None
+    if db_auction.category_id:
+        cat = (
+            await db.execute(
+                select(Category).where(Category.id == db_auction.category_id)
+            )
+        ).scalar_one_or_none()
+
     auction_dict = {
         "id": db_auction.id,
         "title": db_auction.title,
@@ -108,16 +112,18 @@ def create_auction(
 async def buy_now(
     auction_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    auction = db.query(Auction).filter(Auction.id == auction_id).first()
+    auction = (
+        await db.execute(select(Auction).where(Auction.id == auction_id))
+    ).scalar_one_or_none()
     if not auction:
         raise HTTPException(404, "Аукцион не найден")
     if not auction.is_active:
         raise HTTPException(400, "Аукцион завершён")
     if utcnow() > auction.end_time:
         auction.is_active = False
-        db.commit()
+        await db.commit()
         raise HTTPException(400, "Аукцион завершён")
     if auction.auction_type != "bin":
         raise HTTPException(400, "Этот аукцион не поддерживает покупку сразу")
@@ -142,16 +148,17 @@ async def buy_now(
     auction.winner_id = current_user.id
     auction.end_time = utcnow()
 
-    creator_bin = db.query(User).filter(User.id == auction.created_by).first()
-    if creator_bin:
-        creator_bin.balance += auction.bin_price
+    creator = (
+        await db.execute(select(User).where(User.id == auction.created_by))
+    ).scalar_one_or_none()
+    if creator:
+        creator.balance += auction.bin_price
         add_transaction(
-            db, creator_bin, "auction_sale", auction.bin_price,
+            db, creator, "auction_sale", auction.bin_price,
             f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
         )
-    db.commit()
+    await db.commit()
 
-    creator = db.query(User).filter(User.id == auction.created_by).first()
     if creator:
         await notify_user(
             db, creator, NotificationType.AUCTION_SOLD,
@@ -164,7 +171,7 @@ async def buy_now(
 
 
 @router.get("/auctions", response_model=PaginatedAuctionsResponse)
-def get_auctions(
+async def get_auctions(
     page: int = Query(1, ge=1),
     page_size: int = Query(12, ge=1, le=50),
     status: str = Query("active", regex="^(active|completed|all)$"),
@@ -175,51 +182,60 @@ def get_auctions(
     created_by: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     auction_type: Optional[str] = Query(None),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    query = db.query(Auction)
+    query = select(Auction)
 
     if status == "active":
-        query = query.filter(Auction.is_active == True)
+        query = query.where(Auction.is_active == True)
     elif status == "completed":
-        query = query.filter(Auction.is_completed == True)
+        query = query.where(Auction.is_completed == True)
 
     if search:
         search_pattern = f"%{search}%"
-        query = query.filter(
+        query = query.where(
             (Auction.title.ilike(search_pattern))
             | (Auction.description.ilike(search_pattern))
         )
 
     if min_price is not None:
-        query = query.filter(Auction.current_price >= min_price)
-
+        query = query.where(Auction.current_price >= min_price)
     if max_price is not None:
-        query = query.filter(Auction.current_price <= max_price)
+        query = query.where(Auction.current_price <= max_price)
 
     if created_by:
-        creator_user = db.query(User).filter(User.username == created_by).first()
+        creator_user = (
+            await db.execute(select(User).where(User.username == created_by))
+        ).scalar_one_or_none()
         if creator_user:
-            query = query.filter(Auction.created_by == creator_user.id)
+            query = query.where(Auction.created_by == creator_user.id)
         else:
-            query = query.filter(Auction.id == -1)
+            query = query.where(Auction.id == -1)
 
     if category:
-        cat_obj = db.query(Category).filter(Category.slug == category).first()
+        cat_obj = (
+            await db.execute(select(Category).where(Category.slug == category))
+        ).scalar_one_or_none()
         if cat_obj:
             cat_ids = [cat_obj.id]
-            children = db.query(Category).filter(Category.parent_id == cat_obj.id).all()
+            children = (
+                await db.execute(
+                    select(Category).where(Category.parent_id == cat_obj.id)
+                )
+            ).scalars().all()
             cat_ids += [c.id for c in children]
-            query = query.filter(Auction.category_id.in_(cat_ids))
+            query = query.where(Auction.category_id.in_(cat_ids))
         else:
-            query = query.filter(Auction.id == -1)
+            query = query.where(Auction.id == -1)
 
     if auction_type == "bid":
-        query = query.filter(Auction.auction_type == "bid")
+        query = query.where(Auction.auction_type == "bid")
     elif auction_type == "bin":
-        query = query.filter(Auction.auction_type == "bin")
+        query = query.where(Auction.auction_type == "bin")
 
-    total = query.count()
+    total = await db.scalar(
+        select(func.count()).select_from(query.subquery())
+    )
     total_pages = (total + page_size - 1) // page_size
 
     if sort_by == "time":
@@ -230,18 +246,26 @@ def get_auctions(
         query = query.order_by(Auction.current_price.desc())
 
     offset = (page - 1) * page_size
-    auctions = query.offset(offset).limit(page_size).all()
+    auctions = (
+        await db.execute(query.offset(offset).limit(page_size))
+    ).scalars().all()
 
     result = []
     for auction in auctions:
-        bids_count = db.query(Bid).filter(Bid.auction_id == auction.id).count()
-        creator = db.query(User).filter(User.id == auction.created_by).first()
-        cat = (
-            db.query(Category).filter(Category.id == auction.category_id).first()
-            if auction.category_id
-            else None
+        bids_count = await db.scalar(
+            select(func.count()).select_from(Bid).where(Bid.auction_id == auction.id)
         )
-        image_urls = get_image_urls(auction, db)
+        creator = (
+            await db.execute(select(User).where(User.id == auction.created_by))
+        ).scalar_one_or_none()
+        cat = None
+        if auction.category_id:
+            cat = (
+                await db.execute(
+                    select(Category).where(Category.id == auction.category_id)
+                )
+            ).scalar_one_or_none()
+        image_urls = await get_image_urls(auction, db)
         auction_dict = {
             "id": auction.id,
             "title": auction.title,
@@ -278,19 +302,27 @@ def get_auctions(
 
 
 @router.get("/auctions/{auction_id}", response_model=AuctionResponse)
-def get_auction(auction_id: int, db: Session = Depends(get_db)):
-    auction = db.query(Auction).filter(Auction.id == auction_id).first()
+async def get_auction(auction_id: int, db: AsyncSession = Depends(get_db)):
+    auction = (
+        await db.execute(select(Auction).where(Auction.id == auction_id))
+    ).scalar_one_or_none()
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
 
-    bids_count = db.query(Bid).filter(Bid.auction_id == auction_id).count()
-    creator = db.query(User).filter(User.id == auction.created_by).first()
-    cat = (
-        db.query(Category).filter(Category.id == auction.category_id).first()
-        if auction.category_id
-        else None
+    bids_count = await db.scalar(
+        select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
-    image_urls = get_image_urls(auction, db)
+    creator = (
+        await db.execute(select(User).where(User.id == auction.created_by))
+    ).scalar_one_or_none()
+    cat = None
+    if auction.category_id:
+        cat = (
+            await db.execute(
+                select(Category).where(Category.id == auction.category_id)
+            )
+        ).scalar_one_or_none()
+    image_urls = await get_image_urls(auction, db)
     auction_dict = {
         "id": auction.id,
         "title": auction.title,
@@ -323,15 +355,19 @@ async def update_auction(
     auction_id: int,
     data: dict,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    auction = db.query(Auction).filter(Auction.id == auction_id).first()
+    auction = (
+        await db.execute(select(Auction).where(Auction.id == auction_id))
+    ).scalar_one_or_none()
     if not auction:
         raise HTTPException(404, "Аукцион не найден")
     if auction.created_by != current_user.id:
         raise HTTPException(403, "Это не ваш лот")
 
-    has_bids = db.query(Bid).filter(Bid.auction_id == auction_id).count() > 0
+    has_bids = await db.scalar(
+        select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
+    )
     if has_bids:
         raise HTTPException(400, "Нельзя редактировать лот — на него уже есть ставки")
 
@@ -353,29 +389,35 @@ async def update_auction(
         if 1 <= mins <= 10080:
             auction.end_time = auction.end_time + timedelta(minutes=mins)
     if "image_urls" in data and isinstance(data["image_urls"], list):
-        db.query(AuctionImage).filter(AuctionImage.auction_id == auction_id).delete()
+        await db.execute(
+            sql_delete(AuctionImage).where(AuctionImage.auction_id == auction_id)
+        )
         for i, url in enumerate(data["image_urls"]):
             db.add(AuctionImage(auction_id=auction_id, url=url, order=i))
         auction.image_url = data["image_urls"][0] if data["image_urls"] else None
 
-    db.commit()
-    db.refresh(auction)
+    await db.commit()
+    await db.refresh(auction)
     return {"message": "Лот обновлён", "id": auction.id}
 
 
 @router.delete("/auctions/{auction_id}")
-def delete_auction(
+async def delete_auction(
     auction_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    auction = db.query(Auction).filter(Auction.id == auction_id).first()
+    auction = (
+        await db.execute(select(Auction).where(Auction.id == auction_id))
+    ).scalar_one_or_none()
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
     if auction.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Нельзя удалить чужой лот")
 
-    bids_count = db.query(Bid).filter(Bid.auction_id == auction_id).count()
+    bids_count = await db.scalar(
+        select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
+    )
 
     if auction.is_active and bids_count > 0:
         raise HTTPException(status_code=400, detail="Нельзя удалить активный лот со ставками")
@@ -383,27 +425,31 @@ def delete_auction(
     if auction.is_completed and auction.winner_id:
         raise HTTPException(status_code=400, detail="Нельзя удалить лот с победителем")
 
-    db.delete(auction)
-    db.commit()
+    await db.delete(auction)
+    await db.commit()
     return {"message": "Лот удалён"}
 
 
 @router.get("/my/participation")
-def get_my_participation(
+async def get_my_participation(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    my_bids = db.query(Bid).filter(Bid.user_id == current_user.id).all()
-    auction_ids = list(set([bid.auction_id for bid in my_bids]))
+    my_bids = (
+        await db.execute(select(Bid).where(Bid.user_id == current_user.id))
+    ).scalars().all()
+    auction_ids = list({bid.auction_id for bid in my_bids})
 
-    participating_auctions = (
-        db.query(Auction)
-        .filter(Auction.id.in_(auction_ids))
-        .order_by(Auction.end_time.desc())
-        .all()
-        if auction_ids
-        else []
-    )
+    if auction_ids:
+        participating_auctions = (
+            await db.execute(
+                select(Auction)
+                .where(Auction.id.in_(auction_ids))
+                .order_by(Auction.end_time.desc())
+            )
+        ).scalars().all()
+    else:
+        participating_auctions = []
 
     active_bids = []
     won_auctions = []
@@ -411,11 +457,13 @@ def get_my_participation(
 
     for auction in participating_auctions:
         my_last_bid = (
-            db.query(Bid)
-            .filter(Bid.auction_id == auction.id, Bid.user_id == current_user.id)
-            .order_by(Bid.timestamp.desc())
-            .first()
-        )
+            await db.execute(
+                select(Bid)
+                .where(Bid.auction_id == auction.id, Bid.user_id == current_user.id)
+                .order_by(Bid.timestamp.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
 
         auction_data = {
             "auction_id": auction.id,
@@ -438,14 +486,17 @@ def get_my_participation(
             lost_auctions.append(auction_data)
 
     my_auctions = (
-        db.query(Auction)
-        .filter(Auction.created_by == current_user.id)
-        .order_by(Auction.is_active.desc(), Auction.start_time.desc())
-        .all()
-    )
+        await db.execute(
+            select(Auction)
+            .where(Auction.created_by == current_user.id)
+            .order_by(Auction.is_active.desc(), Auction.start_time.desc())
+        )
+    ).scalars().all()
     created_auctions = []
     for auction in my_auctions:
-        bids_count = db.query(Bid).filter(Bid.auction_id == auction.id).count()
+        bids_count = await db.scalar(
+            select(func.count()).select_from(Bid).where(Bid.auction_id == auction.id)
+        )
         created_auctions.append({
             "auction_id": auction.id,
             "title": auction.title,

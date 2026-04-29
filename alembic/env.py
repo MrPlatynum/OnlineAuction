@@ -30,10 +30,11 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Override the URL from alembic.ini with the live env var.
-db_url = os.getenv("DATABASE_URL")
-if db_url:
-    config.set_main_option("sqlalchemy.url", db_url)
+# Alembic uses a sync driver. App config exposes ``SYNC_DATABASE_URL``
+# derived from ``DATABASE_URL`` (which may use +asyncpg for the app).
+from app.config import SYNC_DATABASE_URL  # noqa: E402
+
+config.set_main_option("sqlalchemy.url", SYNC_DATABASE_URL)
 
 target_metadata = Base.metadata
 
