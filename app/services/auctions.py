@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from app.models import Auction, AuctionImage, Bid, NotificationType, User
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ async def check_expired_auctions():
         await asyncio.sleep(5)
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            now = utcnow()
 
             expired = (
                 db.query(Auction)

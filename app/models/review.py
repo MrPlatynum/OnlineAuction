@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, Text
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.utils.time import utcnow
 
 
 class Review(Base):
@@ -14,6 +13,6 @@ class Review(Base):
     auction_id = Column(Integer, ForeignKey("auctions.id"), nullable=True)
     rating = Column(Integer)
     comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     seller = relationship("User", foreign_keys=[seller_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])

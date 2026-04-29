@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -9,6 +8,7 @@ from app.database import SessionLocal
 from app.models import Auction
 from app.services.websocket_manager import manager
 from app.utils.security import decode_token
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
                 try:
                     auction = db.query(Auction).filter(Auction.id == auction_id).first()
                     if auction:
-                        time_remaining = int((auction.end_time - datetime.utcnow()).total_seconds())
+                        time_remaining = int((auction.end_time - utcnow()).total_seconds())
                         await websocket.send_json({
                             "type": "time_update",
                             "time_remaining": max(0, time_remaining),

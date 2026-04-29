@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.utils.time import utcnow
 
 
 class Transaction(Base):
@@ -15,5 +14,5 @@ class Transaction(Base):
     balance_after = Column(Float)
     description = Column(String, nullable=True)
     auction_id = Column(Integer, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     user = relationship("User", foreign_keys=[user_id])
