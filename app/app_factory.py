@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from fastapi import FastAPI
@@ -6,6 +7,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import BASE_DIR, CORS_ORIGINS, LOCAL_CORS_REGEX, STATIC_DIR
+
+logger = logging.getLogger(__name__)
+
+
+def setup_logging():
+    """Configure root logger once at app start. Idempotent — uvicorn's own
+    loggers are untouched (they own the access/error namespaces)."""
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 from app.routers import (
     auctions,
     auth,
@@ -25,6 +41,7 @@ from app.services.migrations import create_tables, run_migrations, seed_categori
 
 
 def create_app() -> FastAPI:
+    setup_logging()
     create_tables()
     run_migrations()
     seed_categories()
@@ -63,7 +80,7 @@ def create_app() -> FastAPI:
     async def startup_event():
         nonlocal background_task
         background_task = asyncio.create_task(check_expired_auctions())
-        print("✅ Приложение запущено с системой уведомлений")
+        logger.info("Application startup complete (notifications enabled)")
 
     @fastapi_app.on_event("shutdown")
     async def shutdown_event():
@@ -74,6 +91,6 @@ def create_app() -> FastAPI:
                 await background_task
             except asyncio.CancelledError:
                 pass
-        print("🛑 Приложение остановлено")
+        logger.info("Application shutdown complete")
 
     return fastapi_app
