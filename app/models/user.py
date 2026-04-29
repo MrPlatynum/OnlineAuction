@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.utils.time import utcnow
 
 
 class User(Base):
@@ -13,7 +12,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     balance = Column(Float, default=1000.0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
     avatar_url = Column(String, nullable=True)
 

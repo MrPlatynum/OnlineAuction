@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +20,7 @@ from app.services.notifications import create_notification, notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auctions"])
 
@@ -30,7 +31,7 @@ def create_auction(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    start_time = datetime.utcnow()
+    start_time = utcnow()
     end_time = start_time + timedelta(minutes=auction.duration_minutes)
 
     db_auction = Auction(
@@ -93,7 +94,7 @@ def create_auction(
         "created_by": db_auction.created_by,
         "creator_username": current_user.username,
         "creator_avatar_url": current_user.avatar_url,
-        "time_remaining": max(0, int((db_auction.end_time - datetime.utcnow()).total_seconds())),
+        "time_remaining": max(0, int((db_auction.end_time - utcnow()).total_seconds())),
         "category_id": db_auction.category_id,
         "category_name": cat.name if cat else None,
         "category_icon": cat.icon if cat else None,
@@ -114,7 +115,7 @@ async def buy_now(
         raise HTTPException(404, "Аукцион не найден")
     if not auction.is_active:
         raise HTTPException(400, "Аукцион завершён")
-    if datetime.utcnow() > auction.end_time:
+    if utcnow() > auction.end_time:
         auction.is_active = False
         db.commit()
         raise HTTPException(400, "Аукцион завершён")
@@ -139,7 +140,7 @@ async def buy_now(
     auction.is_active = False
     auction.is_completed = True
     auction.winner_id = current_user.id
-    auction.end_time = datetime.utcnow()
+    auction.end_time = utcnow()
 
     creator_bin = db.query(User).filter(User.id == auction.created_by).first()
     if creator_bin:
@@ -258,7 +259,7 @@ def get_auctions(
             "creator_username": creator.username if creator else None,
             "creator_avatar_url": creator.avatar_url if creator else None,
             "bids_count": bids_count,
-            "time_remaining": max(0, int((auction.end_time - datetime.utcnow()).total_seconds())),
+            "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
             "category_id": auction.category_id,
             "category_name": cat.name if cat else None,
             "category_icon": cat.icon if cat else None,
@@ -307,7 +308,7 @@ def get_auction(auction_id: int, db: Session = Depends(get_db)):
         "creator_username": creator.username if creator else None,
         "creator_avatar_url": creator.avatar_url if creator else None,
         "bids_count": bids_count,
-        "time_remaining": max(0, int((auction.end_time - datetime.utcnow()).total_seconds())),
+        "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
         "category_id": auction.category_id,
         "category_name": cat.name if cat else None,
         "category_icon": cat.icon if cat else None,
@@ -424,7 +425,7 @@ def get_my_participation(
             "my_bid": my_last_bid.amount if my_last_bid else 0,
             "is_winning": auction.current_price == my_last_bid.amount if my_last_bid else False,
             "end_time": auction.end_time.isoformat(),
-            "time_remaining": max(0, int((auction.end_time - datetime.utcnow()).total_seconds())),
+            "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
             "is_active": auction.is_active,
             "auction_type": auction.auction_type or "bid",
         }
@@ -456,7 +457,7 @@ def get_my_participation(
             "image_url": auction.image_url,
             "end_time": auction.end_time.isoformat() if auction.end_time else None,
             "time_remaining": max(
-                0, int((auction.end_time - datetime.utcnow()).total_seconds())
+                0, int((auction.end_time - utcnow()).total_seconds())
             ) if auction.end_time and auction.is_active else 0,
         })
 
