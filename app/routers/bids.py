@@ -8,6 +8,7 @@ from app.services.balance import effective_committed_balance
 from app.services.bid_locks import get_bid_lock
 from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
+from app.utils.money import to_decimal
 from app.utils.security import get_current_user
 from app.utils.time import utcnow
 
@@ -60,6 +61,8 @@ async def place_bid(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    bid_amount = to_decimal(bid.amount)
+
     # Serialise concurrent bids on the same auction so the
     # read-check-write below is atomic per auction.
     async with get_bid_lock(bid.auction_id):
@@ -75,7 +78,7 @@ async def place_bid(
             db.commit()
             raise HTTPException(status_code=400, detail="Auction has ended")
 
-        if bid.amount <= auction.current_price:
+        if bid_amount <= auction.current_price:
             raise HTTPException(status_code=400, detail="Bid must be higher than current price")
 
         # Available = balance minus what's already committed elsewhere
@@ -85,7 +88,7 @@ async def place_bid(
             db, current_user.id, bid.auction_id, auction.current_price
         )
         available = current_user.balance - committed_elsewhere
-        if available < bid.amount:
+        if available < bid_amount:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -101,8 +104,8 @@ async def place_bid(
             .first()
         )
 
-        db_bid = Bid(amount=bid.amount, user_id=current_user.id, auction_id=bid.auction_id)
-        auction.current_price = bid.amount
+        db_bid = Bid(amount=bid_amount, user_id=current_user.id, auction_id=bid.auction_id)
+        auction.current_price = bid_amount
 
         db.add(db_bid)
         db.commit()
@@ -133,11 +136,11 @@ async def place_bid(
         "type": "new_bid",
         "bid": {
             "id": db_bid.id,
-            "amount": db_bid.amount,
+            "amount": float(db_bid.amount),
             "username": current_user.username,
             "timestamp": db_bid.timestamp.isoformat(),
         },
-        "current_price": auction.current_price,
+        "current_price": float(auction.current_price),
     }, bid.auction_id)
 
     return {"message": "Bid placed successfully", "bid_id": db_bid.id}

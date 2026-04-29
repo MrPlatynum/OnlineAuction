@@ -37,14 +37,11 @@ from app.routers import (
     websocket,
 )
 from app.services.auctions import check_expired_auctions
-from app.services.migrations import create_tables, run_migrations, seed_categories
+from app.services.migrations import seed_categories
 
 
 def create_app() -> FastAPI:
     setup_logging()
-    create_tables()
-    run_migrations()
-    seed_categories()
 
     fastapi_app = FastAPI(title="Real-time Auction API with Notifications")
 
@@ -79,6 +76,10 @@ def create_app() -> FastAPI:
     @fastapi_app.on_event("startup")
     async def startup_event():
         nonlocal background_task
+        # Schema is managed by Alembic (run `alembic upgrade head`
+        # before starting the server). Reference-data seeding is
+        # idempotent and runs on every startup.
+        seed_categories()
         background_task = asyncio.create_task(check_expired_auctions())
         logger.info("Application startup complete (notifications enabled)")
 

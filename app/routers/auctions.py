@@ -119,7 +119,7 @@ async def buy_now(
         auction.is_active = False
         db.commit()
         raise HTTPException(400, "Аукцион завершён")
-    if auction.auction_type not in ("bin", "bid_bin"):
+    if auction.auction_type != "bin":
         raise HTTPException(400, "Этот аукцион не поддерживает покупку сразу")
     if not auction.bin_price:
         raise HTTPException(400, "Цена BIN не установлена")
@@ -160,7 +160,7 @@ async def buy_now(
             auction.id, auction.title, manager,
         )
 
-    return {"message": "Покупка совершена", "price": auction.bin_price}
+    return {"message": "Покупка совершена", "price": float(auction.bin_price)}
 
 
 @router.get("/auctions", response_model=PaginatedAuctionsResponse)
@@ -421,8 +421,8 @@ def get_my_participation(
             "auction_id": auction.id,
             "title": auction.title,
             "image_url": auction.image_url,
-            "current_price": auction.current_price,
-            "my_bid": my_last_bid.amount if my_last_bid else 0,
+            "current_price": float(auction.current_price),
+            "my_bid": float(my_last_bid.amount) if my_last_bid else 0,
             "is_winning": auction.current_price == my_last_bid.amount if my_last_bid else False,
             "end_time": auction.end_time.isoformat(),
             "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
@@ -449,8 +449,8 @@ def get_my_participation(
         created_auctions.append({
             "auction_id": auction.id,
             "title": auction.title,
-            "current_price": auction.current_price,
-            "starting_price": auction.starting_price,
+            "current_price": float(auction.current_price),
+            "starting_price": float(auction.starting_price),
             "is_active": auction.is_active,
             "winner_id": auction.winner_id,
             "bids_count": bids_count,

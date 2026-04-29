@@ -1,19 +1,19 @@
 """Shared pytest fixtures.
 
-Sets env vars BEFORE any app imports, so the FastAPI app, SQLAlchemy
-engine, and config use a throwaway test database — production
-auction.db is never touched.
+Sets env vars BEFORE any app imports so the FastAPI app, SQLAlchemy
+engine, and config use the dedicated Postgres test database
+(``auction_test``) created by docker-compose's init script. Production
+data is never touched.
 """
 
 import os
-import tempfile
 
-# Test DB lives in a temp file for the whole pytest session.
-_db_fd, _db_path = tempfile.mkstemp(suffix="_test.db")
-os.close(_db_fd)
-os.environ["DATABASE_URL"] = f"sqlite:///{_db_path.replace(os.sep, '/')}"
-
-# Without this, app/config.py raises at import time.
+# Defaults match docker-compose.yml. Override TEST_DATABASE_URL if you
+# run Postgres elsewhere.
+os.environ["DATABASE_URL"] = os.getenv(
+    "TEST_DATABASE_URL",
+    "postgresql+psycopg2://auction:auction_dev_password@localhost:5433/auction_test",
+)
 os.environ.setdefault(
     "AUCTION_SECRET_KEY",
     "test-only-secret-key-do-not-use-in-prod",
@@ -27,18 +27,10 @@ from app.database import Base, engine  # noqa: E402
 from app.services.migrations import seed_categories  # noqa: E402
 
 
-def pytest_sessionfinish(session, exitstatus):
-    """Delete the temp DB file when pytest finishes."""
-    try:
-        os.unlink(_db_path)
-    except OSError:
-        pass
-
-
 @pytest.fixture(autouse=True)
 def reset_db():
-    """Drop all rows and reseed categories before each test, so tests
-    are independent of each other."""
+    """Drop and recreate all tables before each test, then re-seed
+    reference data, so tests are independent."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     seed_categories()
@@ -52,7 +44,7 @@ def client():
 
 @pytest.fixture
 def registered_user(client):
-    """Register a default user and return {token, user, headers}."""
+    """Register a default user and return token + headers."""
     payload = {
         "username": "alice",
         "email": "alice@example.com",
@@ -71,7 +63,7 @@ def registered_user(client):
 
 @pytest.fixture
 def second_user(client):
-    """A second registered user, useful for bidding scenarios."""
+    """Second registered user, useful for bidding scenarios."""
     payload = {
         "username": "bob",
         "email": "bob@example.com",

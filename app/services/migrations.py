@@ -1,82 +1,14 @@
-from sqlalchemy import inspect, text
+"""Seed default category data on first startup.
 
-from app.database import Base, SessionLocal, engine
+Schema migrations are managed by Alembic (see ``alembic/`` and run with
+``alembic upgrade head``). This module only handles idempotent reference-
+data seeding for categories — those don't fit cleanly into a one-shot
+migration because we want them to be top-up-able as new sub-categories
+are added in code.
+"""
+
+from app.database import SessionLocal
 from app.models import Category
-
-
-def create_tables():
-    Base.metadata.create_all(bind=engine)
-
-
-def run_migrations():
-    """Автомиграция — добавляем новые колонки если их нет."""
-    with engine.connect() as conn:
-        inspector = inspect(engine)
-        existing_cols = [c['name'] for c in inspector.get_columns('auctions')]
-        if 'category_id' not in existing_cols:
-            conn.execute(text("ALTER TABLE auctions ADD COLUMN category_id INTEGER REFERENCES categories(id)"))
-            conn.commit()
-        if 'auction_type' not in existing_cols:
-            conn.execute(text("ALTER TABLE auctions ADD COLUMN auction_type TEXT DEFAULT 'bid'"))
-            conn.commit()
-        conn.execute(text("UPDATE auctions SET auction_type = 'bid' WHERE auction_type IS NULL"))
-        conn.commit()
-        if 'bin_price' not in existing_cols:
-            conn.execute(text("ALTER TABLE auctions ADD COLUMN bin_price REAL"))
-            conn.commit()
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS auction_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                auction_id INTEGER NOT NULL REFERENCES auctions(id) ON DELETE CASCADE,
-                url TEXT NOT NULL,
-                "order" INTEGER DEFAULT 0
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS reviews (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                seller_id INTEGER NOT NULL REFERENCES users(id),
-                reviewer_id INTEGER NOT NULL REFERENCES users(id),
-                auction_id INTEGER REFERENCES auctions(id),
-                rating INTEGER NOT NULL,
-                comment TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS subscriptions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                subscriber_id INTEGER NOT NULL REFERENCES users(id),
-                seller_id INTEGER NOT NULL REFERENCES users(id),
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(subscriber_id, seller_id)
-            )
-        """))
-        conn.commit()
-
-        cat_cols = [c['name'] for c in inspector.get_columns('categories')]
-        if 'parent_id' not in cat_cols:
-            conn.execute(text("ALTER TABLE categories ADD COLUMN parent_id INTEGER REFERENCES categories(id)"))
-            conn.commit()
-
-        user_cols = [c['name'] for c in inspector.get_columns('users')]
-        if 'avatar_url' not in user_cols:
-            conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url TEXT"))
-            conn.commit()
-
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                type TEXT NOT NULL,
-                amount REAL NOT NULL,
-                balance_after REAL NOT NULL,
-                description TEXT,
-                auction_id INTEGER,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
-        conn.commit()
 
 
 def seed_categories():

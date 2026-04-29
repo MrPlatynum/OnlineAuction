@@ -31,7 +31,7 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
                         await websocket.send_json({
                             "type": "time_update",
                             "time_remaining": max(0, time_remaining),
-                            "current_price": auction.current_price,
+                            "current_price": float(auction.current_price),
                         })
                 finally:
                     db.close()
