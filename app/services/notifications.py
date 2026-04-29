@@ -1,9 +1,24 @@
+import asyncio
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.models import Notification, NotificationType, User
 from app.services.email import build_notification_email_html, send_email_notification
+
+# Strong references to in-flight email tasks so they don't get GC'd
+# mid-execution. Python only keeps weak refs to bare ``asyncio.create_task``
+# results.
+_pending_email_tasks: set[asyncio.Task] = set()
+
+
+def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
+    """Schedule an email send on the running event loop without
+    awaiting it, so the caller (e.g. an HTTP handler) can return
+    immediately."""
+    task = asyncio.create_task(send_email_notification(to_email, subject, html))
+    _pending_email_tasks.add(task)
+    task.add_done_callback(_pending_email_tasks.discard)
 
 
 def create_notification(
@@ -78,4 +93,4 @@ async def notify_user(
             html_content = build_notification_email_html(
                 notification_type.value, title, message, auction_id, auction_title
             )
-            await send_email_notification(user.email, title, html_content)
+            _fire_and_forget_email(user.email, title, html_content)
