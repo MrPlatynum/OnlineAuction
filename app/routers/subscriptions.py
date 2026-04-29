@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Auction, Review, Subscription, User
@@ -9,33 +10,45 @@ router = APIRouter(prefix="/api", tags=["subscriptions"])
 
 
 @router.get("/my/subscriptions")
-def get_my_subscriptions(
+async def get_my_subscriptions(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     subs = (
-        db.query(Subscription)
-        .filter(Subscription.subscriber_id == current_user.id)
-        .order_by(Subscription.created_at.desc())
-        .all()
-    )
+        await db.execute(
+            select(Subscription)
+            .where(Subscription.subscriber_id == current_user.id)
+            .order_by(Subscription.created_at.desc())
+        )
+    ).scalars().all()
 
     result = []
     for sub in subs:
-        seller = db.query(User).filter(User.id == sub.seller_id).first()
+        seller = (
+            await db.execute(select(User).where(User.id == sub.seller_id))
+        ).scalar_one_or_none()
         if not seller:
             continue
-        lots_count = db.query(Auction).filter(Auction.created_by == seller.id).count()
-        reviews = db.query(Review).filter(Review.seller_id == seller.id).all()
+        lots_count = await db.scalar(
+            select(func.count())
+            .select_from(Auction)
+            .where(Auction.created_by == seller.id)
+        )
+        active_lots_count = await db.scalar(
+            select(func.count())
+            .select_from(Auction)
+            .where(Auction.created_by == seller.id, Auction.is_active == True)
+        )
+        reviews = (
+            await db.execute(select(Review).where(Review.seller_id == seller.id))
+        ).scalars().all()
         avg = round(sum(r.rating for r in reviews) / len(reviews), 1) if reviews else 0
         result.append({
             "seller_id": seller.id,
             "username": seller.username,
             "avatar_url": seller.avatar_url,
             "lots_count": lots_count,
-            "active_lots_count": db.query(Auction).filter(
-                Auction.created_by == seller.id, Auction.is_active == True
-            ).count(),
+            "active_lots_count": active_lots_count,
             "reviews_count": len(reviews),
             "avg_rating": avg,
             "subscribed_at": sub.created_at.isoformat(),
@@ -44,64 +57,76 @@ def get_my_subscriptions(
 
 
 @router.get("/sellers/{seller_id}/subscription")
-def get_subscription(
+async def get_subscription(
     seller_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     sub = (
-        db.query(Subscription)
-        .filter(
-            Subscription.subscriber_id == current_user.id,
-            Subscription.seller_id == seller_id,
+        await db.execute(
+            select(Subscription).where(
+                Subscription.subscriber_id == current_user.id,
+                Subscription.seller_id == seller_id,
+            )
         )
-        .first()
+    ).scalar_one_or_none()
+    count = await db.scalar(
+        select(func.count())
+        .select_from(Subscription)
+        .where(Subscription.seller_id == seller_id)
     )
-    count = db.query(Subscription).filter(Subscription.seller_id == seller_id).count()
     return {"subscribed": sub is not None, "subscribers_count": count}
 
 
 @router.post("/sellers/{seller_id}/subscribe")
-def subscribe(
+async def subscribe(
     seller_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     if seller_id == current_user.id:
         raise HTTPException(400, "Нельзя подписаться на себя")
     exists = (
-        db.query(Subscription)
-        .filter(
-            Subscription.subscriber_id == current_user.id,
-            Subscription.seller_id == seller_id,
+        await db.execute(
+            select(Subscription).where(
+                Subscription.subscriber_id == current_user.id,
+                Subscription.seller_id == seller_id,
+            )
         )
-        .first()
-    )
+    ).scalar_one_or_none()
     if exists:
         raise HTTPException(400, "Уже подписаны")
     db.add(Subscription(subscriber_id=current_user.id, seller_id=seller_id))
-    db.commit()
-    count = db.query(Subscription).filter(Subscription.seller_id == seller_id).count()
+    await db.commit()
+    count = await db.scalar(
+        select(func.count())
+        .select_from(Subscription)
+        .where(Subscription.seller_id == seller_id)
+    )
     return {"subscribed": True, "subscribers_count": count}
 
 
 @router.delete("/sellers/{seller_id}/subscribe")
-def unsubscribe(
+async def unsubscribe(
     seller_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     sub = (
-        db.query(Subscription)
-        .filter(
-            Subscription.subscriber_id == current_user.id,
-            Subscription.seller_id == seller_id,
+        await db.execute(
+            select(Subscription).where(
+                Subscription.subscriber_id == current_user.id,
+                Subscription.seller_id == seller_id,
+            )
         )
-        .first()
-    )
+    ).scalar_one_or_none()
     if not sub:
         raise HTTPException(400, "Вы не подписаны")
-    db.delete(sub)
-    db.commit()
-    count = db.query(Subscription).filter(Subscription.seller_id == seller_id).count()
+    await db.delete(sub)
+    await db.commit()
+    count = await db.scalar(
+        select(func.count())
+        .select_from(Subscription)
+        .where(Subscription.seller_id == seller_id)
+    )
     return {"subscribed": False, "subscribers_count": count}

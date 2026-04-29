@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Transaction, User
@@ -12,15 +13,15 @@ router = APIRouter(prefix="/api", tags=["balance"])
 
 
 @router.post("/deposit")
-def deposit(
+async def deposit(
     data: DepositRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
     current_user.balance = round(current_user.balance + amount, 2)
     add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
-    db.commit()
+    await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
         "amount": float(data.amount),
@@ -28,17 +29,17 @@ def deposit(
 
 
 @router.post("/withdraw")
-def withdraw(
+async def withdraw(
     data: WithdrawRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
     if current_user.balance < amount:
         raise HTTPException(400, detail=f"Недостаточно средств. Доступно: ${current_user.balance:.2f}")
     current_user.balance = round(current_user.balance - amount, 2)
     add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
-    db.commit()
+    await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
         "amount": float(data.amount),
@@ -46,19 +47,25 @@ def withdraw(
 
 
 @router.get("/transactions")
-def get_transactions(
+async def get_transactions(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    q = (
-        db.query(Transaction)
-        .filter(Transaction.user_id == current_user.id)
+    base_query = (
+        select(Transaction)
+        .where(Transaction.user_id == current_user.id)
         .order_by(Transaction.created_at.desc())
     )
-    total = q.count()
-    items = q.offset((page - 1) * page_size).limit(page_size).all()
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Transaction)
+        .where(Transaction.user_id == current_user.id)
+    )
+    items = (
+        await db.execute(base_query.offset((page - 1) * page_size).limit(page_size))
+    ).scalars().all()
     return {
         "balance": money_to_float(current_user.balance),
         "total": total,

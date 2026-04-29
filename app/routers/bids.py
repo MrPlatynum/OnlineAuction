@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Auction, Bid, NotificationType, User
@@ -16,23 +18,29 @@ router = APIRouter(prefix="/api", tags=["bids"])
 
 
 @router.get("/auctions/{auction_id}/bids", response_model=PaginatedBidsResponse)
-def get_auction_bids(
+async def get_auction_bids(
     auction_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=50),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    query = (
-        db.query(Bid)
-        .filter(Bid.auction_id == auction_id)
-        .order_by(Bid.timestamp.desc())
+    base_filter = Bid.auction_id == auction_id
+    total = await db.scalar(
+        select(func.count()).select_from(Bid).where(base_filter)
     )
-
-    total = query.count()
     total_pages = (total + page_size - 1) // page_size
 
     offset = (page - 1) * page_size
-    bids = query.offset(offset).limit(page_size).all()
+    bids = (
+        await db.execute(
+            select(Bid)
+            .where(base_filter)
+            .options(selectinload(Bid.user))
+            .order_by(Bid.timestamp.desc())
+            .offset(offset)
+            .limit(page_size)
+        )
+    ).scalars().all()
 
     result = [
         BidResponse(
@@ -59,14 +67,16 @@ def get_auction_bids(
 async def place_bid(
     bid: BidCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     bid_amount = to_decimal(bid.amount)
 
     # Serialise concurrent bids on the same auction so the
     # read-check-write below is atomic per auction.
     async with get_bid_lock(bid.auction_id):
-        auction = db.query(Auction).filter(Auction.id == bid.auction_id).first()
+        auction = (
+            await db.execute(select(Auction).where(Auction.id == bid.auction_id))
+        ).scalar_one_or_none()
         if not auction:
             raise HTTPException(status_code=404, detail="Auction not found")
 
@@ -75,16 +85,13 @@ async def place_bid(
 
         if utcnow() > auction.end_time:
             auction.is_active = False
-            db.commit()
+            await db.commit()
             raise HTTPException(status_code=400, detail="Auction has ended")
 
         if bid_amount <= auction.current_price:
             raise HTTPException(status_code=400, detail="Bid must be higher than current price")
 
-        # Available = balance minus what's already committed elsewhere
-        # (and minus the user's own existing commit on THIS auction,
-        # which is about to be replaced by the new bid).
-        committed_elsewhere = effective_committed_balance(
+        committed_elsewhere = await effective_committed_balance(
             db, current_user.id, bid.auction_id, auction.current_price
         )
         available = current_user.balance - committed_elsewhere
@@ -98,23 +105,25 @@ async def place_bid(
             )
 
         previous_leader_bid = (
-            db.query(Bid)
-            .filter(Bid.auction_id == bid.auction_id)
-            .order_by(Bid.timestamp.desc())
-            .first()
-        )
+            await db.execute(
+                select(Bid)
+                .where(Bid.auction_id == bid.auction_id)
+                .order_by(Bid.timestamp.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
 
         db_bid = Bid(amount=bid_amount, user_id=current_user.id, auction_id=bid.auction_id)
         auction.current_price = bid_amount
 
         db.add(db_bid)
-        db.commit()
-        db.refresh(db_bid)
+        await db.commit()
+        await db.refresh(db_bid)
 
     if previous_leader_bid and previous_leader_bid.user_id != current_user.id:
         previous_leader = (
-            db.query(User).filter(User.id == previous_leader_bid.user_id).first()
-        )
+            await db.execute(select(User).where(User.id == previous_leader_bid.user_id))
+        ).scalar_one_or_none()
         if previous_leader:
             await notify_user(
                 db, previous_leader, NotificationType.BID_OUTBID,
@@ -123,7 +132,9 @@ async def place_bid(
                 auction.id, auction.title, manager,
             )
 
-    creator = db.query(User).filter(User.id == auction.created_by).first()
+    creator = (
+        await db.execute(select(User).where(User.id == auction.created_by))
+    ).scalar_one_or_none()
     if creator and creator.id != current_user.id:
         await notify_user(
             db, creator, NotificationType.BID_PLACED,

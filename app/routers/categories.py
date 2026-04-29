@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Category
@@ -8,8 +9,10 @@ router = APIRouter(prefix="/api", tags=["categories"])
 
 
 @router.get("/categories")
-def get_categories(db: Session = Depends(get_db)):
-    all_cats = db.query(Category).order_by(Category.id).all()
+async def get_categories(db: AsyncSession = Depends(get_db)):
+    all_cats = (
+        await db.execute(select(Category).order_by(Category.id))
+    ).scalars().all()
     parents = [c for c in all_cats if c.parent_id is None]
     children_map = {}
     for c in all_cats:

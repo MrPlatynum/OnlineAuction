@@ -2,7 +2,8 @@ import asyncio
 import logging
 from datetime import timedelta
 
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import SessionLocal
 from app.models import Auction, AuctionImage, Bid, NotificationType, User
@@ -14,32 +15,39 @@ from app.utils.time import utcnow
 logger = logging.getLogger(__name__)
 
 
-def get_image_urls(auction: Auction, db: Session):
+async def get_image_urls(auction: Auction, db: AsyncSession):
     imgs = (
-        db.query(AuctionImage)
-        .filter(AuctionImage.auction_id == auction.id)
-        .order_by(AuctionImage.order)
-        .all()
-    )
+        await db.execute(
+            select(AuctionImage)
+            .where(AuctionImage.auction_id == auction.id)
+            .order_by(AuctionImage.order)
+        )
+    ).scalars().all()
     if imgs:
         return [i.url for i in imgs]
     return [auction.image_url] if auction.image_url else []
 
 
-async def notify_auction_ending_soon(auction: Auction, db: Session):
+async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     """Уведомление участникам, что аукцион скоро завершится."""
-    bids = db.query(Bid).filter(Bid.auction_id == auction.id).all()
+    bids = (
+        await db.execute(select(Bid).where(Bid.auction_id == auction.id))
+    ).scalars().all()
     user_ids = set([bid.user_id for bid in bids])
 
     for user_id in user_ids:
-        user = db.query(User).filter(User.id == user_id).first()
+        user = (
+            await db.execute(select(User).where(User.id == user_id))
+        ).scalar_one_or_none()
         if user:
             last_bid = (
-                db.query(Bid)
-                .filter(Bid.auction_id == auction.id)
-                .order_by(Bid.timestamp.desc())
-                .first()
-            )
+                await db.execute(
+                    select(Bid)
+                    .where(Bid.auction_id == auction.id)
+                    .order_by(Bid.timestamp.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
             is_winning = last_bid and last_bid.user_id == user_id
 
             message = "Аукцион завершится через 5 минут! " + (
@@ -54,9 +62,11 @@ async def notify_auction_ending_soon(auction: Auction, db: Session):
             )
 
 
-async def complete_auction(auction_id: int, db: Session):
+async def complete_auction(auction_id: int, db: AsyncSession):
     """Завершение аукциона и уведомление участников."""
-    auction = db.query(Auction).filter(Auction.id == auction_id).first()
+    auction = (
+        await db.execute(select(Auction).where(Auction.id == auction_id))
+    ).scalar_one_or_none()
     if not auction or not auction.is_active:
         return
 
@@ -64,15 +74,19 @@ async def complete_auction(auction_id: int, db: Session):
     auction.is_completed = True
 
     last_bid = (
-        db.query(Bid)
-        .filter(Bid.auction_id == auction_id)
-        .order_by(Bid.timestamp.desc())
-        .first()
-    )
+        await db.execute(
+            select(Bid)
+            .where(Bid.auction_id == auction_id)
+            .order_by(Bid.timestamp.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
     if last_bid:
         auction.winner_id = last_bid.user_id
-        winner = db.query(User).filter(User.id == last_bid.user_id).first()
+        winner = (
+            await db.execute(select(User).where(User.id == last_bid.user_id))
+        ).scalar_one_or_none()
 
         if winner:
             winner.balance -= last_bid.amount
@@ -81,7 +95,9 @@ async def complete_auction(auction_id: int, db: Session):
                 f"Победа в аукционе «{auction.title}»", auction_id=auction.id,
             )
 
-        creator = db.query(User).filter(User.id == auction.created_by).first()
+        creator = (
+            await db.execute(select(User).where(User.id == auction.created_by))
+        ).scalar_one_or_none()
         if creator:
             creator.balance += last_bid.amount
             add_transaction(
@@ -89,11 +105,15 @@ async def complete_auction(auction_id: int, db: Session):
                 f"Продажа лота «{auction.title}»", auction_id=auction.id,
             )
 
-        bids = db.query(Bid).filter(Bid.auction_id == auction_id).all()
+        bids = (
+            await db.execute(select(Bid).where(Bid.auction_id == auction_id))
+        ).scalars().all()
         user_ids = set([bid.user_id for bid in bids])
 
         for user_id in user_ids:
-            user = db.query(User).filter(User.id == user_id).first()
+            user = (
+                await db.execute(select(User).where(User.id == user_id))
+            ).scalar_one_or_none()
             if not user:
                 continue
 
@@ -120,7 +140,7 @@ async def complete_auction(auction_id: int, db: Session):
                 auction.id, auction.title, manager,
             )
 
-    db.commit()
+    await db.commit()
 
     await manager.broadcast({
         "type": "auction_ended",
@@ -134,37 +154,37 @@ async def check_expired_auctions():
     """Фоновая задача для завершения аукционов."""
     while True:
         await asyncio.sleep(5)
-        db = SessionLocal()
-        try:
-            now = utcnow()
+        async with SessionLocal() as db:
+            try:
+                now = utcnow()
 
-            expired = (
-                db.query(Auction)
-                .filter(Auction.is_active == True, Auction.end_time <= now)
-                .all()
-            )
+                expired = (
+                    await db.execute(
+                        select(Auction).where(
+                            Auction.is_active == True, Auction.end_time <= now
+                        )
+                    )
+                ).scalars().all()
 
-            for auction in expired:
-                await complete_auction(auction.id, db)
+                for auction in expired:
+                    await complete_auction(auction.id, db)
 
-            ending_soon = (
-                db.query(Auction)
-                .filter(
-                    Auction.is_active == True,
-                    Auction.ending_soon_notified == False,
-                    Auction.end_time <= now + timedelta(minutes=5),
-                    Auction.end_time > now,
-                )
-                .all()
-            )
+                ending_soon = (
+                    await db.execute(
+                        select(Auction).where(
+                            Auction.is_active == True,
+                            Auction.ending_soon_notified == False,
+                            Auction.end_time <= now + timedelta(minutes=5),
+                            Auction.end_time > now,
+                        )
+                    )
+                ).scalars().all()
 
-            for auction in ending_soon:
-                await notify_auction_ending_soon(auction, db)
-                auction.ending_soon_notified = True
+                for auction in ending_soon:
+                    await notify_auction_ending_soon(auction, db)
+                    auction.ending_soon_notified = True
 
-            db.commit()
-        except Exception:
-            logger.exception("Error in check_expired_auctions")
-            db.rollback()
-        finally:
-            db.close()
+                await db.commit()
+            except Exception:
+                logger.exception("Error in check_expired_auctions")
+                await db.rollback()
