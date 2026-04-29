@@ -10,7 +10,7 @@ class Category(Base):
     name = Column(String, unique=True, index=True)
     slug = Column(String, unique=True, index=True)
     icon = Column(String, default="📦")
-    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
     auctions = relationship("Auction", back_populates="category")
     children = relationship(
         "Category", back_populates="parent", foreign_keys="Category.parent_id"

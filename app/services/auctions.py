@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timedelta
+import logging
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,9 @@ from app.models import Auction, AuctionImage, Bid, NotificationType, User
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
+from app.utils.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 
 def get_image_urls(auction: Auction, db: Session):
@@ -122,7 +126,7 @@ async def complete_auction(auction_id: int, db: Session):
         "type": "auction_ended",
         "auction_id": auction_id,
         "winner_id": auction.winner_id,
-        "final_price": auction.current_price,
+        "final_price": float(auction.current_price),
     }, auction_id)
 
 
@@ -132,7 +136,7 @@ async def check_expired_auctions():
         await asyncio.sleep(5)
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            now = utcnow()
 
             expired = (
                 db.query(Auction)
@@ -159,8 +163,8 @@ async def check_expired_auctions():
                 auction.ending_soon_notified = True
 
             db.commit()
-        except Exception as e:
-            print(f"Error in check_expired_auctions: {e}")
+        except Exception:
+            logger.exception("Error in check_expired_auctions")
             db.rollback()
         finally:
             db.close()

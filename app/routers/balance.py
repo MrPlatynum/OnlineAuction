@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
 from app.services.transactions import add_transaction
+from app.utils.money import money_to_float, to_decimal
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
@@ -16,10 +17,14 @@ def deposit(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    current_user.balance = round(current_user.balance + data.amount, 2)
-    add_transaction(db, current_user, "deposit", data.amount, "Пополнение баланса")
+    amount = to_decimal(data.amount)
+    current_user.balance = round(current_user.balance + amount, 2)
+    add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
     db.commit()
-    return {"balance": current_user.balance, "amount": data.amount}
+    return {
+        "balance": money_to_float(current_user.balance),
+        "amount": float(data.amount),
+    }
 
 
 @router.post("/withdraw")
@@ -28,12 +33,16 @@ def withdraw(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if current_user.balance < data.amount:
+    amount = to_decimal(data.amount)
+    if current_user.balance < amount:
         raise HTTPException(400, detail=f"Недостаточно средств. Доступно: ${current_user.balance:.2f}")
-    current_user.balance = round(current_user.balance - data.amount, 2)
-    add_transaction(db, current_user, "withdrawal", data.amount, "Вывод средств")
+    current_user.balance = round(current_user.balance - amount, 2)
+    add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
     db.commit()
-    return {"balance": current_user.balance, "amount": data.amount}
+    return {
+        "balance": money_to_float(current_user.balance),
+        "amount": float(data.amount),
+    }
 
 
 @router.get("/transactions")
@@ -51,7 +60,7 @@ def get_transactions(
     total = q.count()
     items = q.offset((page - 1) * page_size).limit(page_size).all()
     return {
-        "balance": current_user.balance,
+        "balance": money_to_float(current_user.balance),
         "total": total,
         "page": page,
         "total_pages": max(1, (total + page_size - 1) // page_size),
@@ -59,8 +68,8 @@ def get_transactions(
             {
                 "id": t.id,
                 "type": t.type,
-                "amount": t.amount,
-                "balance_after": t.balance_after,
+                "amount": money_to_float(t.amount),
+                "balance_after": money_to_float(t.balance_after),
                 "description": t.description,
                 "auction_id": t.auction_id,
                 "created_at": t.created_at.isoformat(),
