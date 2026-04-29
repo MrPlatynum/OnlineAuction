@@ -140,7 +140,7 @@
 
     // BIN
     const aType=a.auction_type||'bid';
-    const hasBin=aType==='bin'||aType==='bid_bin'||(a.bin_price&&a.bin_price>0);
+    const hasBin=aType==='bin'||(a.bin_price&&a.bin_price>0);
     if (hasBin) {
       $('binBlock').style.display='block';
       syncEl('binPriceDisplay',fmtMoney(a.bin_price));
@@ -374,7 +374,7 @@
 
     const isBinOnly = a.auction_type==='bin';
     $('editStartPriceWrap').style.display = isBinOnly ? 'none' : 'block';
-    $('editBinPriceBlock').style.display = (a.auction_type==='bin'||a.auction_type==='bid_bin'||a.bin_price) ? 'block' : 'none';
+    $('editBinPriceBlock').style.display = (a.auction_type==='bin'||a.bin_price) ? 'block' : 'none';
     $('editPriceBlock').style.flexDirection = isBinOnly ? 'column' : 'row';
     $('editExtendBlock').style.display=a.is_active?'block':'none';
     const parentSel=$('editCategoryParent'),subSel=$('editCategory');

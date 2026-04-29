@@ -12,7 +12,10 @@ if not SECRET_KEY or SECRET_KEY == _PLACEHOLDER_SECRET:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./auction.db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://auction:auction_dev_password@localhost:5433/auction",
+)
 
 LEGACY_PASSWORD_KEYS = [
     key.strip() for key in os.getenv("LEGACY_PASSWORD_KEYS", "").split(",") if key.strip()

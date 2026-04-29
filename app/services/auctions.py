@@ -126,7 +126,7 @@ async def complete_auction(auction_id: int, db: Session):
         "type": "auction_ended",
         "auction_id": auction_id,
         "winner_id": auction.winner_id,
-        "final_price": auction.current_price,
+        "final_price": float(auction.current_price),
     }, auction_id)
 
 

@@ -61,8 +61,8 @@ def get_user_profile(username: str, db: Session = Depends(get_db)):
         auction_list.append({
             "id": a.id,
             "title": a.title,
-            "current_price": a.current_price,
-            "starting_price": a.starting_price,
+            "current_price": float(a.current_price),
+            "starting_price": float(a.starting_price),
             "is_active": a.is_active,
             "is_completed": a.is_completed,
             "end_time": a.end_time.isoformat(),

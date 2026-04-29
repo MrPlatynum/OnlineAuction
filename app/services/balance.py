@@ -8,12 +8,14 @@ can afford a *new* bid we need to subtract those existing commitments
 from their balance.
 """
 
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
 
 from app.models import Auction, Bid
 
 
-def get_committed_balance(db: Session, user_id: int) -> float:
+def get_committed_balance(db: Session, user_id: int) -> Decimal:
     """Sum of ``current_price`` for active auctions where ``user_id``
     is currently the leader (their latest bid amount equals
     ``auction.current_price``)."""
@@ -21,7 +23,7 @@ def get_committed_balance(db: Session, user_id: int) -> float:
         db.query(Bid.auction_id).filter(Bid.user_id == user_id).distinct().all()
     )
     if not bid_auction_ids:
-        return 0.0
+        return Decimal("0")
 
     auction_ids = [aid for (aid,) in bid_auction_ids]
     active_auctions = (
@@ -30,7 +32,7 @@ def get_committed_balance(db: Session, user_id: int) -> float:
         .all()
     )
 
-    total = 0.0
+    total = Decimal("0")
     for auction in active_auctions:
         last_bid = (
             db.query(Bid)
@@ -44,8 +46,8 @@ def get_committed_balance(db: Session, user_id: int) -> float:
 
 
 def effective_committed_balance(
-    db: Session, user_id: int, current_auction_id: int, current_price: float
-) -> float:
+    db: Session, user_id: int, current_auction_id: int, current_price: Decimal
+) -> Decimal:
     """Committed balance excluding any existing commit on the auction
     we're about to bid on — that commit is about to be replaced by the
     new bid amount, so it shouldn't count against availability."""
