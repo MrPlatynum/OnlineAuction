@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuctionHub - Уведомления</title>
+    <style>
+        :root {
+            --bg-primary: #0b0f14;
+            --bg-secondary: #0f1722;
+            --bg-tertiary: #151f2e;
+            --text-primary: #eaf2ff;
+            --text-secondary: #9fb0c2;
+            --accent-primary: #2dd4bf;
+            --accent-secondary: #a78bfa;
+            --accent-success: #22c55e;
+            --accent-warning: #f59e0b;
+            --accent-danger: #ef4444;
+            --border-color: #223147;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        /* Notifications Bell Icon */
+        .notifications-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        .notification-bell {
+            position: relative;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+            font-size: 20px;
+        }
+
+        .notification-bell:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent-primary);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: var(--accent-danger);
+            color: white;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 2px 6px;
+            border-radius: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+
+        /* Notification Dropdown */
+        .notification-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 10px;
+            width: 380px;
+            max-height: 500px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .notification-dropdown.show {
+            display: flex;
+        }
+
+        .notification-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notification-title {
+            font-weight: 800;
+            font-size: 18px;
+        }
+
+        .mark-all-read {
+            font-size: 12px;
+            color: var(--accent-primary);
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .mark-all-read:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .notification-list {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .notification-item {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .notification-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .notification-item.unread {
+            background: rgba(45, 212, 191, 0.05);
+        }
+
+        .notification-item.unread::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: var(--accent-primary);
+        }
+
+        .notification-icon {
+            display: inline-block;
+            margin-right: 12px;
+            font-size: 24px;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-text {
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+
+        .notification-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+
+        .notification-time {
+            opacity: 0.8;
+        }
+
+        .notification-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .notification-action {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .notification-action:hover {
+            background: var(--bg-primary);
+        }
+
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .toast {
+            min-width: 320px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.success { border-left: 4px solid var(--accent-success); }
+        .toast.warning { border-left: 4px solid var(--accent-warning); }
+        .toast.error { border-left: 4px solid var(--accent-danger); }
+        .toast.info { border-left: 4px solid var(--accent-primary); }
+
+        .toast-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+
+        .toast-content {
+            flex: 1;
+        }
+
+        .toast-title {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .toast-message {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .toast-close {
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .toast-close:hover {
+            opacity: 1;
+        }
+
+        /* Settings Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            padding: 30px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+
+        .setting-label {
+            font-weight: 600;
+        }
+
+        .setting-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .toggle {
+            position: relative;
+            width: 48px;
+            height: 24px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .toggle.active {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s;
+        }
+
+        .toggle.active .toggle-slider {
+            transform: translateX(24px);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        /* Demo Container */
+        .demo-container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 40px;
+        }
+
+        .demo-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .demo-title {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 16px;
+        }
+
+        .demo-subtitle {
+            color: var(--text-secondary);
+            font-size: 18px;
+        }
+
+        .demo-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 40px;
+        }
+
+        .demo-button {
+            padding: 16px;
+            border-radius: 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .demo-button:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+        }
+
+        .notification-settings-btn {
+            padding: 12px 20px;
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-left: 12px;
+        }
+
+        .notification-settings-btn:hover {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Demo Container -->
+    <div class="demo-container">
+        <div class="demo-header">
+            <div class="demo-title">🔔 Система уведомлений</div>
+            <div class="demo-subtitle">Real-time уведомления для аукционной платформы</div>
+        </div>
+
+        <!-- Notification Bell Demo -->
+        <div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-bottom: 60px;">
+            <div class="notifications-wrapper">
+                <div class="notification-bell" id="notificationBell" onclick="toggleNotifications()">
+                    🔔
+                    <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                </div>
+
+                <div class="notification-dropdown" id="notificationDropdown">
+                    <div class="notification-header">
+                        <div class="notification-title">Уведомления</div>
+                        <div class="mark-all-read" onclick="markAllAsRead()">Прочитать все</div>
+                    </div>
+                    <div class="notification-list" id="notificationList">
+                        <div class="empty-state">
+                            <div class="empty-icon">📭</div>
+                            <div>Нет уведомлений</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="notification-settings-btn" onclick="showSettings()">
+                ⚙️ Настройки
+            </button>
+        </div>
+
+        <!-- Demo Controls -->
+        <div class="demo-controls">
+            <button class="demo-button" onclick="sendTestNotification('bid_outbid')">
+                😔 Ставку перебили
+            </button>
+            <button class="demo-button" onclick="sendTestNotification('bid_placed')">
+                🎯 Новая ставка
+            </button>
+            <button class="demo-button" onclick="sendTestNotification('auction_ending')">
+                ⏰ Скоро завершится
+            </button>
+            <button class="demo-button" onclick="sendTestNotification('auction_won')">
+                🎉 Вы выиграли
+            </button>
+            <button class="demo-button" onclick="sendTestNotification('auction_lost')">
+                😢 Вы проиграли
+            </button>
+            <button class="demo-button" onclick="sendTestNotification('auction_sold')">
+                💰 Лот продан
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal" onclick="closeSettings(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-title">⚙️ Настройки уведомлений</div>
+            
+            <div class="setting-item">
+                <div>
+                    <div class="setting-label">Email уведомления</div>
+                    <div class="setting-description">Получать письма на почту</div>
+                </div>
+                <div class="toggle" id="toggleEmail" onclick="toggleSetting('email')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div>
+                    <div class="setting-label">Ставку перебили</div>
+                    <div class="setting-description">Когда вашу ставку превысили</div>
+                </div>
+                <div class="toggle active" id="toggleOutbid" onclick="toggleSetting('outbid')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div>
+                    <div class="setting-label">Победа в аукционе</div>
+                    <div class="setting-description">Когда вы выиграли</div>
+                </div>
+                <div class="toggle active" id="toggleWinning" onclick="toggleSetting('winning')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div>
+                    <div class="setting-label">Аукцион скоро завершится</div>
+                    <div class="setting-description">За 5 минут до окончания</div>
+                </div>
+                <div class="toggle active" id="toggleEnding" onclick="toggleSetting('ending')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="setting-item">
+                <div>
+                    <div class="setting-label">Продажа лота</div>
+                    <div class="setting-description">Когда ваш лот продан</div>
+                </div>
+                <div class="toggle active" id="toggleSold" onclick="toggleSetting('sold')">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveSettings()">Сохранить</button>
+                <button class="btn btn-secondary" onclick="closeSettings()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        const WS_URL = 'ws://localhost:8000';
+        
+        let notifications = [];
+        let settings = {
+            email_notifications: true,
+            notify_outbid: true,
+            notify_winning: true,
+            notify_ending: true,
+            notify_sold: true
+        };
+        
+        let notificationWs = null;
+        let userId = null;
+
+        // WebSocket для получения уведомлений в реальном времени
+        function connectNotificationWebSocket(userId) {
+            notificationWs = new WebSocket(`${WS_URL}/ws/notifications/${userId}`);
+            
+            notificationWs.onopen = () => {
+                console.log('✅ WebSocket уведомлений подключен');
+                
+                // Ping каждые 25 секунд
+                setInterval(() => {
+                    if (notificationWs.readyState === WebSocket.OPEN) {
+                        notificationWs.send('ping');
+                    }
+                }, 25000);
+            };
+            
+            notificationWs.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'notification') {
+                    handleNewNotification(data.notification);
+                }
+            };
+            
+            notificationWs.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            notificationWs.onclose = () => {
+                console.log('WebSocket закрыт, переподключение через 5 секунд...');
+                setTimeout(() => connectNotificationWebSocket(userId), 5000);
+            };
+        }
+
+        // Обработка нового уведомления
+        function handleNewNotification(notification) {
+            notifications.unshift(notification);
+            updateNotificationBadge();
+            renderNotifications();
+            
+            // Показываем toast
+            showToast(notification);
+        }
+
+        // Показать toast уведомление
+        function showToast(notification) {
+            const toastContainer = document.getElementById('toastContainer');
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${getNotificationType(notification.type)}`;
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${getNotificationIcon(notification.type)}</div>
+                <div class="toast-content">
+                    <div class="toast-title">${notification.title}</div>
+                    <div class="toast-message">${notification.message}</div>
+                </div>
+                <div class="toast-close" onclick="this.parentElement.remove()">✕</div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // Автоматически удаляем через 5 секунд
+            setTimeout(() => {
+                toast.remove();
+            }, 5000);
+        }
+
+        // Получить тип уведомления для toast
+        function getNotificationType(type) {
+            switch(type) {
+                case 'bid_outbid': return 'warning';
+                case 'auction_won': return 'success';
+                case 'auction_lost': return 'error';
+                case 'auction_ending': return 'info';
+                case 'bid_placed': return 'info';
+                case 'auction_sold': return 'success';
+                default: return 'info';
+            }
+        }
+
+        // Получить иконку для типа уведомления
+        function getNotificationIcon(type) {
+            switch(type) {
+                case 'bid_outbid': return '😔';
+                case 'bid_placed': return '🎯';
+                case 'auction_ending': return '⏰';
+                case 'auction_won': return '🎉';
+                case 'auction_lost': return '😢';
+                case 'auction_sold': return '💰';
+                default: return '🔔';
+            }
+        }
+
+        // Переключение dropdown уведомлений
+        function toggleNotifications() {
+            const dropdown = document.getElementById('notificationDropdown');
+            dropdown.classList.toggle('show');
+            
+            if (dropdown.classList.contains('show')) {
+                loadNotifications();
+            }
+        }
+
+        // Закрытие при клике вне dropdown
+        document.addEventListener('click', (e) => {
+            const wrapper = document.querySelector('.notifications-wrapper');
+            const dropdown = document.getElementById('notificationDropdown');
+            
+            if (!wrapper.contains(e.target) && dropdown.classList.contains('show')) {
+                dropdown.classList.remove('show');
+            }
+        });
+
+        // Загрузка уведомлений с сервера
+        async function loadNotifications() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const response = await fetch(`${API_URL}/api/notifications?limit=20`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    notifications = await response.json();
+                    renderNotifications();
+                    updateNotificationBadge();
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки уведомлений:', error);
+            }
+        }
+
+        // Отрисовка списка уведомлений
+        function renderNotifications() {
+            const list = document.getElementById('notificationList');
+            
+            if (notifications.length === 0) {
+                list.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <div>Нет уведомлений</div>
+                    </div>
+                `;
+                return;
+            }
+            
+            list.innerHTML = notifications.map(n => `
+                <div class="notification-item ${!n.is_read ? 'unread' : ''}" onclick="handleNotificationClick(${n.id}, ${n.auction_id})">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <span class="notification-icon">${getNotificationIcon(n.type)}</span>
+                        <div class="notification-content">
+                            <div class="notification-text">
+                                <strong>${n.title}</strong><br>
+                                ${n.message}
+                                ${n.auction_title ? `<br><small style="color: var(--accent-primary);">${n.auction_title}</small>` : ''}
+                            </div>
+                            <div class="notification-meta">
+                                <span class="notification-time">${formatTime(n.created_at)}</span>
+                                <div class="notification-actions">
+                                    ${!n.is_read ? '<span class="notification-action" onclick="event.stopPropagation(); markAsRead(' + n.id + ')">Прочитать</span>' : ''}
+                                    <span class="notification-action" onclick="event.stopPropagation(); deleteNotification(${n.id})">Удалить</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Обновление бейджа с количеством непрочитанных
+        function updateNotificationBadge() {
+            const badge = document.getElementById('notificationBadge');
+            const unreadCount = notifications.filter(n => !n.is_read).length;
+            
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                badge.style.display = 'block';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        // Клик по уведомлению
+        async function handleNotificationClick(notificationId, auctionId) {
+            await markAsRead(notificationId);
+            
+            if (auctionId) {
+                // Переход на страницу аукциона
+                window.location.href = `auction.html?id=${auctionId}`;
+            }
+        }
+
+        // Отметить как прочитанное
+        async function markAsRead(notificationId) {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const response = await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const notification = notifications.find(n => n.id === notificationId);
+                    if (notification) {
+                        notification.is_read = true;
+                        renderNotifications();
+                        updateNotificationBadge();
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка отметки как прочитанного:', error);
+            }
+        }
+
+        // Отметить все как прочитанные
+        async function markAllAsRead() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const response = await fetch(`${API_URL}/api/notifications/mark-all-read`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    notifications.forEach(n => n.is_read = true);
+                    renderNotifications();
+                    updateNotificationBadge();
+                }
+            } catch (error) {
+                console.error('Ошибка отметки всех как прочитанных:', error);
+            }
+        }
+
+        // Удаление уведомления
+        async function deleteNotification(notificationId) {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const response = await fetch(`${API_URL}/api/notifications/${notificationId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    notifications = notifications.filter(n => n.id !== notificationId);
+                    renderNotifications();
+                    updateNotificationBadge();
+                }
+            } catch (error) {
+                console.error('Ошибка удаления уведомления:', error);
+            }
+        }
+
+        // Форматирование времени
+        function formatTime(timestamp) {
+            const date = new Date(timestamp);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            
+            if (diff < 60) return 'Только что';
+            if (diff < 3600) return `${Math.floor(diff / 60)} мин. назад`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)} ч. назад`;
+            if (diff < 604800) return `${Math.floor(diff / 86400)} дн. назад`;
+            
+            return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        }
+
+        // Настройки уведомлений
+        function showSettings() {
+            document.getElementById('settingsModal').classList.add('show');
+            loadSettings();
+        }
+
+        function closeSettings(event) {
+            if (!event || event.target.id === 'settingsModal') {
+                document.getElementById('settingsModal').classList.remove('show');
+            }
+        }
+
+        function toggleSetting(type) {
+            const toggle = document.getElementById(`toggle${type.charAt(0).toUpperCase() + type.slice(1)}`);
+            toggle.classList.toggle('active');
+        }
+
+        async function loadSettings() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const response = await fetch(`${API_URL}/api/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const user = await response.json();
+                    settings = {
+                        email_notifications: user.email_notifications,
+                        notify_outbid: user.notify_outbid,
+                        notify_winning: user.notify_winning,
+                        notify_ending: user.notify_ending,
+                        notify_sold: user.notify_sold
+                    };
+                    
+                    // Обновляем UI
+                    document.getElementById('toggleEmail').classList.toggle('active', settings.email_notifications);
+                    document.getElementById('toggleOutbid').classList.toggle('active', settings.notify_outbid);
+                    document.getElementById('toggleWinning').classList.toggle('active', settings.notify_winning);
+                    document.getElementById('toggleEnding').classList.toggle('active', settings.notify_ending);
+                    document.getElementById('toggleSold').classList.toggle('active', settings.notify_sold);
+                }
+            } catch (error) {
+                console.error('Ошибка загрузки настроек:', error);
+            }
+        }
+
+        async function saveSettings() {
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                
+                const newSettings = {
+                    email_notifications: document.getElementById('toggleEmail').classList.contains('active'),
+                    notify_outbid: document.getElementById('toggleOutbid').classList.contains('active'),
+                    notify_winning: document.getElementById('toggleWinning').classList.contains('active'),
+                    notify_ending: document.getElementById('toggleEnding').classList.contains('active'),
+                    notify_sold: document.getElementById('toggleSold').classList.contains('active')
+                };
+                
+                const response = await fetch(`${API_URL}/api/notification-settings`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(newSettings)
+                });
+                
+                if (response.ok) {
+                    settings = newSettings;
+                    closeSettings();
+                    showToast({
+                        type: 'auction_won',
+                        title: 'Настройки сохранены',
+                        message: 'Ваши предпочтения обновлены'
+                    });
+                }
+            } catch (error) {
+                console.error('Ошибка сохранения настроек:', error);
+            }
+        }
+
+        // DEMO: Отправка тестовых уведомлений
+        function sendTestNotification(type) {
+            const testNotifications = {
+                'bid_outbid': {
+                    type: 'bid_outbid',
+                    title: '😔 Вашу ставку перебили',
+                    message: 'UserX сделал ставку $250.00. Сделайте новую ставку!',
+                    auction_id: 123,
+                    auction_title: 'Винтажные часы Rolex',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                },
+                'bid_placed': {
+                    type: 'bid_placed',
+                    title: '🎯 Новая ставка на ваш лот',
+                    message: 'UserY сделал ставку $150.00',
+                    auction_id: 456,
+                    auction_title: 'Антикварная книга',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                },
+                'auction_ending': {
+                    type: 'auction_ending',
+                    title: '⏰ Аукцион скоро завершится',
+                    message: 'Аукцион завершится через 5 минут! Вы лидируете! 🎉',
+                    auction_id: 789,
+                    auction_title: 'Коллекционная монета',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                },
+                'auction_won': {
+                    type: 'auction_won',
+                    title: '🎉 Поздравляем! Вы выиграли!',
+                    message: 'Вы выиграли лот за $500.00',
+                    auction_id: 321,
+                    auction_title: 'Картина маслом',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                },
+                'auction_lost': {
+                    type: 'auction_lost',
+                    title: 'Аукцион завершён',
+                    message: 'К сожалению, вы не выиграли этот аукцион',
+                    auction_id: 654,
+                    auction_title: 'Гитара Gibson',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                },
+                'auction_sold': {
+                    type: 'auction_sold',
+                    title: '💰 Ваш лот продан!',
+                    message: 'Лот продан за $350.00. Средства зачислены',
+                    auction_id: 987,
+                    auction_title: 'Смартфон iPhone',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                }
+            };
+            
+            const notification = testNotifications[type];
+            notification.id = Date.now();
+            
+            handleNewNotification(notification);
+        }
+
+        // Инициализация при загрузке
+        window.addEventListener('load', () => {
+            // Для демо используем тестовый userId
+            userId = 1;
+            
+            // В реальном приложении получаем из токена
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    userId = payload.user_id;
+                    
+                    // Подключаемся к WebSocket
+                    connectNotificationWebSocket(userId);
+                    
+                    // Загружаем уведомления
+                    loadNotifications();
+                } catch (e) {
+                    console.error('Ошибка парсинга токена:', e);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

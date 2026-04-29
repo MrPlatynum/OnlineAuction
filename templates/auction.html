@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Лот — AuctionHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/auction.css">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<header class="navbar">
+  <div class="nav-inner">
+    <a class="nav-logo" href="index.html">
+      <div class="nav-logo-icon">🔨</div>
+      <span class="nav-logo-text">AuctionHub</span>
+    </a>
+    <div class="nav-divider"></div>
+    <div class="nav-crumb">
+      <a href="index.html">Аукционы</a>
+      <span class="nav-crumb-sep">›</span>
+      <span class="nav-crumb-current" id="crumbTitle">Лот</span>
+    </div>
+    <div class="nav-right">
+      <button class="btn btn-ghost btn-sm" id="copyLinkBtn" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Копировать ссылку
+      </button>
+      <button class="notif-btn" id="notifBtn" style="display:none;" title="Уведомления">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notifBadge" style="display:none;"></span>
+      </button>
+      <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
+        <div class="nav-avatar" id="avatar">?</div>
+        <div>
+          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-balance" id="userBalance"></div>
+        </div>
+      </a>
+      <button class="btn btn-primary btn-sm" id="authBtn" onclick="goAuth()">Войти</button>
+    </div>
+  </div>
+</header>
+
+<!-- Notification dropdown -->
+<div class="notif-dropdown" id="notifDropdown">
+  <div class="notif-header">
+    <span class="notif-header-title">Уведомления</span>
+    <button class="notif-mark-all" id="notifMarkAll">Прочитать все</button>
+  </div>
+  <div class="notif-list" id="notifList"></div>
+</div>
+
+<!-- ================================================================
+     MAIN
+     ================================================================ -->
+<div class="page-wrap">
+
+  <!-- TOP: gallery + sidebar -->
+  <div class="lot-top">
+
+    <!-- LEFT: Gallery -->
+    <div class="lot-gallery">
+      <div class="lot-image-wrap" id="imageWrap">
+        <span class="lot-image-placeholder" id="imgPlaceholder">🎨</span>
+        <div class="lot-slides" id="lotSlides"></div>
+        <button class="lot-nav lot-nav-prev" id="lotPrev" style="display:none;" onclick="lotSlide(-1)">‹</button>
+        <button class="lot-nav lot-nav-next" id="lotNext" style="display:none;" onclick="lotSlide(1)">›</button>
+        <div class="lot-dots" id="lotDots"></div>
+        <div class="lot-counter" id="lotCounter" style="display:none;"></div>
+      </div>
+      <div class="lot-thumbs" id="lotThumbs"></div>
+    </div>
+
+    <!-- RIGHT: Sidebar -->
+    <div class="lot-sidebar">
+
+      <!-- Price + Timer card -->
+      <div class="card">
+        <div class="card-title" id="bidCardTitle">Текущая ставка</div>
+        <div class="price-hero">
+          <span class="price-hero-val" id="currentPrice">—</span>
+        </div>
+        <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">—</span></div>
+
+        <div class="timer-row" id="timerRow">
+          <span class="timer-icon">⏱</span>
+          <span class="timer-val" id="timeLeft">—</span>
+          <span class="timer-bids"><span id="bidsCount">0</span> ставок</span>
+        </div>
+
+        <!-- BIN block -->
+        <div id="binBlock" style="display:none;" class="bin-block">
+          <div class="bin-label">Цена</div>
+          <div class="bin-price" id="binPriceDisplay">—</div>
+          <button class="btn btn-primary" id="binBtn" onclick="buyNow()" style="width:100%;height:42px;font-size:14px;">Купить</button>
+          <div id="binDivider" class="bin-divider">
+            <div class="bin-divider-line"></div>
+            <span class="bin-divider-text">или сделайте ставку</span>
+            <div class="bin-divider-line"></div>
+          </div>
+        </div>
+
+        <!-- Bid form -->
+        <div class="bid-form" id="bidForm">
+          <div class="bid-input-wrap">
+            <span class="bid-currency">$</span>
+            <input class="bid-input" id="bidAmount" type="number" min="0" step="0.01" placeholder="Введите сумму">
+          </div>
+          <button class="btn btn-primary bid-submit" id="bidBtn" onclick="placeBid()">Поставить ставку</button>
+          <div class="bid-hint" id="bidHint">Войдите, чтобы делать ставки</div>
+        </div>
+      </div>
+
+      <!-- Bids history -->
+      <div class="card">
+        <div class="card-title">История ставок</div>
+        <div class="bids-list" id="bidsList">
+          <div class="bids-empty">Загрузка…</div>
+        </div>
+      </div>
+
+      <!-- Seller card -->
+      <div class="seller-card" id="sellerCard" style="display:none;">
+        <div class="seller-top">
+          <div class="seller-avatar" id="sellerAvatar">?</div>
+          <div>
+            <a class="seller-name-link" id="sellerLink" href="#">—</a>
+            <div class="seller-meta" id="sellerMeta">Продавец</div>
+            <div class="seller-rating-row">
+              <div class="stars" id="sellerStars"></div>
+              <span class="rating-val" id="sellerRatingVal"></span>
+              <span class="rating-count" id="sellerRatingCount"></span>
+            </div>
+          </div>
+        </div>
+        <div class="seller-stats">
+          <div class="seller-stat">
+            <div class="seller-stat-val" id="sellerLots">—</div>
+            <div class="seller-stat-lbl">Лотов</div>
+          </div>
+          <div class="seller-stat">
+            <div class="seller-stat-val" id="sellerSubs">—</div>
+            <div class="seller-stat-lbl">Подписчиков</div>
+          </div>
+          <div class="seller-stat">
+            <div class="seller-stat-val" id="sellerReviews">—</div>
+            <div class="seller-stat-lbl">Отзывов</div>
+          </div>
+        </div>
+        <button class="sub-btn" id="subBtn" onclick="toggleSubscription()" style="display:none;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+          <span id="subBtnText">Подписаться</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LOT INFO: title, desc, stats -->
+  <div class="lot-info" id="lotInfoBlock">
+    <div class="lot-meta-row">
+      <div class="status-badge active" id="statusBadge">Активен</div>
+      <div class="cat-badge" id="categoryBadge"></div>
+      <button id="editLotBtn" onclick="openEditModal()" style="display:none;margin-left:auto;" class="btn btn-secondary btn-sm">✏️ Редактировать</button>
+    </div>
+    <h1 class="lot-title" id="title">Загрузка…</h1>
+    <p class="lot-desc" id="description">Пожалуйста, подождите…</p>
+    <div class="lot-stats">
+      <div class="lot-stat">
+        <div class="lot-stat-label">Текущая цена</div>
+        <div class="lot-stat-value green" id="currentPrice2">—</div>
+      </div>
+      <div class="lot-stat">
+        <div class="lot-stat-label">Стартовая цена</div>
+        <div class="lot-stat-value" id="startingPrice2">—</div>
+      </div>
+      <div class="lot-stat">
+        <div class="lot-stat-label">До окончания</div>
+        <div class="lot-stat-value amber" id="timeLeft2">—</div>
+      </div>
+      <div class="lot-stat">
+        <div class="lot-stat-label">Ставок</div>
+        <div class="lot-stat-value" id="bidsCount2">—</div>
+      </div>
+    </div>
+    <div class="winner-block" id="winnerBlock" style="display:none;">
+      <div class="winner-icon">🏆</div>
+      <div>
+        <div class="winner-label">Победитель</div>
+        <div class="winner-name" id="winnerName">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM: Reviews -->
+  <div class="lot-bottom" id="reviewsSection">
+    <div class="reviews-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="section-title">Отзывы об этом лоте</div>
+        <a id="allReviewsLink" href="#" style="display:none;font-size:12px;color:var(--accent);">Все отзывы о продавце →</a>
+      </div>
+      <div class="reviews-summary" id="reviewsSummary" style="display:none;">
+        <div class="reviews-big-score">
+          <div class="reviews-big-num" id="revAvg">—</div>
+          <div class="reviews-big-stars" id="revBigStars"></div>
+          <div class="reviews-big-count" id="revCount"></div>
+        </div>
+        <div class="reviews-bars" id="revBars"></div>
+      </div>
+      <div class="review-list" id="reviewList"></div>
+      <div class="review-form" id="reviewForm" style="display:none;">
+        <div class="review-form-title">Оставить отзыв</div>
+        <div class="star-picker" id="starPicker">
+          <span class="star-pick" data-val="1">★</span>
+          <span class="star-pick" data-val="2">★</span>
+          <span class="star-pick" data-val="3">★</span>
+          <span class="star-pick" data-val="4">★</span>
+          <span class="star-pick" data-val="5">★</span>
+        </div>
+        <textarea class="review-ta" id="reviewText" placeholder="Расскажите о своём опыте работы с продавцом…"></textarea>
+        <div class="review-form-footer">
+          <button class="btn btn-primary btn-sm" onclick="submitReview()">Опубликовать отзыв</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.page-wrap -->
+
+<!-- Toast -->
+<div class="toast" id="toast">
+  <div class="toast-dot" id="toastDot"></div>
+  <div>
+    <div class="toast-title" id="toastTitle"></div>
+    <div class="toast-msg" id="toastMsg"></div>
+  </div>
+</div>
+
+<!-- Edit Lot Modal -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:center;justify-content:center;backdrop-filter:blur(6px);">
+  <div style="width:500px;max-width:95vw;max-height:88vh;overflow-y:auto;background:var(--bg-2);border:1px solid var(--border-hi);border-radius:16px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.6);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div>
+        <div style="font-size:17px;font-weight:700;">✏️ Редактировать лот</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Изменения доступны пока нет ставок</div>
+      </div>
+      <button onclick="closeEditModal()" style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-3);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="editError" style="display:none;padding:10px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:14px;"></div>
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Название</div>
+        <input type="text" id="editTitle" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Описание</div>
+        <textarea id="editDescription" rows="3" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;resize:vertical;font-family:inherit;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Категория</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <select id="editCategoryParent" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;cursor:pointer;"><option value="">— Выберите категорию —</option></select>
+          <select id="editCategory" style="display:none;width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;cursor:pointer;"><option value="">— Вся категория —</option></select>
+        </div>
+      </div>
+      <div id="editPriceBlock" style="display:flex;gap:12px;">
+        <div id="editStartPriceWrap" style="flex:1;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Стартовая цена ($)</div>
+          <input type="number" id="editPrice" min="1" step="0.01" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div id="editBinPriceBlock" style="flex:1;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Цена BIN ($)</div>
+          <input type="number" id="editBinPrice" min="1" step="0.01" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+      </div>
+      <div id="editExtendBlock">
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Продлить аукцион</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <button type="button" onclick="setExtend(30)" style="padding:6px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;">+30 мин</button>
+          <button type="button" onclick="setExtend(60)" style="padding:6px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;">+1 час</button>
+          <button type="button" onclick="setExtend(1440)" style="padding:6px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;">+1 день</button>
+          <input type="number" id="editExtend" min="1" max="10080" placeholder="мин вручную" style="width:130px;padding:6px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-1);font-size:12px;outline:none;">
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Фотографии</div>
+        <div class="multi-img-preview" id="editImgPreview"></div>
+        <label for="editImageFile" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;background:var(--bg-3);border:1px dashed var(--border-hi);border-radius:8px;color:var(--text-3);font-size:12px;font-weight:600;cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Добавить фото
+        </label>
+        <input type="file" id="editImageFile" accept="image/*" multiple style="display:none;">
+        <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Первое фото — обложка. До 5 изображений.</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
+      <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Отмена</button>
+      <button type="button" id="editSaveBtn" onclick="saveEdit()" class="btn btn-primary" style="min-width:130px;">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+  <script src="/static/js/auction.js"></script>
+</body>
+</html>

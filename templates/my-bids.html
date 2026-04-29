@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Мои ставки — AuctionHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/my-bids.css">
+</head>
+<body>
+
+<header class="navbar">
+  <div class="nav-inner">
+    <a class="nav-logo" href="index.html">
+      <div class="nav-logo-icon">🔨</div>
+      <span class="nav-logo-text">AuctionHub</span>
+    </a>
+
+    <nav class="nav-links">
+      <a class="nav-link" href="index.html">Аукционы</a>
+      <button class="nav-link active">Мои ставки</button>
+      <a class="nav-link" href="profile.html">Профиль</a>
+    </nav>
+
+    <div class="nav-right">
+      <button class="notif-btn" id="notifBtn" style="display:none;" title="Уведомления">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notifBadge" style="display:none;"></span>
+      </button>
+
+      <div class="notif-dropdown" id="notifDropdown">
+        <div class="notif-header">
+          <span class="notif-header-title">Уведомления</span>
+          <button class="notif-mark-all" id="notifMarkAll">Прочитать все</button>
+        </div>
+        <div class="notif-list" id="notifList"></div>
+      </div>
+
+      <div class="nav-user" id="userProfile" style="display:none;" onclick="window.location.href='profile.html'">
+        <div class="nav-avatar" id="userAvatar">?</div>
+        <div>
+          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-balance">$<span id="userBalance">0</span></div>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary btn-sm" id="guestBtn" onclick="window.location.href='index.html'" style="display:none;">Войти</button>
+    </div>
+  </div>
+</header>
+
+<main class="page" id="mainContent">
+  <!-- Наполняется JS -->
+</main>
+
+<!-- Notification Bell JS -->
+  <script src="/static/js/my-bids.js"></script>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuctionHub — Онлайн-аукцион</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css">
+  <link rel="stylesheet" href="/static/css/index.css">
+</head>
+<body>
+
+<!-- ================================================================
+     NAVBAR
+     ================================================================ -->
+<header class="navbar">
+  <div class="nav-inner">
+    <a class="nav-logo" href="index.html">
+      <div class="nav-logo-icon">🔨</div>
+      <span class="nav-logo-text">AuctionHub</span>
+    </a>
+
+    <div class="nav-divider"></div>
+
+    <nav class="nav-links">
+      <button class="nav-link active" onclick="showSection(event,'auctions')">Аукционы</button>
+    </nav>
+
+    <!-- Центральный поиск -->
+    <div class="nav-search" style="position:relative;">
+      <div class="search-wrap" id="searchWrap">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" class="search-input" id="searchInput" placeholder="Поиск лотов..." autocomplete="off">
+        <button class="search-clear" id="clearSearch" type="button" style="display:none;">✕</button>
+      </div>
+      <div class="search-history" id="searchHistory" style="display:none;">
+        <div class="sh-header">
+          <span class="sh-title">История поиска</span>
+          <button class="sh-clear-all" onclick="clearSearchHistory()">Очистить</button>
+        </div>
+        <div id="shList"></div>
+      </div>
+    </div>
+
+    <div class="nav-right">
+      <button class="notif-btn" id="notifBtn" style="display:none;" title="Уведомления">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notifBadge" style="display:none;"></span>
+      </button>
+
+      <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
+        <div class="nav-avatar" id="userAvatarSmall">?</div>
+        <div>
+          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-balance">$<span id="userBalanceSmall">0</span></div>
+        </div>
+      </a>
+
+      <button class="btn btn-primary btn-sm" id="guestProfile" onclick="showAuth()">Войти</button>
+
+      <button class="nav-hamburger" onclick="openMobileNav()">☰</button>
+    </div>
+  </div>
+</header>
+
+<!-- Notification Dropdown (outside header, positioned fixed) -->
+<div class="notif-dropdown" id="notifDropdown">
+  <div class="notif-header">
+    <span class="notif-header-title">Уведомления</span>
+    <button class="notif-mark-all" id="notifMarkAll">Прочитать все</button>
+  </div>
+  <div class="notif-list" id="notifList">
+    <div class="notif-empty">
+      <div class="notif-empty-icon">🔔</div>
+      Загрузка…
+    </div>
+  </div>
+</div>
+
+<!-- Mobile nav -->
+<div class="mobile-nav" id="mobileNav" onclick="closeMobileNav(event)">
+  <div class="mobile-nav-inner">
+    <div style="font-size:15px;font-weight:700;padding:4px 12px 12px;border-bottom:1px solid var(--border);margin-bottom:8px;">AuctionHub</div>
+    <button class="mobile-nav-link active" onclick="showSection(event,'auctions');closeMobileNavFull()">🏠 Аукционы</button>
+    <button class="mobile-nav-link" href="my-bids.html" onclick="closeMobileNavFull()">🎯 Мои ставки</button>
+    <button class="mobile-nav-link" onclick="window.location.href='profile.html'">👤 Профиль</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     MAIN PAGE
+     ================================================================ -->
+<main class="page-layout">
+
+  <!-- ======= SIDEBAR FILTERS ======= -->
+  <aside class="filter-sidebar" id="filterSidebar">
+
+    <!-- Статус -->
+    <div class="fs-section">
+      <div class="fs-label">Статус</div>
+      <div class="fs-status-tabs">
+        <button class="fs-stab active" data-status="active"    onclick="setStatus(this,'active')">Активные</button>
+        <button class="fs-stab"        data-status="completed" onclick="setStatus(this,'completed')">Завершённые</button>
+        <button class="fs-stab"        data-status="all"       onclick="setStatus(this,'all')">Все</button>
+      </div>
+    </div>
+
+    <!-- Категории -->
+    <div class="fs-section">
+      <div class="fs-label">Категория</div>
+      <div class="fs-cat-list" id="fsCatList">
+        <button class="fs-cat-item active" data-slug="" onclick="selectCategory(this,'',null,'','')">
+          <span>🏷️</span> Все категории
+        </button>
+      </div>
+    </div>
+
+    <!-- Тип аукциона -->
+    <div class="fs-section">
+      <div class="fs-label">Тип аукциона</div>
+      <div class="fs-checks">
+        <label class="fs-check"><input type="checkbox" id="filterBid"> 🔨 Торги (BID)</label>
+        <label class="fs-check"><input type="checkbox" id="filterBin"> ⚡ Купить сразу (BIN)</label>
+      </div>
+    </div>
+
+    <!-- Цена -->
+    <div class="fs-section">
+      <div class="fs-label">Цена ($)</div>
+      <div class="fs-price-row">
+        <input type="number" class="fs-price-input" id="minPrice" placeholder="от">
+        <span class="fs-price-sep">—</span>
+        <input type="number" class="fs-price-input" id="maxPrice" placeholder="до">
+      </div>
+    </div>
+
+    <!-- Сортировка -->
+    <div class="fs-section">
+      <div class="fs-label">Сортировка</div>
+      <select class="fs-select" id="sortFilter">
+        <option value="time">По времени</option>
+        <option value="price_asc">Цена ↑</option>
+        <option value="price_desc">Цена ↓</option>
+      </select>
+    </div>
+
+    <!-- Автор -->
+    <div class="fs-section">
+      <div class="fs-label">Автор</div>
+      <input type="text" class="fs-input" id="creatorInput" placeholder="@username">
+    </div>
+
+    <!-- Кнопки -->
+    <div class="fs-actions">
+      <button class="btn btn-primary" style="width:100%;" onclick="applyFilters()">Применить</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="resetFilters()">Сбросить фильтры</button>
+    </div>
+
+  </aside>
+
+  <!-- ======= CONTENT ======= -->
+  <div class="page-content">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title" id="pageTitle">Активные аукционы</h1>
+        <p class="page-subtitle">Участвуйте в торгах и находите уникальные лоты</p>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="toolbar-count" id="resultInfoInline"></span>
+      </div>
+    </div>
+
+    <!-- Активные теги фильтров -->
+    <div class="filter-tags" id="filterTags"></div>
+
+    <!-- Скрытые элементы для совместимости -->
+    <span style="display:none" id="resultInfo"></span>
+    <span style="display:none" id="advancedFilters"></span>
+    <button style="display:none" id="applyBtn" type="button"></button>
+    <select style="display:none" id="categoryFilter"></select>
+
+    <div id="auctionsContainer" class="auctions-grid"></div>
+
+    <div class="pagination" id="pagination" style="display:none;">
+      <button class="pagination-btn" id="prevBtn" onclick="changePage(-1)">← Назад</button>
+      <span class="pagination-info" id="pageInfo">Страница 1 из 1</span>
+      <button class="pagination-btn" id="nextBtn" onclick="changePage(1)">Вперёд →</button>
+    </div>
+  </div>
+
+</main>
+
+
+<!-- FAB (mobile) -->
+<button class="fab" id="fabCreate" type="button" onclick="showCreateModal()">+ Создать</button>
+
+<!-- ================================================================
+     AUTH MODAL
+     ================================================================ -->
+<div class="modal" id="authModal">
+  <div class="modal-box">
+    <h2 class="modal-title">Добро пожаловать</h2>
+    <button class="modal-close" onclick="closeAuth()">✕</button>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchAuthTab('login')">Вход</button>
+      <button class="tab" onclick="switchAuthTab('register')">Регистрация</button>
+    </div>
+
+    <div class="error-box" id="authError"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label class="form-label">Имя пользователя</label>
+        <input type="text" class="form-input" id="loginUsername" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="password" class="form-input" id="loginPassword" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px;">Войти</button>
+    </form>
+
+    <form id="registerForm" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">Имя пользователя</label>
+        <input type="text" class="form-input" id="registerUsername" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-input" id="registerEmail" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Пароль</label>
+        <input type="password" class="form-input" id="registerPassword" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px;">Зарегистрироваться</button>
+    </form>
+
+    <button class="btn btn-ghost btn-full" onclick="closeAuth()" style="margin-top:8px;">Отмена</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     CREATE LOT MODAL
+     ================================================================ -->
+<div class="modal" id="createModal">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>Новый лот</span>
+      <button class="modal-close" type="button" onclick="closeCreateModal()" style="position:static;margin-left:auto;">✕</button>
+    </div>
+
+    <div class="error-box" id="createError"></div>
+
+    <form id="createAuctionForm" style="display:contents;">
+      <div class="create-grid">
+        <div class="create-pane">
+          <div class="form-group">
+            <label class="form-label">Изображения <span style="color:var(--text-3);font-weight:400">(до 5 фото)</span></label>
+            <!-- Превью загруженных -->
+            <div class="multi-img-preview" id="multiImgPreview"></div>
+            <!-- Кнопка добавить -->
+            <label class="multi-img-add" id="multiImgAddBtn" for="auctionImageFile">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Добавить фото
+            </label>
+            <input type="file" class="form-input" id="auctionImageFile" accept="image/*" style="display:none;" multiple>
+            <div class="img-hint">Первое фото — обложка. Можно добавить до 5 изображений.</div>
+          </div>
+        </div>
+
+        <div class="create-pane">
+          <div class="form-group">
+            <label class="form-label">Название</label>
+            <input type="text" class="form-input" id="auctionTitle" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Описание</label>
+            <textarea class="form-input" id="auctionDescription" required></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Категория</label>
+            <div class="cat-picker" id="createCatPicker">
+              <select class="form-input cat-picker-parent" id="auctionCategoryParent">
+                <option value="">— Выберите категорию —</option>
+              </select>
+              <select class="form-input cat-picker-sub" id="auctionCategory" style="display:none;">
+                <option value="">— Подкатегория —</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Тип аукциона</label>
+            <div class="auction-type-tabs">
+              <button type="button" class="type-tab active" data-type="bid" onclick="setAuctionType('bid')">
+                🔨 Торги (BID)
+              </button>
+              <button type="button" class="type-tab" data-type="bin" onclick="setAuctionType('bin')">
+                ⚡ Купить сразу (BIN)
+              </button>
+            </div>
+            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки — побеждает наибольшая</div>
+          </div>
+
+          <!-- BID поля -->
+          <div id="bidFields">
+            <div class="form-group">
+              <label class="form-label">Стартовая цена ($)</label>
+              <input type="number" class="form-input" id="auctionPrice" min="1" step="0.01" placeholder="например, 100">
+              <div class="img-hint">Минимальная ставка, с которой начнутся торги</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Длительность</label>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="number" class="form-input" id="auctionDuration" min="1" max="10080" value="60" placeholder="60" style="flex:1;">
+                <span style="font-size:12px;color:var(--text-3);white-space:nowrap;">мин</span>
+              </div>
+              <div class="img-hint" id="durationHint">1 час — аукцион завершится через 60 мин</div>
+            </div>
+          </div>
+
+          <!-- BIN поля -->
+          <div id="binFields" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Цена «Купить сразу» ($)</label>
+              <input type="number" class="form-input" id="auctionBinPrice" min="1" step="0.01" placeholder="например, 500">
+              <div class="img-hint">Первый покупатель забирает лот по этой цене</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Длительность <span style="color:var(--text-3);font-weight:400">(необязательно)</span></label>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="number" class="form-input" id="auctionDurationBin" min="1" max="10080" value="10080" placeholder="10080" style="flex:1;">
+                <span style="font-size:12px;color:var(--text-3);white-space:nowrap;">мин</span>
+              </div>
+              <div class="img-hint">Лот закроется когда его купят или истечёт время</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="create-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Отмена</button>
+        <button type="submit" class="btn btn-primary">Создать лот</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
+
+<!-- ================================================================
+     COMPAT SHIMS — bridge new HTML to existing JS
+     ================================================================ -->
+  <script src="/static/js/index.js"></script>
+</body>
+</html>

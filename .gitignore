@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual env
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment & secrets
+.env
+.env.local
+
+# Application data — never commit
+auction.db
+auction.db.backup_*
+static/uploads/
+
+# Test/dev images (not part of the app)
+images/
+
+# Refactor backup (delete after thesis defense)
+_old_root_html/
+
+# Personal notes (not for repo)
+Запуск.txt
+Текстовый документ.txt
+
+# Misc
+*.bak
+*.bak.html
+*.swp
+.DS_Store
+Thumbs.db

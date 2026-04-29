@@ -1,0 +1,58 @@
+import os
+
+from fastapi import APIRouter, HTTPException
+from starlette.responses import FileResponse
+
+from app.config import BASE_DIR
+
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+
+router = APIRouter()
+
+
+def _page(name: str) -> FileResponse:
+    path = os.path.join(TEMPLATES_DIR, name)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Page not found")
+    return FileResponse(path)
+
+
+@router.get("/")
+async def read_index_root():
+    return _page("index.html")
+
+
+@router.get("/index.html")
+async def read_index():
+    return _page("index.html")
+
+
+@router.get("/auction.html")
+async def read_auction():
+    return _page("auction.html")
+
+
+@router.get("/profile.html")
+async def read_profile():
+    return _page("profile.html")
+
+
+@router.get("/my-bids.html")
+async def read_my_bids():
+    return _page("my-bids.html")
+
+
+@router.get("/user.html")
+async def read_user():
+    return _page("user.html")
+
+
+@router.get("/notifications.html")
+async def read_notifications():
+    notifications_path = os.path.join(TEMPLATES_DIR, "notifications.html")
+    if os.path.exists(notifications_path):
+        return FileResponse(notifications_path)
+    demo_path = os.path.join(BASE_DIR, "notifications_demo.html")
+    if os.path.exists(demo_path):
+        return FileResponse(demo_path)
+    raise HTTPException(status_code=404, detail="Page not found")
