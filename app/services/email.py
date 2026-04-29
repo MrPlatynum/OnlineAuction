@@ -1,7 +1,8 @@
 import logging
-import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+
+import aiosmtplib
 
 from app.config import EMAIL_FROM, SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USERNAME
 
@@ -9,20 +10,30 @@ logger = logging.getLogger(__name__)
 
 
 async def send_email_notification(to_email: str, subject: str, html_content: str):
-    """Отправка email уведомления."""
+    """Send an email notification.
+
+    Uses ``aiosmtplib`` so the SMTP handshake, login, and send all
+    happen on the asyncio event loop without blocking it. The previous
+    ``smtplib`` implementation was a sync API that, called inside an
+    ``async def``, blocked the entire FastAPI worker for the duration
+    of the SMTP roundtrip — defeating the purpose of having an async
+    framework in the first place.
+    """
     try:
         msg = MIMEMultipart('alternative')
         msg['From'] = EMAIL_FROM
         msg['To'] = to_email
         msg['Subject'] = subject
+        msg.attach(MIMEText(html_content, 'html'))
 
-        html_part = MIMEText(html_content, 'html')
-        msg.attach(html_part)
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USERNAME, SMTP_PASSWORD)
-            server.send_message(msg)
+        await aiosmtplib.send(
+            msg,
+            hostname=SMTP_SERVER,
+            port=SMTP_PORT,
+            start_tls=True,
+            username=SMTP_USERNAME or None,
+            password=SMTP_PASSWORD or None,
+        )
 
         logger.info("Email sent to %s: %s", to_email, subject)
     except Exception:
