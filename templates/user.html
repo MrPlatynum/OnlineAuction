@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Профиль — AuctionHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/user.css">
+</head>
+<body>
+
+<header class="navbar">
+  <div class="nav-inner">
+    <a class="nav-logo" href="index.html">
+      <div class="nav-logo-icon">🔨</div>
+      <span class="nav-logo-text">AuctionHub</span>
+    </a>
+    <div class="nav-divider"></div>
+    <div class="nav-crumb">
+      <a href="index.html">Аукционы</a>
+      <span class="nav-crumb-sep">›</span>
+      <span class="nav-crumb-current" id="crumbName">Профиль</span>
+    </div>
+    <div class="nav-right">
+      <button class="notif-btn" id="notifBtn" style="display:none;" title="Уведомления">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-badge" id="notifBadge" style="display:none;"></span>
+      </button>
+      <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
+        <div class="nav-avatar" id="navAvatar">?</div>
+        <div>
+          <div class="nav-user-name" id="navUserName">—</div>
+          <div class="nav-balance">$<span id="navBalance">0</span></div>
+        </div>
+      </a>
+      <a href="index.html" class="btn btn-secondary btn-sm" id="guestBtn">← К аукционам</a>
+    </div>
+  </div>
+</header>
+
+<div class="notif-dropdown" id="notifDropdown" style="position:fixed;top:calc(var(--nav-h)+6px);right:20px;width:360px;background:var(--bg-2);border:1px solid var(--border-hi);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);z-index:500;display:none;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border);">
+    <span style="font-size:13px;font-weight:700;">Уведомления</span>
+    <button id="notifMarkAll" style="background:none;border:none;font-size:12px;color:var(--accent);cursor:pointer;font-weight:600;">Прочитать все</button>
+  </div>
+  <div id="notifList" style="max-height:380px;overflow-y:auto;"><div style="padding:28px;text-align:center;color:var(--text-3);">🔔 Загрузка…</div></div>
+</div>
+
+<div class="page-wrap" id="page">
+  <!-- Skeleton -->
+  <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px 28px;margin-bottom:20px;display:flex;align-items:center;gap:20px;">
+    <div class="skel" style="width:72px;height:72px;border-radius:50%;flex-shrink:0;"></div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+      <div class="skel" style="height:22px;width:180px;"></div>
+      <div class="skel" style="height:12px;width:120px;"></div>
+    </div>
+  </div>
+</div>
+
+  <script src="/static/js/user.js"></script>
+</body>
+</html>
