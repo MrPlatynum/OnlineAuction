@@ -47,12 +47,3 @@ async def read_user():
     return _page("user.html")
 
 
-@router.get("/notifications.html")
-async def read_notifications():
-    notifications_path = os.path.join(TEMPLATES_DIR, "notifications.html")
-    if os.path.exists(notifications_path):
-        return FileResponse(notifications_path)
-    demo_path = os.path.join(BASE_DIR, "notifications_demo.html")
-    if os.path.exists(demo_path):
-        return FileResponse(demo_path)
-    raise HTTPException(status_code=404, detail="Page not found")
