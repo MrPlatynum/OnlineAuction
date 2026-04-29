@@ -1,6 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 SQLAlchemy==2.0.36
+greenlet==3.2.4  # required by SQLAlchemy async extension
 pydantic==2.10.3
 pydantic-settings==2.6.1
 python-multipart==0.0.12
@@ -10,5 +11,12 @@ passlib[bcrypt]==1.7.4
 bcrypt==4.3.0  # Pinned: passlib 1.7.4 is incompatible with bcrypt 5.x
 
 # Database
-psycopg2-binary==2.9.12
+asyncpg==0.31.0           # async driver used by the FastAPI app
+psycopg2-binary==2.9.12   # sync driver used by Alembic migrations
 alembic==1.18.4
+
+# Config
+python-dotenv==1.1.1
+
+# Async SMTP
+aiosmtplib==5.1.0

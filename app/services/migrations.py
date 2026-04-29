@@ -7,97 +7,93 @@ migration because we want them to be top-up-able as new sub-categories
 are added in code.
 """
 
+from sqlalchemy import select
+
 from app.database import SessionLocal
 from app.models import Category
 
 
-def seed_categories():
-    db = SessionLocal()
-    try:
-        if db.query(Category).count() == 0:
-            parents = [
-                Category(name="Электроника",   slug="electronics",  icon="💻"),
-                Category(name="Авто",          slug="auto",         icon="🚗"),
-                Category(name="Одежда",        slug="clothing",     icon="👗"),
-                Category(name="Искусство",     slug="art",          icon="🎨"),
-                Category(name="Коллекционное", slug="collectibles", icon="🏺"),
-                Category(name="Спорт",         slug="sport",        icon="⚽"),
-                Category(name="Дом и сад",     slug="home",         icon="🏡"),
-                Category(name="Животные",      slug="animals",      icon="🐾"),
-                Category(name="Другое",        slug="other",        icon="📦"),
-            ]
-            db.add_all(parents)
-            db.commit()
-            for p in parents:
-                db.refresh(p)
+_PARENTS = [
+    ("Электроника",   "electronics",  "💻"),
+    ("Авто",          "auto",         "🚗"),
+    ("Одежда",        "clothing",     "👗"),
+    ("Искусство",     "art",          "🎨"),
+    ("Коллекционное", "collectibles", "🏺"),
+    ("Спорт",         "sport",        "⚽"),
+    ("Дом и сад",     "home",         "🏡"),
+    ("Животные",      "animals",      "🐾"),
+    ("Другое",        "other",        "📦"),
+]
 
-            subs_map = {
-                "electronics": [
-                    ("Смартфоны",      "phones",    "📱"),
-                    ("Ноутбуки",       "laptops",   "💻"),
-                    ("Фото и видео",   "photo",     "📷"),
-                    ("Аудио",          "audio",     "🎧"),
-                    ("Игры и консоли", "gaming",    "🎮"),
-                    ("ТВ и мониторы",  "tv",        "🖥️"),
-                ],
-                "auto": [
-                    ("Легковые",  "cars",   "🚗"),
-                    ("Мотоциклы", "motos",  "🏍️"),
-                    ("Запчасти",  "parts",  "🔧"),
-                    ("Грузовые",  "trucks", "🚛"),
-                ],
-                "clothing": [
-                    ("Мужская",    "men",       "👔"),
-                    ("Женская",    "women",     "👗"),
-                    ("Детская",    "kids",      "🧒"),
-                    ("Обувь",      "shoes",     "👟"),
-                    ("Аксессуары", "accessory", "💍"),
-                ],
-                "art": [
-                    ("Живопись",   "painting",  "🖼️"),
-                    ("Скульптура", "sculpture", "🗿"),
-                    ("Фотоарт",    "photoart",  "📸"),
-                    ("Цифровое",   "digital",   "💾"),
-                ],
-                "sport": [
-                    ("Велоспорт",      "cycling", "🚴"),
-                    ("Фитнес",         "fitness", "🏋️"),
-                    ("Зимние виды",    "winter",  "⛷️"),
-                    ("Командные виды", "team",    "⚽"),
-                ],
-                "home": [
-                    ("Мебель",      "furniture", "🛋️"),
-                    ("Инструменты", "tools",     "🔨"),
-                    ("Сад",         "garden",    "🌿"),
-                    ("Декор",       "decor",     "🕯️"),
-                ],
-            }
+_SUBS_MAP = {
+    "electronics": [
+        ("Смартфоны",      "phones",    "📱"),
+        ("Ноутбуки",       "laptops",   "💻"),
+        ("Фото и видео",   "photo",     "📷"),
+        ("Аудио",          "audio",     "🎧"),
+        ("Игры и консоли", "gaming",    "🎮"),
+        ("ТВ и мониторы",  "tv",        "🖥️"),
+    ],
+    "auto": [
+        ("Легковые",  "cars",   "🚗"),
+        ("Мотоциклы", "motos",  "🏍️"),
+        ("Запчасти",  "parts",  "🔧"),
+        ("Грузовые",  "trucks", "🚛"),
+    ],
+    "clothing": [
+        ("Мужская",    "men",       "👔"),
+        ("Женская",    "women",     "👗"),
+        ("Детская",    "kids",      "🧒"),
+        ("Обувь",      "shoes",     "👟"),
+        ("Аксессуары", "accessory", "💍"),
+    ],
+    "art": [
+        ("Живопись",   "painting",  "🖼️"),
+        ("Скульптура", "sculpture", "🗿"),
+        ("Фотоарт",    "photoart",  "📸"),
+        ("Цифровое",   "digital",   "💾"),
+    ],
+    "sport": [
+        ("Велоспорт",      "cycling", "🚴"),
+        ("Фитнес",         "fitness", "🏋️"),
+        ("Зимние виды",    "winter",  "⛷️"),
+        ("Командные виды", "team",    "⚽"),
+    ],
+    "home": [
+        ("Мебель",      "furniture", "🛋️"),
+        ("Инструменты", "tools",     "🔨"),
+        ("Сад",         "garden",    "🌿"),
+        ("Декор",       "decor",     "🕯️"),
+    ],
+}
+
+
+async def seed_categories():
+    async with SessionLocal() as db:
+        existing_count = (await db.execute(select(Category))).scalars().first()
+        if existing_count is None:
+            parents = [Category(name=n, slug=s, icon=i) for n, s, i in _PARENTS]
+            db.add_all(parents)
+            await db.commit()
+            for p in parents:
+                await db.refresh(p)
+
             parent_map = {p.slug: p.id for p in parents}
             subs = []
-            for parent_slug, children in subs_map.items():
+            for parent_slug, children in _SUBS_MAP.items():
                 pid = parent_map.get(parent_slug)
                 if not pid:
                     continue
                 for name, slug, icon in children:
                     subs.append(Category(name=name, slug=slug, icon=icon, parent_id=pid))
             db.add_all(subs)
-            db.commit()
+            await db.commit()
         else:
-            existing_slugs = {c.slug for c in db.query(Category).all()}
-            parent_map = {
-                c.slug: c.id
-                for c in db.query(Category).filter(Category.parent_id == None).all()
-            }
-            subs_map = {
-                "electronics": [("Смартфоны","phones","📱"),("Ноутбуки","laptops","💻"),("Фото и видео","photo","📷"),("Аудио","audio","🎧"),("Игры и консоли","gaming","🎮"),("ТВ и мониторы","tv","🖥️")],
-                "auto":        [("Легковые","cars","🚗"),("Мотоциклы","motos","🏍️"),("Запчасти","parts","🔧"),("Грузовые","trucks","🚛")],
-                "clothing":    [("Мужская","men","👔"),("Женская","women","👗"),("Детская","kids","🧒"),("Обувь","shoes","👟"),("Аксессуары","accessory","💍")],
-                "art":         [("Живопись","painting","🖼️"),("Скульптура","sculpture","🗿"),("Фотоарт","photoart","📸"),("Цифровое","digital","💾")],
-                "sport":       [("Велоспорт","cycling","🚴"),("Фитнес","fitness","🏋️"),("Зимние виды","winter","⛷️"),("Командные виды","team","⚽")],
-                "home":        [("Мебель","furniture","🛋️"),("Инструменты","tools","🔨"),("Сад","garden","🌿"),("Декор","decor","🕯️")],
-            }
+            existing = (await db.execute(select(Category))).scalars().all()
+            existing_slugs = {c.slug for c in existing}
+            parent_map = {c.slug: c.id for c in existing if c.parent_id is None}
             new_subs = []
-            for parent_slug, children in subs_map.items():
+            for parent_slug, children in _SUBS_MAP.items():
                 pid = parent_map.get(parent_slug)
                 if not pid:
                     continue
@@ -106,6 +102,4 @@ def seed_categories():
                         new_subs.append(Category(name=name, slug=slug, icon=icon, parent_id=pid))
             if new_subs:
                 db.add_all(new_subs)
-                db.commit()
-    finally:
-        db.close()
+                await db.commit()

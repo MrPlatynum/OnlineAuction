@@ -10,8 +10,8 @@ def _make_auction_payload(**overrides):
     return payload
 
 
-def test_create_auction_authenticated(client, registered_user):
-    response = client.post(
+async def test_create_auction_authenticated(client, registered_user):
+    response = await client.post(
         "/api/auctions",
         json=_make_auction_payload(),
         headers=registered_user["headers"],
@@ -25,38 +25,38 @@ def test_create_auction_authenticated(client, registered_user):
     assert body["is_active"] is True
 
 
-def test_create_auction_unauthenticated(client):
-    response = client.post("/api/auctions", json=_make_auction_payload())
+async def test_create_auction_unauthenticated(client):
+    response = await client.post("/api/auctions", json=_make_auction_payload())
     assert response.status_code == 403
 
 
-def test_get_auction_by_id(client, registered_user):
-    create = client.post(
+async def test_get_auction_by_id(client, registered_user):
+    create = await client.post(
         "/api/auctions",
         json=_make_auction_payload(title="Lookup test"),
         headers=registered_user["headers"],
     )
     auction_id = create.json()["id"]
 
-    response = client.get(f"/api/auctions/{auction_id}")
+    response = await client.get(f"/api/auctions/{auction_id}")
     assert response.status_code == 200
     assert response.json()["title"] == "Lookup test"
 
 
-def test_get_nonexistent_auction_returns_404(client):
-    response = client.get("/api/auctions/99999")
+async def test_get_nonexistent_auction_returns_404(client):
+    response = await client.get("/api/auctions/99999")
     assert response.status_code == 404
 
 
-def test_list_auctions_paginated(client, registered_user):
+async def test_list_auctions_paginated(client, registered_user):
     for i in range(3):
-        client.post(
+        await client.post(
             "/api/auctions",
             json=_make_auction_payload(title=f"Lot {i}"),
             headers=registered_user["headers"],
         )
 
-    response = client.get("/api/auctions")
+    response = await client.get("/api/auctions")
     assert response.status_code == 200
     body = response.json()
     assert body["total"] == 3

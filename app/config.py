@@ -1,5 +1,12 @@
 import os
 
+from dotenv import load_dotenv
+
+# Load .env from the project root if present. Existing OS env vars
+# always win (load_dotenv default), so CI / Docker / explicit shell
+# exports keep their precedence.
+load_dotenv()
+
 _PLACEHOLDER_SECRET = "your-secret-key-change-in-production"
 
 SECRET_KEY = os.getenv("AUCTION_SECRET_KEY")
@@ -12,10 +19,24 @@ if not SECRET_KEY or SECRET_KEY == _PLACEHOLDER_SECRET:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-DATABASE_URL = os.getenv(
+_raw_url = os.getenv(
     "DATABASE_URL",
-    "postgresql+psycopg2://auction:auction_dev_password@localhost:5433/auction",
+    "postgresql+asyncpg://auction:auction_dev_password@localhost:5433/auction",
 )
+
+# The app uses asyncpg; Alembic uses psycopg2. Accept either driver in
+# the env var and normalise so both URLs are always available without
+# requiring two env vars.
+if "+psycopg2" in _raw_url:
+    DATABASE_URL = _raw_url.replace("+psycopg2", "+asyncpg")
+elif "+asyncpg" in _raw_url:
+    DATABASE_URL = _raw_url
+elif _raw_url.startswith("postgresql://"):
+    DATABASE_URL = _raw_url.replace("postgresql://", "postgresql+asyncpg://")
+else:
+    DATABASE_URL = _raw_url
+
+SYNC_DATABASE_URL = DATABASE_URL.replace("+asyncpg", "+psycopg2")
 
 LEGACY_PASSWORD_KEYS = [
     key.strip() for key in os.getenv("LEGACY_PASSWORD_KEYS", "").split(",") if key.strip()

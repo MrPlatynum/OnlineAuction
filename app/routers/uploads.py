@@ -2,7 +2,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ALLOWED_IMAGE_TYPES, MAX_UPLOAD_SIZE, UPLOAD_DIR
 from app.database import get_db
@@ -37,7 +37,7 @@ async def upload_image(file: UploadFile = File(...)):
 async def upload_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported image type")
@@ -66,7 +66,7 @@ async def upload_avatar(
 
     avatar_url = f"/static/uploads/{filename}"
     current_user.avatar_url = avatar_url
-    db.commit()
+    await db.commit()
 
     return {"avatar_url": avatar_url}
 
@@ -74,7 +74,7 @@ async def upload_avatar(
 @router.delete("/upload-avatar")
 async def delete_avatar(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     if current_user.avatar_url:
         old_filename = current_user.avatar_url.split("/")[-1]
@@ -85,5 +85,5 @@ async def delete_avatar(
             except Exception:
                 pass
         current_user.avatar_url = None
-        db.commit()
+        await db.commit()
     return {"ok": True}

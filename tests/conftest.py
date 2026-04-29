@@ -8,49 +8,61 @@ data is never touched.
 
 import os
 
-# Defaults match docker-compose.yml. Override TEST_DATABASE_URL if you
-# run Postgres elsewhere.
+# Defaults match docker-compose.yml.
 os.environ["DATABASE_URL"] = os.getenv(
     "TEST_DATABASE_URL",
-    "postgresql+psycopg2://auction:auction_dev_password@localhost:5433/auction_test",
+    "postgresql+asyncpg://auction:auction_dev_password@localhost:5433/auction_test",
 )
 os.environ.setdefault(
     "AUCTION_SECRET_KEY",
     "test-only-secret-key-do-not-use-in-prod",
 )
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
+from sqlalchemy.pool import NullPool  # noqa: E402
 
+import app.database as _db_module  # noqa: E402
 from app import app  # noqa: E402
-from app.database import Base, engine  # noqa: E402
+from app.database import Base  # noqa: E402
 from app.services.migrations import seed_categories  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def reset_db():
-    """Drop and recreate all tables before each test, then re-seed
-    reference data, so tests are independent."""
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    seed_categories()
+@pytest_asyncio.fixture(autouse=True)
+async def reset_db():
+    """Recreate the engine + schema on the current event loop before
+    each test. asyncpg pools connections per-loop, and pytest-asyncio
+    spawns a fresh loop per function — so we discard everything between
+    tests to avoid 'Future attached to a different loop' / 'Event loop
+    is closed' errors."""
+    engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
+    _db_module.engine = engine
+    _db_module.SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    await seed_categories()
     yield
+    await engine.dispose()
 
 
-@pytest.fixture
-def client():
-    return TestClient(app)
+@pytest_asyncio.fixture
+async def client():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
+        yield ac
 
 
-@pytest.fixture
-def registered_user(client):
-    """Register a default user and return token + headers."""
+@pytest_asyncio.fixture
+async def registered_user(client):
     payload = {
         "username": "alice",
         "email": "alice@example.com",
         "password": "password123",
     }
-    response = client.post("/api/register", json=payload)
+    response = await client.post("/api/register", json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
     return {
@@ -61,15 +73,14 @@ def registered_user(client):
     }
 
 
-@pytest.fixture
-def second_user(client):
-    """Second registered user, useful for bidding scenarios."""
+@pytest_asyncio.fixture
+async def second_user(client):
     payload = {
         "username": "bob",
         "email": "bob@example.com",
         "password": "password123",
     }
-    response = client.post("/api/register", json=payload)
+    response = await client.post("/api/register", json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
     return {
