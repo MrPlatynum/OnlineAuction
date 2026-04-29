@@ -1,8 +1,11 @@
+import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from app.config import EMAIL_FROM, SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USERNAME
+
+logger = logging.getLogger(__name__)
 
 
 async def send_email_notification(to_email: str, subject: str, html_content: str):
@@ -21,9 +24,9 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
             server.login(SMTP_USERNAME, SMTP_PASSWORD)
             server.send_message(msg)
 
-        print(f"✉️ Email sent to {to_email}: {subject}")
-    except Exception as e:
-        print(f"❌ Failed to send email to {to_email}: {e}")
+        logger.info("Email sent to %s: %s", to_email, subject)
+    except Exception:
+        logger.exception("Failed to send email to %s", to_email)
 
 
 def build_notification_email_html(

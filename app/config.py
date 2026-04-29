@@ -1,6 +1,14 @@
 import os
 
-SECRET_KEY = os.getenv("AUCTION_SECRET_KEY", "your-secret-key-change-in-production")
+_PLACEHOLDER_SECRET = "your-secret-key-change-in-production"
+
+SECRET_KEY = os.getenv("AUCTION_SECRET_KEY")
+if not SECRET_KEY or SECRET_KEY == _PLACEHOLDER_SECRET:
+    raise RuntimeError(
+        "AUCTION_SECRET_KEY env var is required. "
+        "Generate a random key with: python -c \"import secrets; print(secrets.token_urlsafe(64))\""
+    )
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 

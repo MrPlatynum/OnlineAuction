@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -8,6 +9,8 @@ from app.database import SessionLocal
 from app.models import Auction
 from app.services.websocket_manager import manager
 from app.utils.security import decode_token
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,8 +44,8 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, auction_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
+    except Exception:
+        logger.exception("WebSocket error on auction %s", auction_id)
         manager.disconnect(websocket, auction_id)
 
 
@@ -51,7 +54,7 @@ async def notifications_websocket(
     websocket: WebSocket, user_id: int, token: Optional[str] = Query(None)
 ):
     if not token:
-        print(f"WS notifications denied: missing token for path user_id {user_id}")
+        logger.warning("WS notifications denied: missing token for user_id %s", user_id)
         await websocket.close(code=1008)
         return
 
@@ -59,11 +62,14 @@ async def notifications_websocket(
         payload = decode_token(token)
         token_user_id = payload.get("user_id")
         if token_user_id != user_id:
-            print(f"WS notifications denied: token user_id {token_user_id} != path user_id {user_id}")
+            logger.warning(
+                "WS notifications denied: token user_id %s != path user_id %s",
+                token_user_id, user_id,
+            )
             await websocket.close(code=1008)
             return
     except HTTPException:
-        print(f"WS notifications denied: invalid or expired token for path user_id {user_id}")
+        logger.warning("WS notifications denied: invalid or expired token for user_id %s", user_id)
         await websocket.close(code=1008)
         return
 
@@ -80,6 +86,6 @@ async def notifications_websocket(
 
     except WebSocketDisconnect:
         manager.disconnect_user(websocket, user_id)
-    except Exception as e:
-        print(f"Notifications WebSocket error: {e}")
+    except Exception:
+        logger.exception("Notifications WebSocket error for user_id %s", user_id)
         manager.disconnect_user(websocket, user_id)
