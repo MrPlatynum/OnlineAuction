@@ -16,6 +16,7 @@ from app.models import (
     User,
 )
 from app.schemas import AuctionCreate, AuctionResponse, PaginatedAuctionsResponse
+from app.services.auction_scheduler import cancel_auction, schedule_auction
 from app.services.auctions import get_image_urls
 from app.services.notifications import create_notification, notify_user
 from app.services.transactions import add_transaction
@@ -51,6 +52,8 @@ async def create_auction(
     db.add(db_auction)
     await db.commit()
     await db.refresh(db_auction)
+
+    schedule_auction(db_auction)
 
     all_urls = auction.image_urls or ([auction.image_url] if auction.image_url else [])
     for i, url in enumerate(all_urls):
@@ -158,6 +161,8 @@ async def buy_now(
             f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
         )
     await db.commit()
+
+    cancel_auction(auction_id)
 
     if creator:
         await notify_user(
@@ -384,10 +389,12 @@ async def update_auction(
         auction.bin_price = float(data["bin_price"]) if data["bin_price"] else None
     if "auction_type" in data:
         auction.auction_type = data["auction_type"]
+    extended = False
     if "extend_minutes" in data and data["extend_minutes"] and auction.is_active:
         mins = int(data["extend_minutes"])
         if 1 <= mins <= 10080:
             auction.end_time = auction.end_time + timedelta(minutes=mins)
+            extended = True
     if "image_urls" in data and isinstance(data["image_urls"], list):
         await db.execute(
             sql_delete(AuctionImage).where(AuctionImage.auction_id == auction_id)
@@ -398,6 +405,10 @@ async def update_auction(
 
     await db.commit()
     await db.refresh(auction)
+
+    if extended:
+        schedule_auction(auction)
+
     return {"message": "Лот обновлён", "id": auction.id}
 
 
@@ -427,6 +438,7 @@ async def delete_auction(
 
     await db.delete(auction)
     await db.commit()
+    cancel_auction(auction_id)
     return {"message": "Лот удалён"}
 
 

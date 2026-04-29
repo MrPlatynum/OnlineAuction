@@ -1,16 +1,12 @@
-import asyncio
 import logging
-from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import SessionLocal
 from app.models import Auction, AuctionImage, Bid, NotificationType, User
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
-from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -148,43 +144,3 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         "winner_id": auction.winner_id,
         "final_price": float(auction.current_price),
     }, auction_id)
-
-
-async def check_expired_auctions():
-    """Фоновая задача для завершения аукционов."""
-    while True:
-        await asyncio.sleep(5)
-        async with SessionLocal() as db:
-            try:
-                now = utcnow()
-
-                expired = (
-                    await db.execute(
-                        select(Auction).where(
-                            Auction.is_active == True, Auction.end_time <= now
-                        )
-                    )
-                ).scalars().all()
-
-                for auction in expired:
-                    await complete_auction(auction.id, db)
-
-                ending_soon = (
-                    await db.execute(
-                        select(Auction).where(
-                            Auction.is_active == True,
-                            Auction.ending_soon_notified == False,
-                            Auction.end_time <= now + timedelta(minutes=5),
-                            Auction.end_time > now,
-                        )
-                    )
-                ).scalars().all()
-
-                for auction in ending_soon:
-                    await notify_auction_ending_soon(auction, db)
-                    auction.ending_soon_notified = True
-
-                await db.commit()
-            except Exception:
-                logger.exception("Error in check_expired_auctions")
-                await db.rollback()

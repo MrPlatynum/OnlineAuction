@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -22,7 +21,7 @@ from app.routers import (
     users,
     websocket,
 )
-from app.services.auctions import check_expired_auctions
+from app.services.auction_scheduler import schedule_active_auctions, shutdown_scheduler
 from app.services.migrations import seed_categories
 
 logger = logging.getLogger(__name__)
@@ -46,16 +45,12 @@ async def lifespan(fastapi_app: FastAPI):
     # starting the server). Reference-data seeding is idempotent and
     # runs on every startup.
     await seed_categories()
-    background_task = asyncio.create_task(check_expired_auctions())
+    await schedule_active_auctions()
     logger.info("Application startup complete (notifications enabled)")
     try:
         yield
     finally:
-        background_task.cancel()
-        try:
-            await background_task
-        except asyncio.CancelledError:
-            pass
+        await shutdown_scheduler()
         logger.info("Application shutdown complete")
 
 
