@@ -1,5 +1,12 @@
 import os
 
+from dotenv import load_dotenv
+
+# Load .env from the project root if present. Existing OS env vars
+# always win (load_dotenv default), so CI / Docker / explicit shell
+# exports keep their precedence.
+load_dotenv()
+
 _PLACEHOLDER_SECRET = "your-secret-key-change-in-production"
 
 SECRET_KEY = os.getenv("AUCTION_SECRET_KEY")
