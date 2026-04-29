@@ -44,7 +44,8 @@ class Auction(Base):
     )
 
     __table_args__ = (
-        # check_expired_auctions polls active auctions ordered by end_time.
+        # schedule_active_auctions walks active rows on startup; the
+        # listing API also filters/orders by these columns.
         Index("ix_auctions_active_end_time", "is_active", "end_time"),
         CheckConstraint("starting_price > 0", name="ck_auctions_starting_price_positive"),
         CheckConstraint(
