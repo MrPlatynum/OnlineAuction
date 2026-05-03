@@ -152,7 +152,7 @@ function setAuctionType(type) {
 async function loadCategories() {
   const apiBase = (typeof API_URL !== 'undefined' ? API_URL : null)
                || (typeof API !== 'undefined' ? API : null)
-               || 'http://localhost:8000';
+               || window.location.origin;
   try {
     const r = await fetch(`${apiBase}/api/categories`);
     if (!r.ok) return;
@@ -298,11 +298,20 @@ window.renderFilterTags = function() {
   if (currentFilters.auctionType) tags.push({
     label: currentFilters.auctionType === 'bin' ? '⚡ BIN' : '🔨 BID', key: 'auctionType'
   });
-  el.innerHTML = tags.map(t => `
-    <div class="filter-tag">
-      ${t.raw ? t.label : t.label}
-      <button class="filter-tag-remove" onclick="removeFilterTag('${t.key}')">×</button>
+  const chips = tags.map(t => `
+    <div class="filter-tag" data-key="${t.key}">
+      <span class="filter-tag-label">${t.raw ? t.label : t.label}</span>
+      <button class="filter-tag-remove" onclick="removeFilterTag('${t.key}')" aria-label="Удалить фильтр">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+      </button>
     </div>`).join('');
+  const clearAll = tags.length >= 2
+    ? `<button class="filter-tag-clear" type="button" onclick="resetFilters()">
+         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+         Очистить все
+       </button>`
+    : '';
+  el.innerHTML = chips + clearAll;
 }
 
 window.clickCrumbParent = function() {
@@ -500,8 +509,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-        const API_URL = 'http://localhost:8000';
-        const WS_URL = 'ws://localhost:8000';
+        const API_URL = window.location.origin;
+        const WS_URL = window.location.origin.replace(/^http/i, 'ws');
         let token = localStorage.getItem('token');
         let currentUser = null;
         let websockets = {};
@@ -827,27 +836,100 @@ document.addEventListener('DOMContentLoaded', () => {
             if (adv) adv.textContent = text;
         }
 
-function updatePagination(page, total, itemsCount) {
+function buildPageList(current, total) {
+            // Returns array of numbers (1..total) and '...' separators.
+            // Window: first, last, and ±2 around current.
+            if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+            const pages = new Set([1, total, current - 1, current, current + 1, 2, total - 1]);
+            const sorted = [...pages].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+            const out = [];
+            for (let i = 0; i < sorted.length; i++) {
+                if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push('...');
+                out.push(sorted[i]);
+            }
+            return out;
+        }
+
+        function updatePagination(page, total, itemsCount) {
             const paginationDiv = document.getElementById('pagination');
             const prevBtn = document.getElementById('prevBtn');
             const nextBtn = document.getElementById('nextBtn');
-            const pageInfo = document.getElementById('pageInfo');
+            const pagesEl = document.getElementById('paginationPages');
+            const jumpInput = document.getElementById('pageJumpInput');
 
-            if (total > 1) {
-                paginationDiv.style.display = 'flex';
-                pageInfo.textContent = `Страница ${page} из ${total} (всего: ${itemsCount})`;
-                prevBtn.disabled = page <= 1;
-                nextBtn.disabled = page >= total;
-            } else {
+            if (total <= 1) {
                 paginationDiv.style.display = 'none';
+                return;
+            }
+
+            paginationDiv.style.display = 'flex';
+            prevBtn.disabled = page <= 1;
+            nextBtn.disabled = page >= total;
+
+            if (pagesEl) {
+                pagesEl.innerHTML = '';
+                buildPageList(page, total).forEach(p => {
+                    if (p === '...') {
+                        const span = document.createElement('span');
+                        span.className = 'pagination-ellipsis';
+                        span.textContent = '…';
+                        pagesEl.appendChild(span);
+                    } else {
+                        const btn = document.createElement('button');
+                        btn.className = 'pagination-btn pagination-num' + (p === page ? ' active' : '');
+                        btn.type = 'button';
+                        btn.textContent = String(p);
+                        btn.onclick = () => goToPage(p);
+                        pagesEl.appendChild(btn);
+                    }
+                });
+            }
+
+            if (jumpInput) {
+                jumpInput.max = String(total);
+                if (document.activeElement !== jumpInput) jumpInput.value = '';
             }
         }
 
-        function changePage(delta) {
-            currentFilters.page = Math.max(1, Math.min(currentFilters.page + delta, totalPages));
-            loadAuctions();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+        function scrollToAuctionsTop() {
+            const headerEl = document.querySelector('.page-header')
+                          || document.getElementById('auctionsContainer');
+            if (!headerEl) return;
+            const nav = document.querySelector('.navbar');
+            const navH = nav ? nav.getBoundingClientRect().height : 60;
+            const y = headerEl.getBoundingClientRect().top + window.pageYOffset - navH - 12;
+            window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
         }
+
+        function goToPage(n) {
+            const target = Math.max(1, Math.min(n, totalPages));
+            if (target === currentFilters.page) return;
+            currentFilters.page = target;
+            loadAuctions();
+            scrollToAuctionsTop();
+        }
+
+        function changePage(delta) {
+            goToPage(currentFilters.page + delta);
+        }
+
+        // Page-jump input — Enter or blur applies
+        document.addEventListener('DOMContentLoaded', () => {
+            const jumpInput = document.getElementById('pageJumpInput');
+            if (!jumpInput) return;
+            const apply = () => {
+                const v = parseInt(jumpInput.value, 10);
+                if (!isNaN(v)) goToPage(v);
+                jumpInput.value = '';
+                jumpInput.blur();
+            };
+            jumpInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); apply(); }
+            });
+            jumpInput.addEventListener('blur', () => {
+                if (jumpInput.value !== '') apply();
+            });
+        });
 
         function displayAuctions(auctions) {
             const container = document.getElementById('auctionsContainer');
@@ -941,7 +1023,7 @@ function updatePagination(page, total, itemsCount) {
                         <a href="auction.html?id=${auction.id}" class="auction-image-link">
                             <div class="auction-image">
                                 ${imagesHtml}
-                                ${badgeClass !== 'badge-ended' ? `<div class="auction-badge ${badgeClass}">${badgeClass === 'badge-ending' ? '⏰ Скоро конец' : '● В эфире'}</div>` : ''}
+                                ${badgeClass === 'badge-ending' ? `<div class="auction-badge badge-ending">⏰ Скоро конец</div>` : ''}
                                 ${binBadge}
                                 ${canDelete ? `<button class="card-delete-btn" title="Удалить лот" onclick="deleteAuction(event, ${auction.id})">✕</button>` : ''}
                                 ${hasMultiple ? `
@@ -958,7 +1040,7 @@ function updatePagination(page, total, itemsCount) {
                             </a>
                             <div class="auction-price">$${auction.current_price.toFixed(2)}</div>
                             ${!isEnded
-                                ? `<div class="auction-start" data-timer="${auction.id}" style="color:var(--amber);font-weight:600;">${formatTime(timeRemaining)}</div>`
+                                ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
                                 : `<div class="auction-start">Завершён · от $${auction.starting_price.toFixed(2)}</div>`}
                             ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${creatorName}</a></span></div>` : ''}
                         </div>
@@ -1656,7 +1738,7 @@ document.addEventListener('DOMContentLoaded', () => {
    NOTIFICATION BELL
    ================================================================ */
 (function() {
-  const API_URL = 'http://localhost:8000';
+  const API_URL = window.location.origin;
 
   function getToken() { return localStorage.getItem('token'); }
 
