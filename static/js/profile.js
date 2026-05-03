@@ -969,7 +969,7 @@ async function load() {
   $('email').textContent  = user.email;
   $('bal').textContent    = Number(user.balance || 0).toFixed(2);
   if ($('balBadge'))       $('balBadge').textContent = '$' + Number(user.balance || 0).toFixed(2);
-  document.title = `${user.username} — AuctionHub`;
+  document.title = `${user.username} — Лотус`;
 
   // Nav-пилюля
   const navPill = $('navUserPill');

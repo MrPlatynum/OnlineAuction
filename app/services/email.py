@@ -235,7 +235,7 @@ def build_notification_email_html(
         <div class="email-wrapper">
             <div class="container">
                 <div class="header">
-                    <h1 class="logo">🔨 AuctionHub</h1>
+                    <h1 class="logo">Лотус</h1>
                     <p class="tagline">Аукционы в реальном времени</p>
                 </div>
 
@@ -267,13 +267,13 @@ def build_notification_email_html(
 
                 <div class="footer">
                     <p class="footer-text">
-                        Вы получили это письмо, потому что участвуете в аукционах на <strong>AuctionHub</strong>.
+                        Вы получили это письмо, потому что участвуете в аукционах на <strong>Лотус</strong>.
                     </p>
                     <p class="footer-text">
                         <a href="http://localhost:8000/profile.html" class="footer-link">Изменить настройки уведомлений</a>
                     </p>
                     <p class="footer-text" style="font-size: 11px; color: #6b7280; margin-top: 20px;">
-                        © 2025 AuctionHub. Все права защищены.<br>
+                        © 2025 Лотус. Все права защищены.<br>
                         Это автоматическое письмо, не отвечайте на него.
                     </p>
                 </div>
