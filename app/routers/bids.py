@@ -7,7 +7,6 @@ from app.database import get_db
 from app.models import Auction, Bid, NotificationType, User
 from app.schemas import BidCreate, BidResponse, PaginatedBidsResponse
 from app.services.balance import effective_committed_balance
-from app.services.bid_locks import get_bid_lock
 from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
@@ -71,54 +70,56 @@ async def place_bid(
 ):
     bid_amount = to_decimal(bid.amount)
 
-    # Serialise concurrent bids on the same auction so the
-    # read-check-write below is atomic per auction.
-    async with get_bid_lock(bid.auction_id):
-        auction = (
-            await db.execute(select(Auction).where(Auction.id == bid.auction_id))
-        ).scalar_one_or_none()
-        if not auction:
-            raise HTTPException(status_code=404, detail="Auction not found")
-
-        if not auction.is_active:
-            raise HTTPException(status_code=400, detail="Auction is not active")
-
-        if utcnow() > auction.end_time:
-            auction.is_active = False
-            await db.commit()
-            raise HTTPException(status_code=400, detail="Auction has ended")
-
-        if bid_amount <= auction.current_price:
-            raise HTTPException(status_code=400, detail="Bid must be higher than current price")
-
-        committed_elsewhere = await effective_committed_balance(
-            db, current_user.id, bid.auction_id, auction.current_price
+    # Take a row-level lock on the auction for the rest of this transaction.
+    # Concurrent bids on the same auction queue here at the database, so the
+    # read-check-write below is atomic across all workers/processes.
+    auction = (
+        await db.execute(
+            select(Auction).where(Auction.id == bid.auction_id).with_for_update()
         )
-        available = current_user.balance - committed_elsewhere
-        if available < bid_amount:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Insufficient available balance. You have ${available:.2f} available "
-                    f"(${committed_elsewhere:.2f} already committed to other active auctions)."
-                ),
-            )
+    ).scalar_one_or_none()
+    if not auction:
+        raise HTTPException(status_code=404, detail="Auction not found")
 
-        previous_leader_bid = (
-            await db.execute(
-                select(Bid)
-                .where(Bid.auction_id == bid.auction_id)
-                .order_by(Bid.timestamp.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+    if not auction.is_active:
+        raise HTTPException(status_code=400, detail="Auction is not active")
 
-        db_bid = Bid(amount=bid_amount, user_id=current_user.id, auction_id=bid.auction_id)
-        auction.current_price = bid_amount
-
-        db.add(db_bid)
+    if utcnow() > auction.end_time:
+        auction.is_active = False
         await db.commit()
-        await db.refresh(db_bid)
+        raise HTTPException(status_code=400, detail="Auction has ended")
+
+    if bid_amount <= auction.current_price:
+        raise HTTPException(status_code=400, detail="Bid must be higher than current price")
+
+    committed_elsewhere = await effective_committed_balance(
+        db, current_user.id, bid.auction_id, auction.current_price
+    )
+    available = current_user.balance - committed_elsewhere
+    if available < bid_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Insufficient available balance. You have ${available:.2f} available "
+                f"(${committed_elsewhere:.2f} already committed to other active auctions)."
+            ),
+        )
+
+    previous_leader_bid = (
+        await db.execute(
+            select(Bid)
+            .where(Bid.auction_id == bid.auction_id)
+            .order_by(Bid.timestamp.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    db_bid = Bid(amount=bid_amount, user_id=current_user.id, auction_id=bid.auction_id)
+    auction.current_price = bid_amount
+
+    db.add(db_bid)
+    await db.commit()
+    await db.refresh(db_bid)
 
     if previous_leader_bid and previous_leader_bid.user_id != current_user.id:
         previous_leader = (
