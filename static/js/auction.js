@@ -103,7 +103,7 @@
     if (!r.ok) { syncEl('title','Лот не найден'); showToast('Не найдено','Лот не существует.','warn'); return null; }
     const a=await r.json();
 
-    document.title=`${a.title} — AuctionHub`;
+    document.title=`${a.title} — Лотус`;
     syncEl('title',a.title||'Лот'); syncEl('crumbTitle',a.title||'Лот'); syncEl('description',a.description||'');
 
     // Images

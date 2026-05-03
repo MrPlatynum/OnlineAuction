@@ -27,7 +27,7 @@ async function init(){
 async function render(data){
   const {user,auctions,stats}=data;
   sellerId=user.id;
-  document.title=`${user.username} — AuctionHub`;
+  document.title=`${user.username} — Лотус`;
   document.getElementById('crumbName').textContent=user.username;
 
   const isMe=token&&(()=>{try{const p=JSON.parse(atob(token.split('.')[1]));return p.user_id===user.id;}catch{return false;}})();
