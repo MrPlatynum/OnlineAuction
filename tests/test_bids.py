@@ -1,3 +1,6 @@
+import asyncio
+
+
 async def _create_auction(client, headers, **overrides):
     payload = {
         "title": "Bid test lot",
@@ -159,3 +162,38 @@ async def test_outbid_user_can_reuse_their_full_balance(client, registered_user,
         headers=second_user["headers"],
     )
     assert r3.status_code == 200, r3.text
+
+
+async def test_concurrent_equal_bids_only_one_wins(client, registered_user, second_user):
+    """Fire two equal bids on the same auction concurrently. The
+    SELECT...FOR UPDATE row lock must serialise them so the second one
+    fails the 'must be higher than current price' check instead of both
+    silently winning."""
+    third_resp = await client.post("/api/register", json={
+        "username": "carol",
+        "email": "carol@example.com",
+        "password": "password123",
+    })
+    third_headers = {"Authorization": f"Bearer {third_resp.json()['token']}"}
+
+    auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
+
+    r_a, r_b = await asyncio.gather(
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=second_user["headers"],
+        ),
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=third_headers,
+        ),
+    )
+
+    statuses = sorted([r_a.status_code, r_b.status_code])
+    assert statuses == [200, 400], (r_a.text, r_b.text)
+
+    refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    assert refreshed["current_price"] == 150.0
+    assert refreshed["bids_count"] == 1
