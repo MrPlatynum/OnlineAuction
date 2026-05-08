@@ -70,12 +70,14 @@ function renderSearchHistory() {
     list.innerHTML = '<div class="sh-empty">История пуста</div>';
     return;
   }
-  list.innerHTML = history.map(q => `
-    <div class="sh-item" onclick="applyHistorySearch('${q.replace(/'/g, "\\'")}')">
+  list.innerHTML = history.map(q => {
+    const safe = esc(q);
+    return `<div class="sh-item" data-query="${safe}" onclick="applyHistorySearch(this.dataset.query)">
       <span class="sh-item-icon">🕐</span>
-      <span class="sh-item-text">${q}</span>
-      <button class="sh-item-del" onclick="event.stopPropagation();removeFromSearchHistory('${q.replace(/'/g, "\\'")}')">×</button>
-    </div>`).join('');
+      <span class="sh-item-text">${safe}</span>
+      <button class="sh-item-del" onclick="event.stopPropagation();removeFromSearchHistory(this.parentElement.dataset.query)">×</button>
+    </div>`;
+  }).join('');
 }
 
 function showSearchHistory() {
@@ -278,7 +280,7 @@ window.renderFilterTags = function() {
   const el = document.getElementById('filterTags');
   if (!el || typeof currentFilters === 'undefined') return;
   const tags = [];
-  if (currentFilters.search)     tags.push({ label: `🔍 ${currentFilters.search}`,   key: 'search' });
+  if (currentFilters.search)     tags.push({ label: `🔍 ${esc(currentFilters.search)}`, key: 'search' });
   if (currentFilters.category) {
     const parentSlug = currentFilters.categoryParentSlug;
     const parentName = currentFilters.categoryParentName;
@@ -286,15 +288,15 @@ window.renderFilterTags = function() {
     let label;
     if (parentSlug && parentName) {
       // Подкатегория — "Одежда → Мужская", клик на "Одежда" переключает на родителя
-      label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${parentName}">${parentName}</span> <span style="opacity:.5;">›</span> ${name}`;
+      label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${esc(parentName)}">${esc(parentName)}</span> <span style="opacity:.5;">›</span> ${esc(name)}`;
     } else {
-      label = `📂 ${name}`;
+      label = `📂 ${esc(name)}`;
     }
     tags.push({ label, key: 'category', raw: true });
   }
   if (currentFilters.minPrice)   tags.push({ label: `от $${currentFilters.minPrice}`, key: 'minPrice' });
   if (currentFilters.maxPrice)   tags.push({ label: `до $${currentFilters.maxPrice}`, key: 'maxPrice' });
-  if (currentFilters.createdBy)  tags.push({ label: `@${currentFilters.createdBy}`,   key: 'createdBy' });
+  if (currentFilters.createdBy)  tags.push({ label: `@${esc(currentFilters.createdBy)}`, key: 'createdBy' });
   if (currentFilters.auctionType) tags.push({
     label: currentFilters.auctionType === 'bin' ? '⚡ BIN' : '🔨 BID', key: 'auctionType'
   });
@@ -1001,19 +1003,20 @@ function buildPageList(current, total) {
                 const isEnded = timeRemaining === 0;
                 const bidsCount = auction.bids_count ?? '';
                 const creatorName = auction.creator_username || '';
+                const safeCreator = esc(creatorName);
                 const creatorAvatarUrl = auction.creator_avatar_url || null;
                 const creatorAvatarHtml = creatorName ? (() => {
                   const src = creatorAvatarUrl
                     ? (creatorAvatarUrl.startsWith('http') ? creatorAvatarUrl : `${API_URL}${creatorAvatarUrl}`)
                     : null;
-                  return `<div class="mini-avatar">${src ? `<img src="${src}" alt="${creatorName}">` : creatorName[0].toUpperCase()}</div>`;
+                  return `<div class="mini-avatar">${src ? `<img src="${esc(src)}" alt="${safeCreator}">` : esc(creatorName[0].toUpperCase())}</div>`;
                 })() : '';
 
                 const isOwner = currentUser && auction.created_by === currentUser.id;
                 const canDelete = isOwner && !(auction.is_completed && auction.winner_id);
                 const catLabel = auction.category_icon && auction.category_name
-                    ? `${auction.category_icon} ${auction.category_name}` : '';
-                const safeTitle = auction.title.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    ? esc(`${auction.category_icon} ${auction.category_name}`) : '';
+                const safeTitle = esc(auction.title);
 
                 const allImgUrls = (auction.image_urls && auction.image_urls.length)
                     ? auction.image_urls.map(u => String(u).startsWith('http') ? u : `${API_URL}${u}`)
@@ -1022,7 +1025,7 @@ function buildPageList(current, total) {
                 const hasMultiple = allImgUrls.length > 1;
 
                 const imagesHtml = allImgUrls.length
-                    ? allImgUrls.map((u, i) => `<img class="card-slide${i === 0 ? ' active' : ''}" src="${u}" alt="${safeTitle}" data-slide="${i}">`).join('')
+                    ? allImgUrls.map((u, i) => `<img class="card-slide${i === 0 ? ' active' : ''}" src="${esc(u)}" alt="${safeTitle}" data-slide="${i}">`).join('')
                     : `<div class="card-placeholder"><div class="card-placeholder-icon">🖼</div><div class="card-placeholder-label">Нет фото</div></div>`;
 
                 const isBinType = auction.auction_type === 'bin';
@@ -1036,7 +1039,7 @@ function buildPageList(current, total) {
                        data-price="${isBinType ? '⚡ ' : ''}$${auction.current_price.toFixed(2)}"
                        data-start="от $${auction.starting_price.toFixed(2)}"
                        data-bids="${bidsCount !== '' ? '💬 ' + bidsCount : ''}"
-                       data-creator="${creatorName ? '@' + creatorName : ''}"
+                       data-creator="${creatorName ? '@' + safeCreator : ''}"
                        data-category="${catLabel}"
                        data-slide-count="${allImgUrls.length}">
 
@@ -1057,13 +1060,13 @@ function buildPageList(current, total) {
                         <!-- Текстовый блок — статичный -->
                         <div class="auction-body">
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
-                                <div class="auction-title">${auction.title}</div>
+                                <div class="auction-title">${safeTitle}</div>
                             </a>
                             <div class="auction-price">$${auction.current_price.toFixed(2)}</div>
                             ${!isEnded
                                 ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
                                 : `<div class="auction-start">Завершён · от $${auction.starting_price.toFixed(2)}</div>`}
-                            ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${creatorName}</a></span></div>` : ''}
+                            ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${safeCreator}</a></span></div>` : ''}
                         </div>
                     </div>
                 `;
@@ -1225,8 +1228,8 @@ function buildPageList(current, total) {
                 if (container && data.items.length > 0) {
                     container.innerHTML = data.items.map(bid => `
                         <div class="bid-item">
-                            <span class="bid-user">${bid.username}</span>
-                            <span class="bid-amount">${bid.amount.toFixed(2)}</span>
+                            <span class="bid-user">${esc(bid.username)}</span>
+                            <span class="bid-amount">${Number(bid.amount).toFixed(2)}</span>
                         </div>
                     `).join('');
                 }
@@ -1241,8 +1244,8 @@ function buildPageList(current, total) {
                 const bidElement = document.createElement('div');
                 bidElement.className = 'bid-item';
                 bidElement.innerHTML = `
-                    <span class="bid-user">${bid.username}</span>
-                    <span class="bid-amount">${bid.amount.toFixed(2)}</span>
+                    <span class="bid-user">${esc(bid.username)}</span>
+                    <span class="bid-amount">${Number(bid.amount).toFixed(2)}</span>
                 `;
                 container.insertBefore(bidElement, container.firstChild);
                 while (container.children.length > 5) {
