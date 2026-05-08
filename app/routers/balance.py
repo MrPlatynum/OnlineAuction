@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,13 +8,16 @@ from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import lock_users_by_id
 from app.services.transactions import add_transaction
 from app.utils.money import money_to_float, to_decimal
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
 
 @router.post("/deposit")
+@limiter.limit("30/minute")
 async def deposit(
+    request: Request,
     data: DepositRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -34,7 +37,9 @@ async def deposit(
 
 
 @router.post("/withdraw")
+@limiter.limit("30/minute")
 async def withdraw(
+    request: Request,
     data: WithdrawRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
