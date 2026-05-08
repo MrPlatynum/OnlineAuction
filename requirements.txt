@@ -20,5 +20,8 @@ python-dotenv==1.1.1
 # Async SMTP
 aiosmtplib==5.1.0
 
+# Rate limiting
+slowapi==0.1.9
+
 # Image validation / sanitisation for uploads
 Pillow==11.0.0

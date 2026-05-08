@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +10,7 @@ from app.schemas import (
     UserLogin,
     UserResponse,
 )
+from app.utils.rate_limit import limiter
 from app.utils.security import (
     create_access_token,
     get_current_user,
@@ -22,7 +23,8 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 
 @router.post("/register", response_model=dict)
-async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, user: UserCreate, db: AsyncSession = Depends(get_db)):
     if (await db.execute(select(User).where(User.username == user.username))).scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username already exists")
     if (await db.execute(select(User).where(User.email == user.email))).scalar_one_or_none():
@@ -42,7 +44,8 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=dict)
-async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(get_db)):
     db_user = (
         await db.execute(select(User).where(User.username == user.username))
     ).scalar_one_or_none()
@@ -64,7 +67,9 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.put("/change-password")
+@limiter.limit("5/minute")
 async def change_password(
+    request: Request,
     data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

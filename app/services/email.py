@@ -1,3 +1,4 @@
+import html
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -54,6 +55,17 @@ def build_notification_email_html(
     auction_id: int = None,
     auction_title: str = None,
 ) -> str:
+    # Escape every user-controllable field before it's spliced into the
+    # HTML template. ``title`` / ``message`` / ``auction_title`` flow
+    # from auction titles, usernames and bid notification copy — any of
+    # which can contain ``<`` / ``>`` / ``"`` from the user. Without
+    # escaping, a lot title like ``<img src=x onerror=...>`` would
+    # render as live HTML in the recipient's mail client.
+    title = html.escape(title or "")
+    message = html.escape(message or "")
+    auction_title = html.escape(auction_title) if auction_title else None
+    type_label = html.escape(notification_type_value.replace("_", " "))
+
     auction_link = ""
     if auction_id:
         auction_link = (
@@ -249,7 +261,7 @@ def build_notification_email_html(
                 <div class="content">
                     <div class="notification-badge">
                         <span class="notification-icon">{icon}</span>
-                        <span class="notification-type">{notification_type_value.replace('_', ' ')}</span>
+                        <span class="notification-type">{type_label}</span>
                     </div>
 
                     <h1>{title}</h1>

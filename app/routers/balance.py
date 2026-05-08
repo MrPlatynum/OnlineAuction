@@ -1,24 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
+from app.services.balance import lock_users_by_id
 from app.services.transactions import add_transaction
 from app.utils.money import money_to_float, to_decimal
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
 
 @router.post("/deposit")
+@limiter.limit("30/minute")
 async def deposit(
+    request: Request,
     data: DepositRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
+    # Row-lock the user before reading balance so concurrent /deposit and
+    # /withdraw on the same account serialise instead of racing on stale
+    # in-memory copies and clobbering each other's update.
+    await lock_users_by_id(db, current_user.id)
     current_user.balance = round(current_user.balance + amount, 2)
     add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
     await db.commit()
@@ -29,12 +37,15 @@ async def deposit(
 
 
 @router.post("/withdraw")
+@limiter.limit("30/minute")
 async def withdraw(
+    request: Request,
     data: WithdrawRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
+    await lock_users_by_id(db, current_user.id)
     if current_user.balance < amount:
         raise HTTPException(400, detail=f"Недостаточно средств. Доступно: ${current_user.balance:.2f}")
     current_user.balance = round(current_user.balance - amount, 2)

@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import BASE_DIR, CORS_ORIGINS, LOCAL_CORS_REGEX, STATIC_DIR
 from app.routers import (
@@ -23,6 +25,7 @@ from app.routers import (
 )
 from app.services.auction_scheduler import schedule_active_auctions, shutdown_scheduler
 from app.services.migrations import seed_categories
+from app.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +64,9 @@ def create_app() -> FastAPI:
         title="Real-time Auction API with Notifications",
         lifespan=lifespan,
     )
+
+    fastapi_app.state.limiter = limiter
+    fastapi_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     fastapi_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
