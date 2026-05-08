@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import (
@@ -17,7 +18,6 @@ from app.models import (
 )
 from app.schemas import AuctionCreate, AuctionResponse, PaginatedAuctionsResponse
 from app.services.auction_scheduler import cancel_auction, schedule_auction
-from app.services.auctions import get_image_urls
 from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
 from app.services.transactions import add_transaction
@@ -26,6 +26,41 @@ from app.utils.security import get_current_user
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auctions"])
+
+
+def _auction_to_dict(auction: Auction, bids_count: int) -> dict:
+    """Build the listing-row dict from an ``Auction`` whose ``creator``,
+    ``category`` and ``images`` were eager-loaded via ``selectinload``.
+    Touches no DB, so the listing handler stays O(1) per row."""
+    creator = auction.creator
+    cat = auction.category
+    image_urls = [i.url for i in auction.images] if auction.images else []
+    if not image_urls and auction.image_url:
+        image_urls = [auction.image_url]
+    return {
+        "id": auction.id,
+        "title": auction.title,
+        "description": auction.description,
+        "starting_price": auction.starting_price,
+        "current_price": auction.current_price,
+        "image_url": auction.image_url,
+        "image_urls": image_urls,
+        "start_time": auction.start_time,
+        "end_time": auction.end_time,
+        "is_active": auction.is_active,
+        "is_completed": auction.is_completed,
+        "winner_id": auction.winner_id,
+        "created_by": auction.created_by,
+        "creator_username": creator.username if creator else None,
+        "creator_avatar_url": creator.avatar_url if creator else None,
+        "bids_count": bids_count,
+        "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
+        "category_id": auction.category_id,
+        "category_name": cat.name if cat else None,
+        "category_icon": cat.icon if cat else None,
+        "auction_type": auction.auction_type or "bid",
+        "bin_price": auction.bin_price,
+    }
 
 
 @router.post("/auctions", response_model=AuctionResponse)
@@ -259,50 +294,36 @@ async def get_auctions(
 
     offset = (page - 1) * page_size
     auctions = (
-        await db.execute(query.offset(offset).limit(page_size))
+        await db.execute(
+            query
+            .options(
+                selectinload(Auction.creator),
+                selectinload(Auction.category),
+                selectinload(Auction.images),
+            )
+            .offset(offset)
+            .limit(page_size)
+        )
     ).scalars().all()
 
-    result = []
-    for auction in auctions:
-        bids_count = await db.scalar(
-            select(func.count()).select_from(Bid).where(Bid.auction_id == auction.id)
-        )
-        creator = (
-            await db.execute(select(User).where(User.id == auction.created_by))
-        ).scalar_one_or_none()
-        cat = None
-        if auction.category_id:
-            cat = (
-                await db.execute(
-                    select(Category).where(Category.id == auction.category_id)
-                )
-            ).scalar_one_or_none()
-        image_urls = await get_image_urls(auction, db)
-        auction_dict = {
-            "id": auction.id,
-            "title": auction.title,
-            "description": auction.description,
-            "starting_price": auction.starting_price,
-            "current_price": auction.current_price,
-            "image_url": auction.image_url,
-            "image_urls": image_urls,
-            "start_time": auction.start_time,
-            "end_time": auction.end_time,
-            "is_active": auction.is_active,
-            "is_completed": auction.is_completed,
-            "winner_id": auction.winner_id,
-            "created_by": auction.created_by,
-            "creator_username": creator.username if creator else None,
-            "creator_avatar_url": creator.avatar_url if creator else None,
-            "bids_count": bids_count,
-            "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
-            "category_id": auction.category_id,
-            "category_name": cat.name if cat else None,
-            "category_icon": cat.icon if cat else None,
-            "auction_type": auction.auction_type or "bid",
-            "bin_price": auction.bin_price,
-        }
-        result.append(AuctionResponse(**auction_dict))
+    # One aggregate query for the whole page instead of one COUNT per
+    # row — turns the listing from O(page_size) round-trips into O(1).
+    auction_ids = [a.id for a in auctions]
+    bid_counts: dict[int, int] = {}
+    if auction_ids:
+        rows = (
+            await db.execute(
+                select(Bid.auction_id, func.count(Bid.id))
+                .where(Bid.auction_id.in_(auction_ids))
+                .group_by(Bid.auction_id)
+            )
+        ).all()
+        bid_counts = {aid: cnt for aid, cnt in rows}
+
+    result = [
+        AuctionResponse(**_auction_to_dict(a, bid_counts.get(a.id, 0)))
+        for a in auctions
+    ]
 
     return PaginatedAuctionsResponse(
         items=result,
@@ -316,7 +337,15 @@ async def get_auctions(
 @router.get("/auctions/{auction_id}", response_model=AuctionResponse)
 async def get_auction(auction_id: int, db: AsyncSession = Depends(get_db)):
     auction = (
-        await db.execute(select(Auction).where(Auction.id == auction_id))
+        await db.execute(
+            select(Auction)
+            .options(
+                selectinload(Auction.creator),
+                selectinload(Auction.category),
+                selectinload(Auction.images),
+            )
+            .where(Auction.id == auction_id)
+        )
     ).scalar_one_or_none()
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
@@ -324,42 +353,7 @@ async def get_auction(auction_id: int, db: AsyncSession = Depends(get_db)):
     bids_count = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
-    creator = (
-        await db.execute(select(User).where(User.id == auction.created_by))
-    ).scalar_one_or_none()
-    cat = None
-    if auction.category_id:
-        cat = (
-            await db.execute(
-                select(Category).where(Category.id == auction.category_id)
-            )
-        ).scalar_one_or_none()
-    image_urls = await get_image_urls(auction, db)
-    auction_dict = {
-        "id": auction.id,
-        "title": auction.title,
-        "description": auction.description,
-        "starting_price": auction.starting_price,
-        "current_price": auction.current_price,
-        "image_url": auction.image_url,
-        "image_urls": image_urls,
-        "start_time": auction.start_time,
-        "end_time": auction.end_time,
-        "is_active": auction.is_active,
-        "is_completed": auction.is_completed,
-        "winner_id": auction.winner_id,
-        "created_by": auction.created_by,
-        "creator_username": creator.username if creator else None,
-        "creator_avatar_url": creator.avatar_url if creator else None,
-        "bids_count": bids_count,
-        "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
-        "category_id": auction.category_id,
-        "category_name": cat.name if cat else None,
-        "category_icon": cat.icon if cat else None,
-        "auction_type": auction.auction_type or "bid",
-        "bin_price": auction.bin_price,
-    }
-    return AuctionResponse(**auction_dict)
+    return AuctionResponse(**_auction_to_dict(auction, bids_count))
 
 
 @router.patch("/auctions/{auction_id}")

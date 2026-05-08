@@ -1072,10 +1072,9 @@ function buildPageList(current, total) {
                 `;
             }).join('');
 
-            // Загружаем ставки и запускаем таймеры
+            // Подключаем WebSocket для живой цены и запускаем таймеры
             auctions.forEach(auction => {
                 if (token && auction.time_remaining > 0) {
-                    loadBids(auction.id);
                     connectWebSocket(auction.id);
                 }
                 startTimer(auction.id, auction.time_remaining);
@@ -1152,7 +1151,6 @@ function buildPageList(current, total) {
                 const data = JSON.parse(event.data);
                 if (data.type === 'new_bid') {
                     updatePrice(auctionId, data.current_price);
-                    addBidToList(auctionId, data.bid);
                 }
             };
 
@@ -1218,40 +1216,6 @@ function buildPageList(current, total) {
                     showToast('Не удалось удалить', err.detail || 'Попробуйте позже', 'bad');
                 }
             } catch { showToast('Ошибка сети', 'Проверьте соединение', 'bad'); }
-        }
-
-        async function loadBids(auctionId) {
-            try {
-                const response = await fetch(`${API_URL}/api/auctions/${auctionId}/bids?page=1&page_size=5`);
-                const data = await response.json();
-                const container = document.getElementById(`bids-${auctionId}`);
-                if (container && data.items.length > 0) {
-                    container.innerHTML = data.items.map(bid => `
-                        <div class="bid-item">
-                            <span class="bid-user">${esc(bid.username)}</span>
-                            <span class="bid-amount">${Number(bid.amount).toFixed(2)}</span>
-                        </div>
-                    `).join('');
-                }
-            } catch (e) {
-                console.error('Error loading bids:', e);
-            }
-        }
-
-        function addBidToList(auctionId, bid) {
-            const container = document.getElementById(`bids-${auctionId}`);
-            if (container) {
-                const bidElement = document.createElement('div');
-                bidElement.className = 'bid-item';
-                bidElement.innerHTML = `
-                    <span class="bid-user">${esc(bid.username)}</span>
-                    <span class="bid-amount">${Number(bid.amount).toFixed(2)}</span>
-                `;
-                container.insertBefore(bidElement, container.firstChild);
-                while (container.children.length > 5) {
-                    container.removeChild(container.lastChild);
-                }
-            }
         }
 
         async function placeBid(auctionId) {
