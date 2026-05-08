@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,7 +10,7 @@ class AuctionCreate(BaseModel):
     starting_price: float = Field(gt=0)
     duration_minutes: int = Field(gt=0, le=10080)
     image_url: Optional[str] = None
-    image_urls: Optional[List[str]] = None
+    image_urls: Optional[list[str]] = None
     category_id: Optional[int] = None
     auction_type: str = "bid"
     bin_price: Optional[float] = None
@@ -24,7 +24,7 @@ class AuctionResponse(BaseModel):
     starting_price: float
     current_price: float
     image_url: Optional[str]
-    image_urls: Optional[List[str]] = None
+    image_urls: Optional[list[str]] = None
     start_time: datetime
     end_time: datetime
     is_active: bool
@@ -43,7 +43,7 @@ class AuctionResponse(BaseModel):
 
 
 class PaginatedAuctionsResponse(BaseModel):
-    items: List[AuctionResponse]
+    items: list[AuctionResponse]
     total: int
     page: int
     page_size: int

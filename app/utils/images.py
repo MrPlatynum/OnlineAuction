@@ -8,20 +8,19 @@ to disk.
 """
 
 import io
-from typing import Tuple
 
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 
 # PIL format ID -> (canonical content_type, file extension).
-_PIL_FORMAT_TO_META: dict[str, Tuple[str, str]] = {
+_PIL_FORMAT_TO_META: dict[str, tuple[str, str]] = {
     "JPEG": ("image/jpeg", "jpg"),
     "PNG": ("image/png", "png"),
     "WEBP": ("image/webp", "webp"),
 }
 
 
-def validate_and_normalise_image(data: bytes) -> Tuple[bytes, str, str]:
+def validate_and_normalise_image(data: bytes) -> tuple[bytes, str, str]:
     """Verify *data* decodes as one of the allowed image formats and
     return ``(sanitised_bytes, content_type, extension)``.
 
@@ -34,7 +33,7 @@ def validate_and_normalise_image(data: bytes) -> Tuple[bytes, str, str]:
         with Image.open(io.BytesIO(data)) as probe:
             probe.verify()
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
-        raise HTTPException(status_code=400, detail="File is not a valid image")
+        raise HTTPException(status_code=400, detail="File is not a valid image") from None
 
     # ``verify()`` consumes the stream — re-open for the actual encode.
     img = Image.open(io.BytesIO(data))

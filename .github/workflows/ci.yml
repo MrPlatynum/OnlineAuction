@@ -7,6 +7,18 @@ on:
     branches: [develop, main]
 
 jobs:
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install ruff==0.15.12
+      - run: ruff check .
+
   test:
     name: pytest
     runs-on: ubuntu-latest
@@ -40,6 +52,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+
+      - name: Verify alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+asyncpg://auction:auction_dev_password@localhost:5432/auction_test
+          AUCTION_SECRET_KEY: ci-test-secret-key-not-for-prod
+        # Catch out-of-sync migrations before tests do — pytest's
+        # conftest skips alembic and goes straight to ``create_all``,
+        # so without this step a broken migration would only be found
+        # in production.
+        run: alembic upgrade head
 
       - name: Run pytest
         env:

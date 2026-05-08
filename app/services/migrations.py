@@ -12,7 +12,6 @@ from sqlalchemy import select
 from app.database import SessionLocal
 from app.models import Category
 
-
 _PARENTS = [
     ("Электроника",   "electronics",  "💻"),
     ("Авто",          "auto",         "🚗"),

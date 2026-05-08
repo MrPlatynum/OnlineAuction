@@ -1,5 +1,4 @@
 import logging
-from typing import Dict, List
 
 from fastapi import WebSocket
 
@@ -8,8 +7,8 @@ logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: Dict[int, List[WebSocket]] = {}  # auction_id -> websockets
-        self.user_connections: Dict[int, List[WebSocket]] = {}    # user_id -> websockets
+        self.active_connections: dict[int, list[WebSocket]] = {}  # auction_id -> websockets
+        self.user_connections: dict[int, list[WebSocket]] = {}    # user_id -> websockets
 
     async def connect(self, websocket: WebSocket, auction_id: int):
         await websocket.accept()
@@ -43,7 +42,7 @@ class ConnectionManager:
     async def send_notification(self, user_id: int, message: dict):
         await self._fan_out(self.user_connections, user_id, message)
 
-    async def _fan_out(self, registry: Dict[int, List[WebSocket]], key: int, message: dict):
+    async def _fan_out(self, registry: dict[int, list[WebSocket]], key: int, message: dict):
         """Send ``message`` to every socket under ``key``, dropping any
         connection whose ``send_json`` raises. Without the cleanup the
         bucket grows forever as clients silently drop off — every
@@ -51,7 +50,7 @@ class ConnectionManager:
         bucket = registry.get(key)
         if not bucket:
             return
-        dead: List[WebSocket] = []
+        dead: list[WebSocket] = []
         for connection in bucket:
             try:
                 await connection.send_json(message)

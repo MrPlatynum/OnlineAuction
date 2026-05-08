@@ -14,7 +14,7 @@ import argparse
 import asyncio
 import statistics
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import httpx
 

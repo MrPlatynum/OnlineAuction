@@ -23,7 +23,6 @@ from app.models import Auction, Category, User
 from app.utils.security import hash_password
 from app.utils.time import utcnow
 
-
 DEMO_USERNAME = "demo"
 DEMO_EMAIL = "demo@example.com"
 DEMO_PASSWORD = "demo"

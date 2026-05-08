@@ -1,4 +1,3 @@
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update
@@ -12,7 +11,7 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
-@router.get("", response_model=List[NotificationResponse])
+@router.get("", response_model=list[NotificationResponse])
 async def get_notifications(
     limit: int = Query(20, ge=1, le=100),
     unread_only: bool = Query(False),
