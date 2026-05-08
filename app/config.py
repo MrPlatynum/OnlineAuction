@@ -57,9 +57,12 @@ CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:5500,http://localhost:8000,null"
+        "http://localhost:3000,http://127.0.0.1:5500,http://localhost:8000",
     ).split(",")
-    if origin.strip()
+    # ``null`` is the Origin header sent by sandboxed iframes and
+    # ``file://`` pages; allowing it together with credentials lets a
+    # malicious page trick the browser into authenticated CORS calls.
+    if origin.strip() and origin.strip().lower() != "null"
 ]
 LOCAL_CORS_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
