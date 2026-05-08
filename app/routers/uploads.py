@@ -2,6 +2,7 @@ import asyncio
 import os
 import uuid
 
+import aiofiles
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,8 +51,8 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
     sanitised, ext = await _accept_image(file)
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-    with open(dst_path, "wb") as out:
-        out.write(sanitised)
+    async with aiofiles.open(dst_path, "wb") as out:
+        await out.write(sanitised)
     return {"image_url": f"/static/uploads/{filename}"}
 
 
@@ -76,8 +77,8 @@ async def upload_avatar(
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-    with open(dst_path, "wb") as out:
-        out.write(sanitised)
+    async with aiofiles.open(dst_path, "wb") as out:
+        await out.write(sanitised)
 
     avatar_url = f"/static/uploads/{filename}"
     current_user.avatar_url = avatar_url
