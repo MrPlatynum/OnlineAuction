@@ -18,6 +18,7 @@ from app.models import (
 from app.schemas import AuctionCreate, AuctionResponse, PaginatedAuctionsResponse
 from app.services.auction_scheduler import cancel_auction, schedule_auction
 from app.services.auctions import get_image_urls
+from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
@@ -117,8 +118,14 @@ async def buy_now(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Row-lock the auction first. Two simultaneous /buy-now calls (or
+    # /buy-now racing complete_auction at end_time) queue here at the DB,
+    # so the second one sees is_active=False after the first commits and
+    # exits cleanly instead of double-charging.
     auction = (
-        await db.execute(select(Auction).where(Auction.id == auction_id))
+        await db.execute(
+            select(Auction).where(Auction.id == auction_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if not auction:
         raise HTTPException(404, "Аукцион не найден")
@@ -134,6 +141,9 @@ async def buy_now(
         raise HTTPException(400, "Цена BIN не установлена")
     if auction.created_by == current_user.id:
         raise HTTPException(400, "Нельзя купить собственный лот")
+
+    locked_users = await lock_users_by_id(db, current_user.id, auction.created_by)
+    creator = locked_users.get(auction.created_by)
     if current_user.balance < auction.bin_price:
         raise HTTPException(
             400,
@@ -151,9 +161,6 @@ async def buy_now(
     auction.winner_id = current_user.id
     auction.end_time = utcnow()
 
-    creator = (
-        await db.execute(select(User).where(User.id == auction.created_by))
-    ).scalar_one_or_none()
     if creator:
         creator.balance += auction.bin_price
         add_transaction(

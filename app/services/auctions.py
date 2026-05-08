@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Auction, AuctionImage, Bid, NotificationType, User
+from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
@@ -60,8 +61,14 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
 
 async def complete_auction(auction_id: int, db: AsyncSession):
     """Завершение аукциона и уведомление участников."""
+    # Row-lock the auction first. Guards against a duplicate scheduler
+    # tick after server restart (or multi-worker race with /buy-now)
+    # double-settling the same lot — the second caller sees is_active=False
+    # and exits.
     auction = (
-        await db.execute(select(Auction).where(Auction.id == auction_id))
+        await db.execute(
+            select(Auction).where(Auction.id == auction_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if not auction or not auction.is_active:
         return
@@ -80,9 +87,11 @@ async def complete_auction(auction_id: int, db: AsyncSession):
 
     if last_bid:
         auction.winner_id = last_bid.user_id
-        winner = (
-            await db.execute(select(User).where(User.id == last_bid.user_id))
-        ).scalar_one_or_none()
+        locked_users = await lock_users_by_id(
+            db, last_bid.user_id, auction.created_by
+        )
+        winner = locked_users.get(last_bid.user_id)
+        creator = locked_users.get(auction.created_by)
 
         if winner:
             winner.balance -= last_bid.amount
@@ -91,9 +100,6 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 f"Победа в аукционе «{auction.title}»", auction_id=auction.id,
             )
 
-        creator = (
-            await db.execute(select(User).where(User.id == auction.created_by))
-        ).scalar_one_or_none()
         if creator:
             creator.balance += last_bid.amount
             add_transaction(
