@@ -17,6 +17,10 @@ os.environ.setdefault(
     "AUCTION_SECRET_KEY",
     "test-only-secret-key-do-not-use-in-prod",
 )
+# Tests fire many requests at 127.0.0.1 inside one minute (registration,
+# login, deposit) which would trip the production limits. The dedicated
+# test ``test_rate_limit_*`` files re-enable it explicitly per-test.
+os.environ.setdefault("AUCTION_RATE_LIMIT_ENABLED", "false")
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402

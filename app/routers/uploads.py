@@ -1,19 +1,21 @@
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ALLOWED_IMAGE_TYPES, MAX_UPLOAD_SIZE, UPLOAD_DIR
 from app.database import get_db
 from app.models import User
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["uploads"])
 
 
 @router.post("/upload-image")
-async def upload_image(file: UploadFile = File(...)):
+@limiter.limit("20/minute")
+async def upload_image(request: Request, file: UploadFile = File(...)):
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported image type")
 
@@ -34,7 +36,9 @@ async def upload_image(file: UploadFile = File(...)):
 
 
 @router.post("/upload-avatar")
+@limiter.limit("20/minute")
 async def upload_avatar(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
