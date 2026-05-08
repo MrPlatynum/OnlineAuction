@@ -13,7 +13,33 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Auction, Bid
+from app.models import Auction, Bid, User
+
+
+async def lock_users_by_id(db: AsyncSession, *user_ids: int) -> dict[int, User]:
+    """Take ``SELECT ... FOR UPDATE`` row locks on the given users in
+    ascending-id order to avoid deadlocks across transactions that
+    touch the same pair of users (e.g. /buy-now and complete_auction).
+
+    Returns the locked ``User`` instances keyed by id. Duplicates and
+    ``None`` ids are filtered. ``populate_existing`` is set so any copy
+    already in the session's identity map is refreshed from the locked
+    row, not served stale.
+    """
+    sorted_ids = sorted({uid for uid in user_ids if uid is not None})
+    locked: dict[int, User] = {}
+    for uid in sorted_ids:
+        user = (
+            await db.execute(
+                select(User)
+                .where(User.id == uid)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if user is not None:
+            locked[uid] = user
+    return locked
 
 
 async def get_committed_balance(db: AsyncSession, user_id: int) -> Decimal:
