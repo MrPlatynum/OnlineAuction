@@ -1,33 +1,92 @@
-  const API     = 'http://localhost:8000';
-  const WS_BASE = API.replace(/^http/i, 'ws');
+(function() {
+  'use strict';
+
   const auctionId = new URLSearchParams(location.search).get('id');
   const token     = localStorage.getItem('token');
   let currentPriceValue = null;
   let remainingSec      = null;
   let isActive          = null;
-  let ws = null, wsPingTimer = null, toastTimer = null;
+  let ws = null, wsPingTimer = null;
   const $ = id => document.getElementById(id);
 
-  function showToast(title, msg, tone = 'info') {
-    $('toastTitle').textContent = title;
-    $('toastMsg').textContent   = msg;
-    $('toastDot').style.background = tone==='ok'?'var(--green)':tone==='warn'?'var(--amber)':tone==='bad'?'var(--red)':'var(--accent)';
-    $('toast').classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3200);
-  }
+  // showToast — общий из common.js (window.showToast)
 
-  function fmtMoney(n) { const num=Number(n); return Number.isFinite(num)?'$'+num.toFixed(2):'—'; }
   function fmtTime(sec) {
     if (!Number.isFinite(sec)||sec<=0) return '0м 00с';
     const h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
     if (h>0) return `${h}ч ${m}м ${String(s).padStart(2,'0')}с`;
     return `${m}м ${String(s).padStart(2,'0')}с`;
   }
-  function fmtDate(ts) { if(!ts)return''; return new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
-  function esc(str) { return String(str).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function syncEl(id, val) { const el=$(id); if(el) el.textContent=val; }
+
+  function flashPrice() {
+    const el = $('currentPrice');
+    if (!el) return;
+    el.classList.remove('flash');
+    void el.offsetWidth;       /* перезапуск CSS-анимации */
+    el.classList.add('flash');
+  }
+
+  // ---- Breadcrumbs ----
+  let _categoriesCache = null;
+  async function loadBreadcrumbs(catId) {
+    try {
+      if (!_categoriesCache) {
+        const r = await fetch(`${API}/api/categories`);
+        if (!r.ok) return;
+        _categoriesCache = await r.json();
+      }
+      // Ищем путь до категории в дереве
+      const path = findCategoryPath(_categoriesCache, catId);
+      if (!path.length) return;
+
+      const wrap = document.querySelector('.nav-crumb');
+      const titleEl = $('crumbTitle');
+      if (!wrap || !titleEl) return;
+
+      // Очищаем всё внутри nav-crumb и пересобираем
+      wrap.innerHTML = '';
+
+      const root = document.createElement('a');
+      root.href = 'index.html';
+      root.textContent = 'Аукционы';
+      wrap.appendChild(root);
+
+      path.forEach(c => {
+        const sep = document.createElement('span');
+        sep.className = 'nav-crumb-sep';
+        sep.textContent = '›';
+        wrap.appendChild(sep);
+        const a = document.createElement('a');
+        a.href = `index.html?category=${encodeURIComponent(c.slug)}`;
+        a.textContent = c.name;
+        wrap.appendChild(a);
+      });
+
+      // Добавляем обратно слот для заголовка лота
+      const sep = document.createElement('span');
+      sep.className = 'nav-crumb-sep';
+      sep.textContent = '›';
+      wrap.appendChild(sep);
+      const cur = document.createElement('span');
+      cur.className = 'nav-crumb-current';
+      cur.id = 'crumbTitle';
+      cur.textContent = titleEl.textContent;  // сохраняем текущее значение
+      wrap.appendChild(cur);
+    } catch (e) {
+      console.warn('[breadcrumbs] failed:', e);
+    }
+  }
+
+  function findCategoryPath(cats, targetId, ancestors = []) {
+    for (const c of cats || []) {
+      if (c.id === targetId) return [...ancestors, c];
+      const sub = findCategoryPath(c.children || [], targetId, [...ancestors, c]);
+      if (sub.length) return sub;
+    }
+    return [];
+  }
 
   function applyStatus(active) {
     isActive = !!active;
@@ -86,11 +145,6 @@
     localStorage.removeItem('token'); location.href='index.html';
   }
 
-  async function apiFetch(url,opts={}) {
-    const headers={...(opts.headers||{})};
-    if (token) headers['Authorization']='Bearer '+token;
-    return fetch(url,{...opts,headers});
-  }
 
   async function loadMe() {
     if (!token) return null;
@@ -104,7 +158,19 @@
     const a=await r.json();
 
     document.title=`${a.title} — Лотус`;
-    syncEl('title',a.title||'Лот'); syncEl('crumbTitle',a.title||'Лот'); syncEl('description',a.description||'');
+    syncEl('title',a.title||'Лот'); syncEl('crumbTitle',a.title||'Лот');
+    // Описание: если пусто, показываем muted-плейсхолдер
+    const descEl = $('description');
+    if (descEl) {
+      const txt = (a.description || '').trim();
+      if (txt) {
+        descEl.textContent = txt;
+        descEl.classList.remove('is-empty');
+      } else {
+        descEl.textContent = 'Продавец не оставил описание';
+        descEl.classList.add('is-empty');
+      }
+    }
 
     // Images
     const urls=(a.image_urls&&a.image_urls.length)?a.image_urls.map(u=>String(u).startsWith('http')?u:API+u):(a.image_url?[String(a.image_url).startsWith('http')?a.image_url:API+a.image_url]:[]);
@@ -182,8 +248,25 @@
     // Category
     if (a.category_name) {
       const cb=$('categoryBadge');
-      cb.textContent=`${a.category_icon||''} ${a.category_name}`;
+      cb.textContent=a.category_name;
       cb.style.display='inline-flex';
+    }
+    // Breadcrumbs (Аукционы › Категория › Подкатегория › Лот)
+    if (a.category_id) loadBreadcrumbs(a.category_id);
+
+    // Lot byline (под заголовком в шапке)
+    const byline=$('lotByline');
+    if (byline && a.creator_username) {
+      const parts=[];
+      parts.push(`Продаёт: <a href="user.html?username=${encodeURIComponent(a.creator_username)}">@${esc(a.creator_username)}</a>`);
+      if (a.category_name) parts.push(esc(a.category_name));
+      byline.innerHTML = parts.join('<span class="sep">·</span>');
+    }
+
+    // Quick-bid buttons видны только для авторизованных активных торгов
+    const quick=$('bidQuick');
+    if (quick) {
+      quick.style.display = (token && a.is_active && a.auction_type !== 'bin') ? 'flex' : 'none';
     }
 
     return a;
@@ -196,12 +279,32 @@
   function renderBids(items) {
     const list=$('bidsList');
     if (!items.length) { list.innerHTML='<div class="bids-empty">Ставок пока нет — будьте первым!</div>'; return; }
-    list.innerHTML=items.map((b,i)=>`
-      <div class="bid-row ${i===0?'top-bid':''}">
-        <div><div class="bid-who">${esc(b.username??'—')}</div><div class="bid-when">${fmtDate(b.timestamp)}</div></div>
+    const medals = ['🥇','🥈','🥉'];
+    list.innerHTML=items.map((b,i)=>{
+      const rank = medals[i] || `<span>${i+1}</span>`;
+      return `<div class="bid-row ${i===0?'top-bid':''}">
+        <div class="bid-rank">${i<3 ? `<span class="bid-rank-medal">${medals[i]}</span>` : (i+1)}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="bid-who">${esc(b.username??'—')}</div>
+          <div class="bid-when">${fmtDate(b.timestamp)}</div>
+        </div>
         <div class="bid-amt ${i===0?'top':''}">${fmtMoney(b.amount)}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
     syncEl('bidsCount',items.length); syncEl('bidsCount2',items.length);
+  }
+
+  // Quick-bid: добавляет к минимальной ставке (текущая+0.01) указанную сумму
+  function bumpBid(amount) {
+    const min = currentPriceValue !== null ? currentPriceValue + 0.01 : 0;
+    const target = Math.round((min + amount) * 100) / 100;
+    const inp = $('bidAmount');
+    if (inp) {
+      inp.value = target.toFixed(2);
+      inp.focus();
+      // лёгкий визуальный «пинок» поля
+      inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash');
+    }
   }
 
   async function loadBids() {
@@ -237,7 +340,13 @@
     ws.onmessage=e=>{
       let data; try{data=JSON.parse(e.data);}catch{return;}
       if (data.type==='new_bid') {
-        if (data.current_price!==undefined) { currentPriceValue=Number(data.current_price); const p=fmtMoney(currentPriceValue); syncEl('currentPrice',p); syncEl('currentPrice2',p); updateBidHint(); }
+        if (data.current_price!==undefined) {
+          currentPriceValue=Number(data.current_price);
+          const p=fmtMoney(currentPriceValue);
+          syncEl('currentPrice',p); syncEl('currentPrice2',p);
+          flashPrice();
+          updateBidHint();
+        }
         loadBids();
       }
       if (data.type==='time_update') {
@@ -304,13 +413,10 @@
         const avg=d.stats.avg,total=d.stats.total;
         syncEl('sellerReviews',total);
         if(total>0){syncEl('sellerRatingVal',avg.toFixed(1));syncEl('sellerRatingCount',`(${total} отзыв${total===1?'':total>4?'ов':'а'})`);renderStars($('sellerStars'),avg);}
-        // На странице лота — показываем только отзывы об этом лоте
-        const lotReviews = d.reviews.filter(r => r.auction_id === +auctionId);
-        const lotData = { ...d, reviews: lotReviews };
-        renderReviews(lotData);
-        $('reviewsSummary').style.display='none'; // summary не нужен для одного лота
-        if(lotReviews.length>0) $('reviewsSection').style.display='block';
-        else $('reviewsSection').style.display='block'; // показываем форму отзыва
+        // Показываем ВСЕ отзывы о продавце (не только об этом лоте)
+        renderReviews(d);
+        $('reviewsSummary').style.display = total > 0 ? 'flex' : 'none';
+        $('reviewsSection').style.display = 'block';
       }
     } catch {}
     if (token) {
@@ -336,16 +442,161 @@
     try{const method=isSubscribed?'DELETE':'POST';const r=await fetch(`${API}/api/sellers/${sellerId}/subscribe`,{method,headers:{'Authorization':'Bearer '+token}});if(r.ok){const d=await r.json();isSubscribed=d.subscribed;syncEl('sellerSubs',d.subscribers_count);updateSubBtn();showToast(isSubscribed?'Подписка':'Отписка',isSubscribed?`Вы подписались на @${sellerUsername}`:`Вы отписались от @${sellerUsername}`,'ok');}}catch{showToast('Ошибка','Не удалось изменить подписку','bad');}
   }
 
+  // Состояние отзывов / фильтра — два независимых стейта:
+  //   1) thisLotOnly — toggle (чекбокс), фильтр по auction_id
+  //   2) lotReviewFilter — exclusive (звезда), фильтр по rating
+  // Оба применяются последовательно.
+  let lotReviews = [];
+  let lotReviewFilter = 'all';   // 'all' | 1..5
+  let thisLotOnly = false;
+
   function renderReviews(data) {
-    const avg=data.stats.avg,total=data.stats.total,dist=data.stats.distribution;
-    syncEl('revAvg',total?avg.toFixed(1):'—');
-    syncEl('revCount',`${total} отзыв${total===1?'':total>4?'ов':'а'}`);
-    renderStars($('revBigStars'),avg,15);
-    const barsEl=$('revBars');
-    if(barsEl)barsEl.innerHTML=[5,4,3,2,1].map(n=>{const cnt=dist[n]||0,pct=total?Math.round(cnt/total*100):0,cls=n<=2?'low':n===3?'mid':'';return`<div class="review-bar-row"><span class="review-bar-label">${n}★</span><div class="review-bar-track"><div class="review-bar-fill ${cls}" style="width:${pct}%"></div></div><span class="review-bar-count">${cnt}</span></div>`;}).join('');
-    const listEl=$('reviewList');if(!listEl)return;
-    if(!data.reviews.length){listEl.innerHTML=`<div style="text-align:center;padding:24px;color:var(--text-3);font-size:13px;">Об этом лоте отзывов пока нет — будьте первым!</div>`;return;}
-    listEl.innerHTML=data.reviews.map(rev=>{const utc=rev.created_at.endsWith('Z')?rev.created_at:rev.created_at+'Z';const date=new Date(utc).toLocaleDateString('ru-RU',{day:'2-digit',month:'short',year:'numeric'});const stars=[1,2,3,4,5].map(i=>`<span class="review-star${i<=rev.rating?' on':''}">★</span>`).join('');const avatarSrc=rev.reviewer_avatar_url?(rev.reviewer_avatar_url.startsWith('http')?rev.reviewer_avatar_url:`${API}${rev.reviewer_avatar_url}`):null;const avatarHtml=avatarSrc?`<img src="${avatarSrc}" alt="${esc(rev.reviewer_username)}">`:(rev.reviewer_username||'?')[0].toUpperCase();return`<div class="review-item"><div class="review-top"><div class="review-avatar">${avatarHtml}</div><span class="review-author">${esc(rev.reviewer_username)}</span><span class="review-date">${date}</span>${rev._can_delete?`<button class="review-del" onclick="deleteReview(${rev.id})">✕</button>`:''}</div><div class="review-stars">${stars}</div>${rev.comment?`<div class="review-text">${esc(rev.comment)}</div>`:''}</div>`;}).join('');
+    const avg = data.stats.avg, total = data.stats.total, dist = data.stats.distribution || {};
+    lotReviews = data.reviews || [];
+
+    syncEl('revAvg', total ? avg.toFixed(1) : '—');
+    syncEl('revCount', `${total} отзыв${total === 1 ? '' : total > 4 ? 'ов' : 'а'}`);
+    syncEl('reviewsTabCount', total);
+    renderStars($('revBigStars'), avg, 15);
+
+    // Бары распределения
+    const barsEl = $('revBars');
+    if (barsEl) barsEl.innerHTML = [5,4,3,2,1].map(n => {
+      const cnt = dist[n] || 0, pct = total ? Math.round(cnt/total*100) : 0;
+      const cls = n <= 2 ? 'low' : n === 3 ? 'mid' : '';
+      return `<div class="review-bar-row">
+        <span class="review-bar-label">${n}<span class="star-glyph">★</span></span>
+        <div class="review-bar-track"><div class="review-bar-fill ${cls}" style="width:${pct}%"></div></div>
+        <span class="review-bar-count">${cnt}</span>
+      </div>`;
+    }).join('');
+
+    // Показываем фильтр-блок если есть отзывы
+    const filterEl = $('revFilter');
+    if (filterEl) filterEl.style.display = total > 0 ? 'flex' : 'none';
+
+    // Счётчик «Об этом лоте» (фиксированный — не зависит от других фильтров)
+    const thisLotCount = lotReviews.filter(r => r.auction_id === +auctionId).length;
+    syncEl('revPillThisLotCount', thisLotCount);
+    const thisPill = $('revPillThisLot');
+    if (thisPill) thisPill.disabled = thisLotCount === 0;
+
+    refreshStarPillCounts();
+    renderReviewsList();
+  }
+
+  // Считает счётчики у звёздных пилюль с учётом активного «thisLotOnly»
+  function refreshStarPillCounts() {
+    const base = thisLotOnly
+      ? lotReviews.filter(r => r.auction_id === +auctionId)
+      : lotReviews;
+    syncEl('revPillAll', base.length);
+    const counts = {1:0, 2:0, 3:0, 4:0, 5:0};
+    for (const r of base) counts[r.rating] = (counts[r.rating] || 0) + 1;
+    [1,2,3,4,5].forEach(n => {
+      syncEl('revPill' + n, counts[n] || 0);
+      const pill = document.querySelector(`.rev-pill[data-rating="${n}"]`);
+      if (pill) pill.disabled = (counts[n] || 0) === 0;
+    });
+  }
+
+  function toggleThisLotOnly() {
+    thisLotOnly = !thisLotOnly;
+    const pill = $('revPillThisLot');
+    if (pill) pill.classList.toggle('active', thisLotOnly);
+    // Если активный звёзд-фильтр станет пустым — сбрасываем на «Все»
+    refreshStarPillCounts();
+    if (lotReviewFilter !== 'all') {
+      const activePill = document.querySelector(`.rev-pill[data-rating="${lotReviewFilter}"]`);
+      if (activePill && activePill.disabled) {
+        lotReviewFilter = 'all';
+        document.querySelectorAll('.rev-pill[data-rating]').forEach(p => p.classList.remove('active'));
+        document.querySelector('.rev-pill[data-rating="all"]')?.classList.add('active');
+      }
+    }
+    renderReviewsList();
+  }
+
+  function renderReviewsList() {
+    const listEl = $('reviewList');
+    if (!listEl) return;
+    // Применяем оба фильтра последовательно
+    let items = lotReviews;
+    if (thisLotOnly)              items = items.filter(r => r.auction_id === +auctionId);
+    if (lotReviewFilter !== 'all') items = items.filter(r => r.rating === lotReviewFilter);
+
+    if (!items.length) {
+      let msg;
+      if (thisLotOnly && lotReviewFilter !== 'all')
+        msg = `Нет отзывов с оценкой ${lotReviewFilter}★ об этом лоте`;
+      else if (thisLotOnly)
+        msg = 'Об этом лоте отзывов пока нет';
+      else if (lotReviewFilter !== 'all')
+        msg = `Нет отзывов с оценкой ${lotReviewFilter}★`;
+      else
+        msg = 'У этого продавца пока нет отзывов — будьте первым!';
+      listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-3);font-size:13px;">${msg}</div>`;
+      return;
+    }
+
+    // Сортируем: отзывы об ЭТОМ лоте в начале, остальные следом по дате
+    const sorted = [...items].sort((a, b) => {
+      const aThis = a.auction_id === +auctionId ? 1 : 0;
+      const bThis = b.auction_id === +auctionId ? 1 : 0;
+      if (aThis !== bThis) return bThis - aThis;
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+
+    listEl.innerHTML = sorted.map(rev => {
+      const tone = rev.rating >= 4 ? 'positive' : rev.rating <= 2 ? 'negative' : 'neutral';
+      const utc = rev.created_at.endsWith('Z') ? rev.created_at : rev.created_at + 'Z';
+      const date = new Date(utc).toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' });
+      const stars = [1,2,3,4,5].map(i => `<span class="review-star${i <= rev.rating ? ' on' : ''}">★</span>`).join('');
+      const avatarSrc = rev.reviewer_avatar_url
+        ? (rev.reviewer_avatar_url.startsWith('http') ? rev.reviewer_avatar_url : `${API}${rev.reviewer_avatar_url}`)
+        : null;
+      const avatarHtml = avatarSrc
+        ? `<img src="${avatarSrc}" alt="${esc(rev.reviewer_username)}">`
+        : (rev.reviewer_username || '?')[0].toUpperCase();
+
+      const isThisLot = rev.auction_id === +auctionId;
+      const lotChip = rev.auction_id && rev.auction_title
+        ? (isThisLot
+            ? `<span class="rev-lot-chip current" title="Отзыв об этом лоте">📍 Об этом лоте</span>`
+            : `<a class="rev-lot-chip" href="auction.html?id=${rev.auction_id}" title="${esc(rev.auction_title)}">🔨 ${esc(rev.auction_title)}</a>`)
+        : '';
+
+      return `<div class="review-item ${tone}${isThisLot ? ' is-this-lot' : ''}">
+        <div class="review-top">
+          <div class="review-avatar">${avatarHtml}</div>
+          <span class="review-author">${esc(rev.reviewer_username)}</span>
+          <span class="review-date">${date}</span>
+          ${rev._can_delete ? `<button class="review-del" onclick="deleteReview(${rev.id})">✕</button>` : ''}
+        </div>
+        <div class="review-stars">${stars}</div>
+        ${lotChip}
+        ${rev.comment ? `<div class="review-text">${esc(rev.comment)}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function filterReviewsByRating(rating, btn) {
+    lotReviewFilter = rating;
+    // Снимаем active только со звёздных пилюль (data-rating), не трогая toggle «Об этом лоте»
+    document.querySelectorAll('.rev-pill[data-rating]').forEach(p => p.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    renderReviewsList();
+  }
+
+  function switchLotTab(tab) {
+    document.querySelectorAll('.lot-tab-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tab);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'tab-' + tab);
+    });
+    // обновляем хэш для deep-link
+    if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
   }
 
   document.addEventListener('DOMContentLoaded',()=>{
@@ -353,11 +604,50 @@
     if(picker){picker.querySelectorAll('.star-pick').forEach(s=>{s.addEventListener('mouseover',()=>{const val=+s.dataset.val;picker.querySelectorAll('.star-pick').forEach(x=>x.classList.toggle('sel',+x.dataset.val<=val));});s.addEventListener('click',()=>{currentRating=+s.dataset.val;picker.querySelectorAll('.star-pick').forEach(x=>x.classList.toggle('sel',+x.dataset.val<=currentRating));});});picker.addEventListener('mouseleave',()=>{picker.querySelectorAll('.star-pick').forEach(x=>x.classList.toggle('sel',+x.dataset.val<=currentRating));});}
   });
 
+  const REVIEW_COMMENT_MAX = 1000;
+
+  function updateReviewCounter() {
+    const ta = $('reviewText');
+    const lbl = $('reviewCharCount');
+    if (!ta || !lbl) return;
+    const len = ta.value.length;
+    lbl.textContent = `${len} / ${REVIEW_COMMENT_MAX}`;
+    lbl.classList.toggle('full', len >= REVIEW_COMMENT_MAX);
+    lbl.classList.toggle('warn', len >= REVIEW_COMMENT_MAX * 0.9 && len < REVIEW_COMMENT_MAX);
+  }
+
   async function submitReview() {
-    if(!currentRating){showToast('Оценка','Выберите оценку от 1 до 5','warn');return;}
-    if(!sellerId)return;
-    const comment=$('reviewText').value.trim();
-    try{const r=await fetch(`${API}/api/reviews`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({seller_id:sellerId,auction_id:+auctionId||null,rating:currentRating,comment})});if(r.ok){showToast('Отзыв','Ваш отзыв опубликован','ok');$('reviewText').value='';currentRating=0;$('starPicker')?.querySelectorAll('.star-pick').forEach(s=>s.classList.remove('sel'));const rev=await fetch(`${API}/api/sellers/${sellerId}/reviews`);if(rev.ok)renderReviews(await rev.json());}else{const err=await r.json();showToast('Ошибка',err.detail||'Не удалось добавить отзыв','bad');}}catch{showToast('Ошибка','Нет соединения','bad');}
+    if (!currentRating) { showToast('Оценка', 'Выберите оценку от 1 до 5', 'warn'); return; }
+    if (!sellerId) return;
+    const comment = $('reviewText').value.trim();
+    if (comment.length > REVIEW_COMMENT_MAX) {
+      showToast('Слишком длинный отзыв', `Максимум ${REVIEW_COMMENT_MAX} символов`, 'warn');
+      return;
+    }
+    try {
+      const r = await fetch(`${API}/api/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          seller_id: sellerId, auction_id: +auctionId || null,
+          rating: currentRating, comment,
+        }),
+      });
+      if (r.ok) {
+        showToast('Отзыв', 'Ваш отзыв опубликован', 'ok');
+        $('reviewText').value = '';
+        updateReviewCounter();
+        currentRating = 0;
+        $('starPicker')?.querySelectorAll('.star-pick').forEach(s => s.classList.remove('sel'));
+        const rev = await fetch(`${API}/api/sellers/${sellerId}/reviews`);
+        if (rev.ok) renderReviews(await rev.json());
+      } else {
+        const err = await r.json();
+        showToast('Ошибка', err.detail || 'Не удалось добавить отзыв', 'bad');
+      }
+    } catch {
+      showToast('Ошибка', 'Нет соединения', 'bad');
+    }
   }
 
   async function deleteReview(id) {
@@ -395,31 +685,24 @@
   function lotGoTo(idx){const slides=document.querySelectorAll('.lot-slide'),dots=document.querySelectorAll('.lot-dot'),counter=$('lotCounter');if(!slides.length)return;slides[lotCurrentSlide]?.classList.remove('active');dots[lotCurrentSlide]?.classList.remove('active');lotCurrentSlide=(idx+slides.length)%slides.length;slides[lotCurrentSlide]?.classList.add('active');dots[lotCurrentSlide]?.classList.add('active');if(counter)counter.textContent=`${lotCurrentSlide+1} / ${slides.length}`;updateThumbs(lotCurrentSlide);}
   function lotSlide(dir){lotGoTo(lotCurrentSlide+dir);}
 
-  init();
+  // Expose handlers for inline onclick="..." in auction.html
+  Object.assign(window, {
+    buyNow, bumpBid, closeEditModal, filterReviewsByRating, goAuth,
+    lotGoTo, lotSlide, openEditModal, placeBid, saveEdit, setExtend,
+    submitReview, switchLotTab, toggleSubscription, toggleThisLotOnly,
+    updateReviewCounter,
+  });
 
-(function() {
-  const API_URL='http://localhost:8000';
-  function getToken(){return localStorage.getItem('token');}
-  const btn=document.getElementById('notifBtn'),badge=document.getElementById('notifBadge'),dropdown=document.getElementById('notifDropdown'),list=document.getElementById('notifList'),markAllBtn=document.getElementById('notifMarkAll');
-  if(!btn||!dropdown)return;
-  let unreadCount=0,wsNotif=null,currentUserId=null,isOpen=false;
-  const ICONS={bid_outbid:{emoji:'⚡'},bid_placed:{emoji:'💰'},auction_won:{emoji:'🏆'},auction_lost:{emoji:'😔'},auction_sold:{emoji:'✅'},new_lot:{emoji:'🔖'},auction_ending:{emoji:'⏰'}};
-  function fmtAge(iso){const utcIso=iso&&!iso.endsWith('Z')&&!iso.includes('+')?iso+'Z':iso;const diff=Math.floor((Date.now()-new Date(utcIso))/1000);if(diff<60)return'только что';if(diff<3600)return`${Math.floor(diff/60)} мин назад`;if(diff<86400)return`${Math.floor(diff/3600)} ч назад`;return new Date(utcIso).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit'});}
-  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function setCount(n){unreadCount=Math.max(0,n);if(unreadCount>0){badge.textContent=unreadCount>99?'99+':String(unreadCount);badge.style.display='flex';btn.classList.add('has-unread');}else{badge.style.display='none';btn.classList.remove('has-unread');}}
-  function renderList(items){if(!items.length){list.innerHTML=`<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Уведомлений пока нет</div>`;return;}list.innerHTML=items.map(n=>{const ico=ICONS[n.type]||{emoji:'🔔'};return`<div class="notif-item ${n.is_read?'':'unread'}" data-id="${n.id}" data-auction="${n.auction_id||''}"><div class="notif-icon">${ico.emoji}</div><div class="notif-body"><div class="notif-title">${esc(n.title)}</div><div class="notif-msg">${esc(n.message)}</div><div class="notif-time">${fmtAge(n.created_at)}</div></div></div>`;}).join('');}
-  async function apiFetch(url,opts={}){const tk=getToken();const headers={...(opts.headers||{})};if(tk)headers['Authorization']='Bearer '+tk;return fetch(url,{...opts,headers});}
-  async function fetchCount(){if(!getToken())return;try{const r=await apiFetch(`${API_URL}/api/notifications/unread-count`);if(r.ok){const d=await r.json();setCount(d.count??0);}}catch{}}
-  async function fetchNotifications(){if(!getToken()){list.innerHTML=`<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Войдите</div>`;return;}list.innerHTML=`<div class="notif-empty">Загрузка…</div>`;try{const r=await apiFetch(`${API_URL}/api/notifications?limit=30`);if(r.ok)renderList(await r.json());else list.innerHTML=`<div class="notif-empty">Ошибка</div>`;}catch{list.innerHTML=`<div class="notif-empty">Нет связи</div>`;}}
-  async function markAllRead(){try{await apiFetch(`${API_URL}/api/notifications/mark-all-read`,{method:'POST'});setCount(0);await fetchNotifications();}catch{}}
-  function openDropdown(){isOpen=true;dropdown.classList.add('open');fetchNotifications();}
-  function closeDropdown(){isOpen=false;dropdown.classList.remove('open');}
-  btn.addEventListener('click',e=>{e.stopPropagation();isOpen?closeDropdown():openDropdown();});
-  document.addEventListener('click',e=>{if(isOpen&&!dropdown.contains(e.target)&&e.target!==btn)closeDropdown();});
-  markAllBtn.addEventListener('click',e=>{e.stopPropagation();markAllRead();});
-  list.addEventListener('click',async e=>{const item=e.target.closest('.notif-item');if(!item)return;const id=item.dataset.id,aId=item.dataset.auction;if(id&&item.classList.contains('unread')){item.classList.remove('unread');setCount(unreadCount-1);try{await apiFetch(`${API_URL}/api/notifications/${id}/read`,{method:'POST'});}catch{}}if(aId){closeDropdown();window.location.href=`auction.html?id=${aId}`;}});
-  function connectNotifWS(userId){if(wsNotif){try{wsNotif.close();}catch{}}const tk=getToken();if(!tk)return;wsNotif=new WebSocket(`${API_URL.replace(/^http/i,'ws')}/ws/notifications/${userId}?token=${encodeURIComponent(tk)}`);wsNotif.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.type==='notification'){setCount(unreadCount+1);if(isOpen)fetchNotifications();}}catch{}};wsNotif.onclose=()=>setTimeout(()=>{if(currentUserId)connectNotifWS(currentUserId);},3000);}
-  async function initNotifBell(){if(!getToken()){btn.style.display='none';return;}btn.style.display='flex';await fetchCount();try{const r=await apiFetch(`${API_URL}/api/me`);if(r.ok){const me=await r.json();currentUserId=me.id;if(currentUserId)connectNotifWS(currentUserId);}}catch{}setInterval(fetchCount,60000);}
-  setTimeout(initNotifBell,800);
-  window.addEventListener('storage',e=>{if(e.key==='token')setTimeout(initNotifBell,300);});
+  // Deep-link: auction.html?id=...#reviews открывает таб «Отзывы» сразу
+  if (location.hash === '#reviews' || location.hash === '#desc') {
+    switchLotTab(location.hash.slice(1));
+  }
+
+  // Bootstrap with error boundary
+  init().catch(err => {
+    console.error('[auction.html] init failed:', err);
+    const target = document.getElementById('lotInfoBlock') || document.querySelector('.page-wrap');
+    window.renderLoadError(target, 'Не удалось загрузить лот', () => location.reload());
+  });
 })();
+

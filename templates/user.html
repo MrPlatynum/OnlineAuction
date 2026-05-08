@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <title>Профиль — Лотус</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/user.css">
 </head>
 <body>
@@ -14,7 +16,7 @@
 <header class="navbar">
   <div class="nav-inner">
     <a class="nav-logo" href="index.html">
-      <div class="nav-logo-icon">🪷</div>
+      <div class="nav-logo-icon"></div>
       <span class="nav-logo-text">Лотус</span>
     </a>
     <div class="nav-divider"></div>
@@ -40,25 +42,89 @@
   </div>
 </header>
 
-<div class="notif-dropdown" id="notifDropdown" style="position:fixed;top:calc(var(--nav-h)+6px);right:20px;width:360px;background:var(--bg-2);border:1px solid var(--border-hi);border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);z-index:500;display:none;">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid var(--border);">
-    <span style="font-size:13px;font-weight:700;">Уведомления</span>
-    <button id="notifMarkAll" style="background:none;border:none;font-size:12px;color:var(--accent);cursor:pointer;font-weight:600;">Прочитать все</button>
+<div class="notif-dropdown" id="notifDropdown">
+  <div class="notif-header">
+    <span class="notif-header-title">Уведомления</span>
+    <button class="notif-mark-all" id="notifMarkAll">Прочитать все</button>
   </div>
-  <div id="notifList" style="max-height:380px;overflow-y:auto;"><div style="padding:28px;text-align:center;color:var(--text-3);">🔔 Загрузка…</div></div>
+  <div class="notif-list" id="notifList">
+    <div class="notif-empty"><div class="notif-empty-icon">🔔</div>Загрузка…</div>
+  </div>
 </div>
 
 <div class="page-wrap" id="page">
-  <!-- Skeleton -->
-  <div style="background:var(--bg-2);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px 28px;margin-bottom:20px;display:flex;align-items:center;gap:20px;">
-    <div class="skel" style="width:72px;height:72px;border-radius:50%;flex-shrink:0;"></div>
-    <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
-      <div class="skel" style="height:22px;width:180px;"></div>
-      <div class="skel" style="height:12px;width:120px;"></div>
+  <!-- Skeleton — повторяет реальный макет, чтобы не было layout-shift -->
+  <div class="skel-header">
+    <div class="skel skel-banner"></div>
+    <div class="skel-header-body">
+      <div class="skel skel-avatar"></div>
+      <div class="skel-info">
+        <div class="skel skel-info-line" style="width:220px;"></div>
+        <div class="skel skel-info-line" style="width:380px;height:11px;"></div>
+      </div>
     </div>
   </div>
+  <div class="profile-section"><div class="skel" style="height:160px;"></div></div>
+  <div class="profile-section"><div class="skel" style="height:140px;"></div></div>
 </div>
 
+<!-- ================================================================
+     FOOTER
+     ================================================================ -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="footer-logo">
+        <div class="nav-logo-icon"></div>
+        <span class="footer-logo-text">Лотус</span>
+      </div>
+      <p class="footer-tagline">
+        Платформа онлайн-аукционов для коллекционеров.<br>
+        Торгуйтесь честно, побеждайте достойно.
+      </p>
+      <div class="footer-social">
+        <a class="footer-soc" href="#" aria-label="Telegram"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg></a>
+        <a class="footer-soc" href="#" aria-label="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57v-2c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.66-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.13 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.6-2.81 5.62-5.48 5.92.42.36.81 1.1.81 2.22v3.29c0 .31.22.69.83.57A12 12 0 0 0 12 .3z"/></svg></a>
+        <a class="footer-soc" href="#" aria-label="Twitter"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+      </div>
+    </div>
+
+    <div class="footer-cols">
+      <div class="footer-col">
+        <div class="footer-col-title">Платформа</div>
+        <a class="footer-link" href="index.html">Все аукционы</a>
+        <a class="footer-link" href="my-bids.html">Мои ставки</a>
+        <a class="footer-link" href="profile.html">Профиль</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Помощь</div>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">О сервисе</div>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <div class="footer-bottom-inner">
+      <span class="footer-copy">© 2026 Лотус. Все права защищены.</span>
+      <span class="footer-status">
+        <span class="footer-status-dot"></span>
+        Все системы работают штатно
+      </span>
+    </div>
+  </div>
+</footer>
+
+  <script src="/static/js/common.js"></script>
   <script src="/static/js/user.js"></script>
 </body>
 </html>
