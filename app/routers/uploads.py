@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 
@@ -7,31 +8,50 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import ALLOWED_IMAGE_TYPES, MAX_UPLOAD_SIZE, UPLOAD_DIR
 from app.database import get_db
 from app.models import User
+from app.utils.images import validate_and_normalise_image
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["uploads"])
 
 
-@router.post("/upload-image")
-@limiter.limit("20/minute")
-async def upload_image(request: Request, file: UploadFile = File(...)):
+async def _read_under_limit(file: UploadFile, max_bytes: int) -> bytes:
+    """Stream-read the upload into memory, bailing with 413 the
+    moment the running total exceeds ``max_bytes``. Avoids slurping a
+    multi-GB attacker-supplied file just to reject it."""
+    buf = bytearray()
+    while chunk := await file.read(1024 * 1024):
+        buf.extend(chunk)
+        if len(buf) > max_bytes:
+            raise HTTPException(status_code=413, detail="Image too large")
+    return bytes(buf)
+
+
+async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
+    """Validate the upload's bytes against the allowed image formats
+    and return the sanitised payload + the file extension to use."""
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported image type")
 
-    ext = ALLOWED_IMAGE_TYPES[file.content_type]
+    raw = await _read_under_limit(file, MAX_UPLOAD_SIZE)
+    sanitised, content_type, ext = await asyncio.to_thread(
+        validate_and_normalise_image, raw
+    )
+    if content_type != file.content_type:
+        # Magic bytes don't match the Content-Type the client claimed —
+        # almost always means a payload disguised as an image.
+        raise HTTPException(status_code=400, detail="Image content type mismatch")
+    return sanitised, ext
+
+
+@router.post("/upload-image")
+@limiter.limit("20/minute")
+async def upload_image(request: Request, file: UploadFile = File(...)):
+    sanitised, ext = await _accept_image(file)
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-
-    size = 0
     with open(dst_path, "wb") as out:
-        while chunk := file.file.read(1024 * 1024):
-            size += len(chunk)
-            if size > MAX_UPLOAD_SIZE:
-                os.remove(dst_path)
-                raise HTTPException(status_code=413, detail="Image too large")
-            out.write(chunk)
-
+        out.write(sanitised)
     return {"image_url": f"/static/uploads/{filename}"}
 
 
@@ -43,12 +63,7 @@ async def upload_avatar(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Unsupported image type")
-
-    ext = ALLOWED_IMAGE_TYPES[file.content_type]
-    filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    dst_path = os.path.join(UPLOAD_DIR, filename)
+    sanitised, ext = await _accept_image(file)
 
     if current_user.avatar_url:
         old_filename = current_user.avatar_url.split("/")[-1]
@@ -59,19 +74,14 @@ async def upload_avatar(
             except Exception:
                 pass
 
-    size = 0
+    filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+    dst_path = os.path.join(UPLOAD_DIR, filename)
     with open(dst_path, "wb") as out:
-        while chunk := file.file.read(1024 * 1024):
-            size += len(chunk)
-            if size > MAX_UPLOAD_SIZE:
-                os.remove(dst_path)
-                raise HTTPException(status_code=413, detail="Image too large")
-            out.write(chunk)
+        out.write(sanitised)
 
     avatar_url = f"/static/uploads/{filename}"
     current_user.avatar_url = avatar_url
     await db.commit()
-
     return {"avatar_url": avatar_url}
 
 
