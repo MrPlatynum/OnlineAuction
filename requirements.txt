@@ -25,3 +25,7 @@ slowapi==0.1.9
 
 # Image validation / sanitisation for uploads
 Pillow==11.0.0
+
+# Async file I/O (uploads write through aiofiles so the event loop
+# isn't blocked on disk while a multi-MB image lands).
+aiofiles==25.1.0

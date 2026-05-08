@@ -1157,18 +1157,18 @@ function buildPageList(current, total) {
             };
 
             ws.onclose = () => {
-                console.log(`WebSocket closed for auction ${auctionId}`);
                 delete websockets[auctionId];
-                
+
                 if (ws.pingInterval) {
                     clearInterval(ws.pingInterval);
                 }
-                
-                // Экспоненциальная задержка: 1s, 2s, 4s, 8s, 16s, максимум 30s
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
+
+                // Экспоненциальная задержка с half-jitter: при разовом
+                // падении сервера сотня вкладок не штормит обратно
+                // одной секундой — равномерно размазывается по [base/2, base].
+                const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
+                const delay = base / 2 + Math.random() * (base / 2);
                 reconnectAttempts[auctionId]++;
-                
-                console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts[auctionId]})`);
                 setTimeout(() => {
                     const card = document.querySelector(`[data-auction-id="${auctionId}"]`);
                     if (card) { // Переподключаемся только если карточка еще на странице

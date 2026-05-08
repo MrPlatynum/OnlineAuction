@@ -257,7 +257,11 @@
         } catch {}
       };
       wsNotif.onclose = () => {
-        setTimeout(() => { if (currentUserId) connectNotifWS(currentUserId); }, reconnectDelay);
+        // Half-jitter on the exponential backoff: if the server drops
+        // every connection at once (deploy, restart) clients reconnect
+        // spread across [delay/2, delay] instead of all on the same tick.
+        const jittered = reconnectDelay / 2 + Math.random() * (reconnectDelay / 2);
+        setTimeout(() => { if (currentUserId) connectNotifWS(currentUserId); }, jittered);
         reconnectDelay = Math.min(reconnectDelay * 2, 30000);
       };
     }
