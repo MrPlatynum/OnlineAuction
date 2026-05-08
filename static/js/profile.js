@@ -6,18 +6,11 @@
   })();
   
 
-const API = 'http://localhost:8000';
 const token = localStorage.getItem('token');
 const $ = id => document.getElementById(id);
 
 function logout() { localStorage.removeItem('token'); location.href = 'index.html'; }
-if (!token) { alert('Войдите в систему'); location.href = 'index.html'; }
-
-function esc(str) {
-  return String(str || '').replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-function fmtMoney(n) { return '$' + Number(n || 0).toFixed(2); }
+if (!token) { showToast('Требуется вход', 'Войдите, чтобы открыть профиль', 'warn'); setTimeout(() => location.href = 'index.html', 1200); }
 
 /* ---- Progress ---- */
 function setProg(labelId, barId, cur, max) {
@@ -492,7 +485,7 @@ function renderList(tab) {
       ? `Текущая: ${fmtMoney(cur)} · Старт: ${fmtMoney(i.starting_price)}`
       : `Ваша: ${fmtMoney(my)} · Текущая: ${fmtMoney(cur)}`;
     const imgUrl = i.image_url
-      ? `<img src="${esc(i.image_url.startsWith('http') ? i.image_url : 'http://localhost:8000' + i.image_url)}" onerror="this.style.display='none'">`
+      ? `<img src="${esc(i.image_url.startsWith('http') ? i.image_url : API + i.image_url)}" onerror="this.style.display='none'">`
       : '🖼️';
     return `
       <div class="part-item">
@@ -689,7 +682,7 @@ async function confirmCrop() {
       removeAvatarImg();
     } else {
       const data = await r.json();
-      const src = data.avatar_url.startsWith('http') ? data.avatar_url : `http://localhost:8000${data.avatar_url}`;
+      const src = data.avatar_url.startsWith('http') ? data.avatar_url : `${API}${data.avatar_url}`;
       // Обновляем src на финальный
       const img = $('avatar').querySelector('img');
       if (img) img.src = src;
@@ -951,7 +944,7 @@ async function load() {
   if (settingsAv) settingsAv.textContent = (user.username[0] || '?').toUpperCase();
 
   if (user.avatar_url) {
-    const src = user.avatar_url.startsWith('http') ? user.avatar_url : `http://localhost:8000${user.avatar_url}`;
+    const src = user.avatar_url.startsWith('http') ? user.avatar_url : `${API}${user.avatar_url}`;
     const img = document.createElement('img');
     img.src = src; img.alt = user.username;
     $('avatar').prepend(img);
@@ -978,7 +971,7 @@ async function load() {
   if ($('navBalancePill'))  $('navBalancePill').textContent  = Number(user.balance || 0).toFixed(2);
   if (navAv) {
     if (user.avatar_url) {
-      const src = user.avatar_url.startsWith('http') ? user.avatar_url : `http://localhost:8000${user.avatar_url}`;
+      const src = user.avatar_url.startsWith('http') ? user.avatar_url : `${API}${user.avatar_url}`;
       const img = document.createElement('img');
       img.src = src;
       img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;';
@@ -1027,7 +1020,13 @@ async function load() {
   } catch {}
 }
 
-load().catch(console.error).finally(() => {
+load().catch(err => {
+  console.error('[profile.html] load failed:', err);
+  const target = document.querySelector('.profile-right') || document.querySelector('.page');
+  if (window.renderLoadError) {
+    window.renderLoadError(target, 'Не удалось загрузить профиль', () => location.reload());
+  }
+}).finally(() => {
   initPanelFromHash();
   // Ждём пока canvas получит реальные размеры, затем рисуем
   const canvas = document.getElementById('chart');
@@ -1108,154 +1107,3 @@ async function doDeposit() {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDeposit(); });
 
-/* ================================================================
-   NOTIFICATION BELL
-   ================================================================ */
-(function() {
-  const API_URL = 'http://localhost:8000';
-  function getToken() { return localStorage.getItem('token'); }
-
-  const btn        = document.getElementById('notifBtn');
-  const badge      = document.getElementById('notifBadge');
-  const dropdown   = document.getElementById('notifDropdown');
-  const list       = document.getElementById('notifList');
-  const markAllBtn = document.getElementById('notifMarkAll');
-
-  if (!btn || !dropdown) return;
-
-  let unreadCount = 0, wsNotif = null, currentUserId = null, isOpen = false;
-
-  const ICONS = {
-    bid_outbid:     { emoji: '⚡', cls: 'bid_outbid' },
-    bid_placed:     { emoji: '💰', cls: 'bid_placed' },
-    auction_won:    { emoji: '🏆', cls: 'auction_won' },
-    auction_lost:   { emoji: '😔', cls: 'auction_lost' },
-    auction_sold:   { emoji: '✅', cls: 'auction_sold' },
-    new_lot:        { emoji: '🔖', cls: 'bid_placed' },
-    auction_ending: { emoji: '⏰', cls: 'auction_ending' },
-  };
-
-  function fmtAge(iso) {
-    const utcIso = iso && !iso.endsWith('Z') && !iso.includes('+') ? iso + 'Z' : iso;
-    const diff = Math.floor((Date.now() - new Date(utcIso)) / 1000);
-    if (diff < 60)    return 'только что';
-    if (diff < 3600)  return `${Math.floor(diff / 60)} мин назад`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
-    return new Date(utcIso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-  }
-
-  function esc2(str) {
-    return String(str || '').replace(/[&<>"']/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function setCount(n) {
-    unreadCount = Math.max(0, n);
-    if (unreadCount > 0) {
-      badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-      badge.style.display = 'flex';
-      btn.classList.add('has-unread');
-    } else {
-      badge.style.display = 'none';
-      btn.classList.remove('has-unread');
-    }
-    // Синхронизируем бейдж в сайдбаре
-    const sbBadge = document.getElementById('sbNotifBadge');
-    if (sbBadge) {
-      sbBadge.textContent = unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : '';
-      sbBadge.style.display = unreadCount > 0 ? 'flex' : 'none';
-    }
-  }
-
-  function renderNotifList(items) {
-    if (!items.length) {
-      list.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Уведомлений пока нет</div>`;
-      return;
-    }
-    list.innerHTML = items.map(n => {
-      const ico = ICONS[n.type] || { emoji: '🔔', cls: '' };
-      return `
-        <div class="notif-item ${n.is_read ? '' : 'unread'}" data-id="${n.id}" data-auction="${n.auction_id || ''}">
-          <div class="notif-icon ${ico.cls}">${ico.emoji}</div>
-          <div class="notif-body">
-            <div class="notif-title">${esc2(n.title)}</div>
-            <div class="notif-msg">${esc2(n.message)}</div>
-            <div class="notif-time">${fmtAge(n.created_at)}</div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  async function apiFetch(url, opts = {}) {
-    const tk = getToken();
-    const headers = { ...(opts.headers || {}) };
-    if (tk) headers['Authorization'] = 'Bearer ' + tk;
-    return fetch(url, { ...opts, headers });
-  }
-
-  async function fetchCount() {
-    if (!getToken()) return;
-    try {
-      const r = await apiFetch(`${API_URL}/api/notifications/unread-count`);
-      if (r.ok) { const d = await r.json(); setCount(d.count ?? 0); }
-    } catch {}
-  }
-
-  async function fetchNotifications() {
-    list.innerHTML = `<div class="notif-empty">Загрузка…</div>`;
-    try {
-      const r = await apiFetch(`${API_URL}/api/notifications?limit=30`);
-      if (r.ok) renderNotifList(await r.json());
-    } catch { list.innerHTML = `<div class="notif-empty">Нет связи с сервером</div>`; }
-  }
-
-  async function markAllRead() {
-    try {
-      await apiFetch(`${API_URL}/api/notifications/mark-all-read`, { method: 'POST' });
-      setCount(0); await fetchNotifications();
-    } catch {}
-  }
-
-  function openDropdown()  { isOpen = true;  dropdown.classList.add('open');    fetchNotifications(); }
-  function closeDropdown() { isOpen = false; dropdown.classList.remove('open'); }
-
-  btn.addEventListener('click', e => { e.stopPropagation(); isOpen ? closeDropdown() : openDropdown(); });
-  document.addEventListener('click', e => {
-    if (isOpen && !dropdown.contains(e.target) && e.target !== btn) closeDropdown();
-  });
-  markAllBtn.addEventListener('click', e => { e.stopPropagation(); markAllRead(); });
-
-  list.addEventListener('click', async e => {
-    const item = e.target.closest('.notif-item');
-    if (!item) return;
-    const id = item.dataset.id, auctionId = item.dataset.auction;
-    if (id && item.classList.contains('unread')) {
-      item.classList.remove('unread'); setCount(unreadCount - 1);
-      try { await apiFetch(`${API_URL}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
-    }
-    if (auctionId) { closeDropdown(); window.location.href = `auction.html?id=${auctionId}`; }
-  });
-
-  function connectNotifWS(userId) {
-    const tk = getToken();
-    if (!tk) return;
-    wsNotif = new WebSocket(`${API_URL.replace(/^http/i, 'ws')}/ws/notifications/${userId}?token=${encodeURIComponent(tk)}`);
-    wsNotif.onmessage = e => {
-      try { const d = JSON.parse(e.data); if (d.type === 'notification') { setCount(unreadCount + 1); if (isOpen) fetchNotifications(); } } catch {}
-    };
-    wsNotif.onclose = () => setTimeout(() => { if (currentUserId) connectNotifWS(currentUserId); }, 3000);
-  }
-
-  async function initBell() {
-    if (!getToken()) return;
-    btn.style.display = 'flex';
-    await fetchCount();
-    try {
-      const r = await apiFetch(`${API_URL}/api/me`);
-      if (r.ok) { const me = await r.json(); currentUserId = me.id; if (currentUserId) connectNotifWS(currentUserId); }
-    } catch {}
-    setInterval(fetchCount, 60000);
-  }
-
-  setTimeout(initBell, 600);
-})();

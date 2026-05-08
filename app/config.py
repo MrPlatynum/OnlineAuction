@@ -48,6 +48,11 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "Лотус <noreply@localhost>")
 
+# Public-facing base URL приложения — используется в email-уведомлениях
+# для построения ссылок (auction.html, profile.html и т. п.).
+# В проде задаётся через env: PUBLIC_BASE_URL=https://lotus.example.com
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+
 CORS_ORIGINS = [
     origin.strip()
     for origin in os.getenv(

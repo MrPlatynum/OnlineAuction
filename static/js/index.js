@@ -167,7 +167,7 @@ async function loadCategories() {
         const btn = document.createElement('button');
         btn.className = 'fs-cat-item';
         btn.dataset.slug = cat.slug;
-        btn.innerHTML = `<span>${cat.icon}</span> ${cat.name}`;
+        btn.textContent = cat.name;
         btn.onclick = () => selectCategory(btn, cat.slug, null, cat.name, null);
         listEl.appendChild(btn);
 
@@ -181,7 +181,7 @@ async function loadCategories() {
             sb.className = 'fs-sub-item';
             sb.dataset.slug = ch.slug;
             sb.dataset.parent = cat.slug;
-            sb.innerHTML = `<span>${ch.icon}</span> ${ch.name}`;
+            sb.textContent = ch.name;
             sb.onclick = () => selectCategory(sb, ch.slug, cat.slug, ch.name, cat.name);
             subs.appendChild(sb);
           });
@@ -509,8 +509,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-        const API_URL = window.location.origin;
-        const WS_URL = window.location.origin.replace(/^http/i, 'ws');
+        // API / WS_BASE приходят из common.js (window.API, window.WS_BASE)
+        const API_URL = window.API;
+        const WS_URL  = window.WS_BASE;
         let token = localStorage.getItem('token');
         let currentUser = null;
         let websockets = {};
@@ -542,6 +543,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentFilters.search = p.get('search');
                 const inp = document.getElementById('searchInput');
                 if (inp) inp.value = p.get('search');
+            }
+            const st = p.get('status');
+            if (st === 'active' || st === 'completed' || st === 'all') {
+                currentFilters.status = st;
+                // переключить активную кнопку статуса
+                document.querySelectorAll('[data-status]').forEach(b => {
+                    b.classList.toggle('active', b.dataset.status === st);
+                });
+                // обновить заголовок страницы под выбранный статус
+                const titleEl = document.getElementById('pageTitle');
+                if (titleEl) {
+                    titleEl.textContent = st === 'completed' ? 'Завершённые аукционы'
+                                        : st === 'all'       ? 'Все аукционы'
+                                                             : 'Активные аукционы';
+                }
+            }
+            // Категория — slug может прийти из хлебных крошек страницы лота.
+            // Названия категорий подгрузятся в loadCategories(), но фильтр работает по slug.
+            if (p.get('category')) {
+                currentFilters.category = p.get('category');
             }
         })();
 
@@ -1191,9 +1212,9 @@ function buildPageList(current, total) {
                     }
                 } else {
                     const err = await r.json().catch(() => ({}));
-                    alert(err.detail || 'Не удалось удалить лот');
+                    showToast('Не удалось удалить', err.detail || 'Попробуйте позже', 'bad');
                 }
-            } catch { alert('Ошибка сети'); }
+            } catch { showToast('Ошибка сети', 'Проверьте соединение', 'bad'); }
         }
 
         async function loadBids(auctionId) {
@@ -1236,7 +1257,7 @@ function buildPageList(current, total) {
             const amount = parseFloat(input.value);
 
             if (!amount || amount <= 0) {
-                alert('Введите корректную сумму');
+                showToast('Неверная сумма', 'Введите корректное число', 'warn');
                 return;
             }
 
@@ -1255,10 +1276,10 @@ function buildPageList(current, total) {
                     await loadCurrentUser();
                 } else {
                     const error = await response.json();
-                    alert(error.detail || 'Ошибка при размещении ставки');
+                    showToast('Ставка не принята', error.detail || 'Попробуйте ещё раз', 'bad');
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             }
         }
 
@@ -1380,7 +1401,7 @@ function buildPageList(current, total) {
                 currentFilters.page = 1;
                 loadAuctions();
             } else if (section === 'my-bids') {
-                alert('Раздел "Мои ставки" в разработке');
+                showToast('В разработке', 'Раздел «Мои ставки» появится скоро', 'warn');
             }
         }
 
@@ -1413,7 +1434,7 @@ location.reload();
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             }
         });
 
@@ -1446,7 +1467,7 @@ location.reload();
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             }
         });
 
@@ -1513,7 +1534,7 @@ location.reload();
                 } catch (imgErr) {
                     const msg = imgErr?.message || 'Ошибка загрузки изображения.';
                     if (errorDiv) { errorDiv.textContent = msg; errorDiv.style.display = 'block'; }
-                    else alert(msg);
+                    else showToast('Ошибка', msg, 'bad');
                     return;
                 }
 
@@ -1539,7 +1560,7 @@ location.reload();
                     }
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             } finally {
                 if (submitBtn) {
                     submitBtn.disabled = false;
@@ -1734,189 +1755,3 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.setAttribute('aria-expanded', adv.classList.contains('open') ? 'true' : 'false');
   }, true);
 
-/* ================================================================
-   NOTIFICATION BELL
-   ================================================================ */
-(function() {
-  const API_URL = window.location.origin;
-
-  function getToken() { return localStorage.getItem('token'); }
-
-  const btn      = document.getElementById('notifBtn');
-  const badge    = document.getElementById('notifBadge');
-  const dropdown = document.getElementById('notifDropdown');
-  const list     = document.getElementById('notifList');
-  const markAllBtn = document.getElementById('notifMarkAll');
-
-  if (!btn || !dropdown) return;
-
-  let unreadCount = 0;
-  let wsNotif = null;
-  let currentUserId = null;
-  let isOpen = false;
-
-  const ICONS = {
-    bid_outbid:     { emoji: '⚡', cls: 'bid_outbid' },
-    bid_placed:     { emoji: '💰', cls: 'bid_placed' },
-    auction_won:    { emoji: '🏆', cls: 'auction_won' },
-    auction_lost:   { emoji: '😔', cls: 'auction_lost' },
-    auction_sold:   { emoji: '✅', cls: 'auction_sold' },
-    new_lot:       { emoji: '🔖', cls: 'bid_placed' },
-    auction_ending: { emoji: '⏰', cls: 'auction_ending' },
-  };
-
-  function fmtAge(iso) {
-    // Бэкенд отдаёт UTC без 'Z' — добавляем чтобы браузер правильно парсил
-    const utcIso = iso && !iso.endsWith('Z') && !iso.includes('+') ? iso + 'Z' : iso;
-    const diff = Math.floor((Date.now() - new Date(utcIso)) / 1000);
-    if (diff < 60)    return 'только что';
-    if (diff < 3600)  return `${Math.floor(diff / 60)} мин назад`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
-    return new Date(utcIso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-  }
-
-  function esc(str) {
-    return String(str || '').replace(/[&<>"']/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function setCount(n) {
-    unreadCount = Math.max(0, n);
-    if (unreadCount > 0) {
-      badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-      badge.style.display = 'flex';
-      btn.classList.add('has-unread');
-    } else {
-      badge.style.display = 'none';
-      btn.classList.remove('has-unread');
-    }
-  }
-
-  function renderList(items) {
-    if (!items.length) {
-      list.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Уведомлений пока нет</div>`;
-      return;
-    }
-    list.innerHTML = items.map(n => {
-      const ico = ICONS[n.type] || { emoji: '🔔', cls: '' };
-      return `
-        <div class="notif-item ${n.is_read ? '' : 'unread'}" data-id="${n.id}" data-auction="${n.auction_id || ''}">
-          <div class="notif-icon ${ico.cls}">${ico.emoji}</div>
-          <div class="notif-body">
-            <div class="notif-title">${esc(n.title)}</div>
-            <div class="notif-msg">${esc(n.message)}</div>
-            <div class="notif-time">${fmtAge(n.created_at)}</div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  async function apiFetch(url, opts = {}) {
-    const tk = getToken();
-    const headers = { ...(opts.headers || {}) };
-    if (tk) headers['Authorization'] = 'Bearer ' + tk;
-    return fetch(url, { ...opts, headers });
-  }
-
-  async function fetchCount() {
-    if (!getToken()) return;
-    try {
-      const r = await apiFetch(`${API_URL}/api/notifications/unread-count`);
-      if (r.ok) { const d = await r.json(); setCount(d.count ?? 0); }
-    } catch {}
-  }
-
-  async function fetchNotifications() {
-    if (!getToken()) {
-      list.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Войдите для уведомлений</div>`;
-      return;
-    }
-    list.innerHTML = `<div class="notif-empty">Загрузка…</div>`;
-    try {
-      const r = await apiFetch(`${API_URL}/api/notifications?limit=30`);
-      if (r.ok) renderList(await r.json());
-      else list.innerHTML = `<div class="notif-empty">Ошибка загрузки</div>`;
-    } catch {
-      list.innerHTML = `<div class="notif-empty">Нет связи с сервером</div>`;
-    }
-  }
-
-  async function markOneRead(id) {
-    try { await apiFetch(`${API_URL}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
-  }
-
-  async function markAllRead() {
-    try {
-      await apiFetch(`${API_URL}/api/notifications/mark-all-read`, { method: 'POST' });
-      setCount(0);
-      await fetchNotifications();
-    } catch {}
-  }
-
-  /* Open / close */
-  function openDropdown() {
-    isOpen = true;
-    dropdown.classList.add('open');
-    fetchNotifications();
-  }
-  function closeDropdown() {
-    isOpen = false;
-    dropdown.classList.remove('open');
-  }
-
-  btn.addEventListener('click', e => { e.stopPropagation(); isOpen ? closeDropdown() : openDropdown(); });
-  document.addEventListener('click', e => {
-    if (isOpen && !dropdown.contains(e.target) && e.target !== btn) closeDropdown();
-  });
-  markAllBtn.addEventListener('click', e => { e.stopPropagation(); markAllRead(); });
-
-  list.addEventListener('click', async e => {
-    const item = e.target.closest('.notif-item');
-    if (!item) return;
-    const id = item.dataset.id;
-    const auctionId = item.dataset.auction;
-    if (id && item.classList.contains('unread')) {
-      item.classList.remove('unread');
-      setCount(unreadCount - 1);
-      await markOneRead(id);
-    }
-    if (auctionId) { closeDropdown(); window.location.href = `auction.html?id=${auctionId}`; }
-  });
-
-  /* WebSocket — realtime */
-  function connectNotifWS(userId) {
-    if (wsNotif) { try { wsNotif.close(); } catch {} }
-    const tk = getToken();
-    if (!tk) return;
-    wsNotif = new WebSocket(`${API_URL.replace(/^http/i, 'ws')}/ws/notifications/${userId}?token=${encodeURIComponent(tk)}`);
-    wsNotif.onmessage = e => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'notification') {
-          setCount(unreadCount + 1);
-          if (isOpen) fetchNotifications();
-        }
-      } catch {}
-    };
-    wsNotif.onclose = () => setTimeout(() => { if (currentUserId) connectNotifWS(currentUserId); }, 3000);
-  }
-
-  async function initNotifBell() {
-    if (!getToken()) { btn.style.display = 'none'; return; }
-    btn.style.display = 'flex';
-    await fetchCount();
-    try {
-      const r = await apiFetch(`${API_URL}/api/me`);
-      if (r.ok) {
-        const me = await r.json();
-        currentUserId = me.id;
-        if (currentUserId) connectNotifWS(currentUserId);
-      }
-    } catch {}
-    setInterval(fetchCount, 60000);
-  }
-
-  setTimeout(initNotifBell, 800);
-  window.addEventListener('storage', e => { if (e.key === 'token') setTimeout(initNotifBell, 300); });
-  window.initNotifBell = initNotifBell;
-})();

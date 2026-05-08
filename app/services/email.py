@@ -4,7 +4,14 @@ from email.mime.text import MIMEText
 
 import aiosmtplib
 
-from app.config import EMAIL_FROM, SMTP_PASSWORD, SMTP_PORT, SMTP_SERVER, SMTP_USERNAME
+from app.config import (
+    EMAIL_FROM,
+    PUBLIC_BASE_URL,
+    SMTP_PASSWORD,
+    SMTP_PORT,
+    SMTP_SERVER,
+    SMTP_USERNAME,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +57,7 @@ def build_notification_email_html(
     auction_link = ""
     if auction_id:
         auction_link = (
-            f'<a href="http://localhost:8000/auction.html?id={auction_id}" '
+            f'<a href="{PUBLIC_BASE_URL}/auction.html?id={auction_id}" '
             f'class="button">Перейти к аукциону →</a>'
         )
 
@@ -270,7 +277,7 @@ def build_notification_email_html(
                         Вы получили это письмо, потому что участвуете в аукционах на <strong>Лотус</strong>.
                     </p>
                     <p class="footer-text">
-                        <a href="http://localhost:8000/profile.html" class="footer-link">Изменить настройки уведомлений</a>
+                        <a href="{PUBLIC_BASE_URL}/profile.html" class="footer-link">Изменить настройки уведомлений</a>
                     </p>
                     <p class="footer-text" style="font-size: 11px; color: #6b7280; margin-top: 20px;">
                         © 2025 Лотус. Все права защищены.<br>

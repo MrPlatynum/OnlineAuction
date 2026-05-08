@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <title>Лотус — Онлайн-аукцион</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css">
+    <link rel="stylesheet" href="/static/vendor/cropper.min.css">
+  <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/index.css">
 </head>
 <body>
@@ -18,7 +20,7 @@
 <header class="navbar">
   <div class="nav-inner">
     <a class="nav-logo" href="index.html">
-      <div class="nav-logo-icon">🪷</div>
+      <div class="nav-logo-icon"></div>
       <span class="nav-logo-text">Лотус</span>
     </a>
 
@@ -82,7 +84,7 @@
 <!-- Mobile nav -->
 <div class="mobile-nav" id="mobileNav" onclick="closeMobileNav(event)">
   <div class="mobile-nav-inner">
-    <div style="font-size:15px;font-weight:700;padding:4px 12px 12px;border-bottom:1px solid var(--border);margin-bottom:8px;">Лотус</div>
+    <div class="mobile-nav-title">Лотус</div>
     <button class="mobile-nav-link active" onclick="showSection(event,'auctions');closeMobileNavFull()">🏠 Аукционы</button>
     <button class="mobile-nav-link" href="my-bids.html" onclick="closeMobileNavFull()">🎯 Мои ставки</button>
     <button class="mobile-nav-link" onclick="window.location.href='profile.html'">👤 Профиль</button>
@@ -204,7 +206,7 @@
       <div class="fs-label">Категория</div>
       <div class="fs-cat-list" id="fsCatList">
         <button class="fs-cat-item active" data-slug="" onclick="selectCategory(this,'',null,'','')">
-          <span>🏷️</span> Все категории
+          Все категории
         </button>
       </div>
     </div>
@@ -216,14 +218,12 @@
         <label class="fs-check">
           <input type="checkbox" id="filterBid">
           <span class="fs-check-box"><svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg></span>
-          <span class="fs-check-emoji">🔨</span>
           <span class="fs-check-text">Торги</span>
           <span class="fs-check-tag">BID</span>
         </label>
         <label class="fs-check">
           <input type="checkbox" id="filterBin">
           <span class="fs-check-box"><svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg></span>
-          <span class="fs-check-emoji">⚡</span>
           <span class="fs-check-text">Купить сразу</span>
           <span class="fs-check-tag">BIN</span>
         </label>
@@ -270,17 +270,14 @@
         </button>
         <ul class="fs-dd-menu" role="listbox">
           <li class="fs-dd-opt is-selected" data-value="time" role="option" aria-selected="true">
-            <span class="fs-dd-opt-icon">⏱</span>
             <span class="fs-dd-opt-label">По времени</span>
             <svg class="fs-dd-tick" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg>
           </li>
           <li class="fs-dd-opt" data-value="price_asc" role="option" aria-selected="false">
-            <span class="fs-dd-opt-icon">↓</span>
             <span class="fs-dd-opt-label">Дешевле</span>
             <svg class="fs-dd-tick" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg>
           </li>
           <li class="fs-dd-opt" data-value="price_desc" role="option" aria-selected="false">
-            <span class="fs-dd-opt-icon">↑</span>
             <span class="fs-dd-opt-label">Дороже</span>
             <svg class="fs-dd-tick" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg>
           </li>
@@ -356,7 +353,7 @@
   <div class="footer-inner">
     <div class="footer-brand">
       <div class="footer-logo">
-        <div class="nav-logo-icon" style="width:28px;height:28px;">🪷</div>
+        <div class="nav-logo-icon" style="width:28px;height:28px;"></div>
         <span class="footer-logo-text">Лотус</span>
       </div>
       <p class="footer-tagline">
@@ -380,18 +377,18 @@
 
       <div class="footer-col">
         <div class="footer-col-title">Помощь</div>
-        <a class="footer-link" href="#">Как делать ставки</a>
-        <a class="footer-link" href="#">Безопасность</a>
-        <a class="footer-link" href="#">FAQ</a>
-        <a class="footer-link" href="#">Поддержка</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
       </div>
 
       <div class="footer-col">
         <div class="footer-col-title">О сервисе</div>
-        <a class="footer-link" href="#">О нас</a>
-        <a class="footer-link" href="#">Контакты</a>
-        <a class="footer-link" href="#">Условия</a>
-        <a class="footer-link" href="#">Политика</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
       </div>
     </div>
   </div>
@@ -563,11 +560,12 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<script src="/static/vendor/cropper.min.js"></script>
 
 <!-- ================================================================
      COMPAT SHIMS — bridge new HTML to existing JS
      ================================================================ -->
+  <script src="/static/js/common.js"></script>
   <script src="/static/js/index.js"></script>
 
   <!-- Hero stat: live count of active auctions -->
@@ -659,9 +657,14 @@
         if (!items || !items.length) { section.hidden = true; return; }
         section.hidden = false;
 
+        // Используем time_remaining от сервера (он считает в UTC корректно).
+        // end_time в API — naive-UTC без 'Z', поэтому браузер парсит его как
+        // локальное время и таймер «уезжает» на UTC-offset.
+        const baseTs = Date.now();
         scroll.innerHTML = items.map(a => {
-          const end = new Date(a.end_time).getTime();
-          const sec = Math.max(0, Math.floor((end - Date.now()) / 1000));
+          const remaining = Number.isFinite(a.time_remaining) ? a.time_remaining : 0;
+          const end = baseTs + remaining * 1000;
+          const sec = Math.max(0, remaining);
           const cls = urgencyClass(sec);
 
           const cover = (a.image_urls && a.image_urls[0]) || a.image_url;
