@@ -1,0 +1,29 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    "alembic/versions",
+    "static/vendor",
+]
+
+[tool.ruff.lint]
+# Conservative starter set. ``E``/``F`` are pyflakes + pycodestyle
+# (real bugs and style); ``I`` orders imports; ``B`` flags common
+# mistakes (mutable default args, unused loop control); ``UP`` nudges
+# towards modern Python idioms.
+select = ["E", "F", "I", "B", "UP"]
+ignore = [
+    "E501",  # Line length is set above; soft-wrap leaves some long
+             # f-strings in HTML templates that are clearer left as-is.
+    "E712",  # ``Column == True`` is the SQLAlchemy idiom for boolean
+             # filter clauses — ``is`` doesn't work, the comparison
+             # has to overload through ColumnOperators.
+    "B008",  # FastAPI's whole DI story is "default = Depends(...)" —
+             # rejecting it would be ruff-against-the-framework.
+    "UP007", # Optional[X] reads better than X | None in our schemas.
+    "UP045", # Same — UP007/UP045 push PEP-604 unions everywhere.
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

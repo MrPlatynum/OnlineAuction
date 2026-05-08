@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def utcnow() -> datetime:
@@ -8,4 +8,4 @@ def utcnow() -> datetime:
     naive value matches the existing ``DateTime`` column behaviour so
     the database schema and stored values stay identical.
     """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)

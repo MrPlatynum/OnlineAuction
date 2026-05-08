@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 
 from pydantic import BaseModel, Field
 
@@ -20,7 +19,7 @@ class BidResponse(BaseModel):
 
 
 class PaginatedBidsResponse(BaseModel):
-    items: List[BidResponse]
+    items: list[BidResponse]
     total: int
     page: int
     page_size: int

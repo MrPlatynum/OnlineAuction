@@ -2,7 +2,6 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-
 REVIEW_COMMENT_MAX = 1000  # тоже используется на фронте — держим в синхроне
 
 

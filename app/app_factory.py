@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from app.routers import (
     balance,
     bids,
     categories,
+    health,
     notifications,
     reviews,
     static_pages,
@@ -30,16 +32,42 @@ from app.utils.rate_limit import limiter
 logger = logging.getLogger(__name__)
 
 
+class _JsonFormatter(logging.Formatter):
+    """Single-line JSON per record. Plays nice with Loki / CloudWatch /
+    any log shipper that wants to index by level/logger/msg."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
 def setup_logging():
     """Configure root logger once at app start. Idempotent — uvicorn's
-    own loggers are untouched (they own the access/error namespaces)."""
+    own loggers are untouched (they own the access/error namespaces).
+
+    Set ``LOG_FORMAT=json`` to switch to one-line JSON records suitable
+    for log shippers; default stays human-readable for local dev.
+    """
     if logging.getLogger().handlers:
         return
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    handler = logging.StreamHandler()
+    if os.getenv("LOG_FORMAT", "").lower() == "json":
+        handler.setFormatter(_JsonFormatter())
+    else:
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        ))
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
 
 
 @asynccontextmanager
@@ -79,6 +107,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    fastapi_app.include_router(health.router)
     fastapi_app.include_router(auth.router)
     fastapi_app.include_router(users.router)
     fastapi_app.include_router(balance.router)

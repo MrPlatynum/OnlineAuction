@@ -22,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # the user only wants to run schema upgrades.
 os.environ.setdefault("AUCTION_SECRET_KEY", "alembic-stub-not-used-for-signing")
 
-from app.database import Base  # noqa: E402
 from app import models  # noqa: E402,F401  -- registers all models on Base
+from app.database import Base  # noqa: E402
 
 config = context.config
 
