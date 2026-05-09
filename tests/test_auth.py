@@ -58,3 +58,36 @@ async def test_me_returns_current_user(client, registered_user):
 async def test_me_without_token_rejected(client):
     response = await client.get("/api/me")
     assert response.status_code == 403  # HTTPBearer returns 403 when no token
+
+
+async def test_bcrypt_hash_upgraded_to_argon2_on_login(client):
+    """Existing accounts hashed with bcrypt are still accepted, and the
+    successful login rotates the row to argon2id transparently."""
+    from passlib.context import CryptContext
+
+    from app.database import SessionLocal
+    from app.models import User
+
+    bcrypt_only = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    legacy_hash = bcrypt_only.hash("password123")
+    assert legacy_hash.startswith("$2"), legacy_hash
+
+    async with SessionLocal() as db:
+        db.add(User(
+            username="legacy",
+            email="legacy@example.com",
+            hashed_password=legacy_hash,
+        ))
+        await db.commit()
+
+    r = await client.post("/api/login", json={
+        "username": "legacy", "password": "password123",
+    })
+    assert r.status_code == 200
+
+    async with SessionLocal() as db:
+        from sqlalchemy import select
+        stored = await db.scalar(
+            select(User.hashed_password).where(User.username == "legacy")
+        )
+    assert stored.startswith("$argon2"), stored
