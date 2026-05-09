@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import uuid
+from pathlib import PurePosixPath
 
 import aiofiles
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -82,8 +83,12 @@ async def upload_avatar(
     sanitised, ext = await _accept_image(file)
 
     if current_user.avatar_url:
-        old_filename = current_user.avatar_url.split("/")[-1]
-        _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
+        # PurePosixPath(...).name returns only the leaf component, never
+        # ``..`` — so a tampered avatar_url like "/static/uploads/../../etc/passwd"
+        # can't escape UPLOAD_DIR. Server writes the column today, but cheap insurance.
+        old_filename = PurePosixPath(current_user.avatar_url).name
+        if old_filename and old_filename != "..":
+            _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
@@ -102,8 +107,12 @@ async def delete_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     if current_user.avatar_url:
-        old_filename = current_user.avatar_url.split("/")[-1]
-        _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
+        # PurePosixPath(...).name returns only the leaf component, never
+        # ``..`` — so a tampered avatar_url like "/static/uploads/../../etc/passwd"
+        # can't escape UPLOAD_DIR. Server writes the column today, but cheap insurance.
+        old_filename = PurePosixPath(current_user.avatar_url).name
+        if old_filename and old_filename != "..":
+            _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
         current_user.avatar_url = None
         await db.commit()
     return {"ok": True}

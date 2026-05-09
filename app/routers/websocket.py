@@ -82,6 +82,18 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
 async def notifications_websocket(
     websocket: WebSocket, user_id: int, token: Optional[str] = Query(None)
 ):
+    # Token preferred via Sec-WebSocket-Protocol subprotocol — clients send
+    #   new WebSocket(url, ['bearer', '<jwt>'])
+    # — so the JWT never lands in URLs (proxy/access logs / browser history).
+    # Query-string fallback retained for backward compat; will be removed
+    # once all clients are on the subprotocol scheme.
+    accepted_protocol: Optional[str] = None
+    sub = websocket.headers.get("sec-websocket-protocol", "")
+    parts = [p.strip() for p in sub.split(",") if p.strip()]
+    if len(parts) == 2 and parts[0] == "bearer":
+        token = parts[1]
+        accepted_protocol = "bearer"
+
     if not token:
         logger.warning("WS notifications denied: missing token for user_id %s", user_id)
         await websocket.close(code=1008)
@@ -102,7 +114,14 @@ async def notifications_websocket(
         await websocket.close(code=1008)
         return
 
-    await manager.connect_user(websocket, user_id)
+    # ``connect_user`` calls accept() — propagate the subprotocol echo so the
+    # browser handshake completes (per RFC 6455 §1.9 server must echo one
+    # of the offered subprotocols).
+    if accepted_protocol:
+        await websocket.accept(subprotocol=accepted_protocol)
+        manager.user_connections.setdefault(user_id, []).append(websocket)
+    else:
+        await manager.connect_user(websocket, user_id)
     try:
         while True:
             try:

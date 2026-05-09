@@ -3,16 +3,22 @@
 Run from project root:
     python -m scripts.seed_demo_auctions
 
-Creates a demo user "demo" (password: demo) if missing, then inserts
-25 active auctions spread across categories with varied prices,
-end times, and a mix of BID/BIN types.
+Creates a demo user "demo" with a randomly-generated password (printed
+once at the end of the run) if missing, then inserts 25 active auctions
+spread across categories with varied prices, end times, and a mix of
+BID/BIN types.
 
-Idempotent on the user; auctions are appended every run.
+Idempotent on the user; auctions are appended every run. Refuses to
+run unless ``ENV in {dev, test}`` — the historical hardcoded ``demo``
+password risked planting a trivial account on a misconfigured prod.
 """
 from __future__ import annotations
 
 import asyncio
+import os
 import random
+import secrets
+import sys
 from datetime import timedelta
 from decimal import Decimal
 
@@ -25,7 +31,10 @@ from app.utils.time import utcnow
 
 DEMO_USERNAME = "demo"
 DEMO_EMAIL = "demo@example.com"
-DEMO_PASSWORD = "demo"
+# Random per-run password; printed at the end so the operator can log in.
+# Beats the old hardcoded "demo" — a script ran on the wrong DB no longer
+# leaves a trivially-guessable account behind.
+DEMO_PASSWORD = secrets.token_urlsafe(16)
 
 
 # (title, description, category_slug, type, price, duration_minutes)
@@ -123,4 +132,11 @@ async def seed():
 
 
 if __name__ == "__main__":
+    env = os.getenv("ENV", "").lower()
+    if env not in {"dev", "test", "local"}:
+        sys.exit(
+            "Refusing to run: set ENV=dev (or test/local) to confirm this is "
+            "not a production database. Demo seeding plants a privileged "
+            "account and 25 active auctions.",
+        )
     asyncio.run(seed())

@@ -25,10 +25,20 @@ router = APIRouter(prefix="/api", tags=["auth"])
 @router.post("/register", response_model=dict)
 @limiter.limit("5/minute")
 async def register(request: Request, user: UserCreate, db: AsyncSession = Depends(get_db)):
-    if (await db.execute(select(User).where(User.username == user.username))).scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Username already exists")
-    if (await db.execute(select(User).where(User.email == user.email))).scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already exists")
+    # Single generic message for both collisions — separate "username taken"
+    # vs "email taken" replies let an attacker enumerate registered usernames
+    # and emails by probing /register.
+    username_taken = (
+        await db.execute(select(User.id).where(User.username == user.username))
+    ).scalar_one_or_none()
+    email_taken = (
+        await db.execute(select(User.id).where(User.email == user.email))
+    ).scalar_one_or_none()
+    if username_taken or email_taken:
+        raise HTTPException(
+            status_code=400,
+            detail="Пользователь с таким username или email уже существует",
+        )
 
     db_user = User(
         username=user.username,

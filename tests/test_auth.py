@@ -12,24 +12,24 @@ async def test_register_creates_user_and_returns_token(client):
     assert body["user"]["balance"] == 1000.0
 
 
-async def test_register_duplicate_username_rejected(client, registered_user):
-    response = await client.post("/api/register", json={
+async def test_register_duplicate_username_or_email_indistinguishable(
+    client, registered_user
+):
+    """Reply for "username taken" must look identical to "email taken" so
+    /register can't be used to enumerate registered usernames or emails."""
+    r_username = await client.post("/api/register", json={
         "username": registered_user["user"]["username"],
         "email": "different@example.com",
         "password": "whatever",
     })
-    assert response.status_code == 400
-    assert "Username" in response.json()["detail"]
-
-
-async def test_register_duplicate_email_rejected(client, registered_user):
-    response = await client.post("/api/register", json={
+    r_email = await client.post("/api/register", json={
         "username": "different",
         "email": registered_user["user"]["email"],
         "password": "whatever",
     })
-    assert response.status_code == 400
-    assert "Email" in response.json()["detail"]
+    assert r_username.status_code == 400
+    assert r_email.status_code == 400
+    assert r_username.json()["detail"] == r_email.json()["detail"]
 
 
 async def test_login_with_correct_password(client, registered_user):
