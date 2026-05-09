@@ -7,11 +7,15 @@ plain liveness probes can hit the same path and just look at the HTTP
 code.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["health"])
 
@@ -21,6 +25,10 @@ async def health(response: Response, db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
         return {"status": "ok", "db": "ok"}
-    except Exception as exc:
+    except Exception:
+        # Log the underlying error for ops; don't ship the message back
+        # to the unauthenticated probe (the asyncpg / SQLAlchemy text
+        # often includes the connection DSN, which is internal).
+        logger.exception("/health DB ping failed")
         response.status_code = 503
-        return {"status": "degraded", "db": "fail", "detail": str(exc)}
+        return {"status": "degraded", "db": "fail"}
