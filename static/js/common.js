@@ -245,7 +245,10 @@
       if (wsNotif) { try { wsNotif.close(); } catch {} }
       const tk = getToken();
       if (!tk) return;
-      wsNotif = new WebSocket(`${window.WS_BASE}/ws/notifications/${userId}?token=${encodeURIComponent(tk)}`);
+      // Token rides as a Sec-WebSocket-Protocol subprotocol so it never
+      // lands in URLs (proxy access logs, browser history). Server echoes
+      // back 'bearer' on accept.
+      wsNotif = new WebSocket(`${window.WS_BASE}/ws/notifications/${userId}`, ['bearer', tk]);
       wsNotif.onopen = () => { reconnectDelay = 1500; };
       wsNotif.onmessage = e => {
         try {

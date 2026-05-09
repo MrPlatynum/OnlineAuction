@@ -220,6 +220,30 @@ async def buy_now(
             auction.id, auction.title, manager,
         )
 
+    # Notify everyone who placed a real bid before the BIN-purchase that
+    # the auction ended without them. complete_auction does this on the
+    # timer path; /buy-now used to silently leave them in the dark.
+    losing_bidder_ids = [
+        uid for (uid,) in (
+            await db.execute(
+                select(Bid.user_id)
+                .where(Bid.auction_id == auction_id, Bid.user_id != current_user.id)
+                .distinct()
+            )
+        ).all()
+    ]
+    if losing_bidder_ids:
+        losers = (
+            await db.execute(select(User).where(User.id.in_(losing_bidder_ids)))
+        ).scalars().all()
+        for loser in losers:
+            await notify_user(
+                db, loser, NotificationType.AUCTION_LOST,
+                "Аукцион завершён",
+                f"Лот «{auction.title}» куплен по цене BIN другим участником.",
+                auction.id, auction.title, manager,
+            )
+
     return {"message": "Покупка совершена", "price": float(auction.bin_price)}
 
 
