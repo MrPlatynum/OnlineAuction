@@ -164,6 +164,33 @@ async def test_outbid_user_can_reuse_their_full_balance(client, registered_user,
     assert r3.status_code == 200, r3.text
 
 
+async def test_concurrent_cross_auction_bids_respect_balance(
+    client, registered_user, second_user
+):
+    """Same user fires two simultaneous bids on *different* auctions, each
+    of which alone fits the balance but together over-commit it. The
+    user-row ``SELECT ... FOR UPDATE`` in /bids must serialise them so
+    only one passes the available-balance check."""
+    a1 = await _create_auction(client, registered_user["headers"], title="Lot 1")
+    a2 = await _create_auction(client, registered_user["headers"], title="Lot 2")
+
+    r1, r2 = await asyncio.gather(
+        client.post(
+            "/api/bids",
+            json={"auction_id": a1["id"], "amount": 700.0},
+            headers=second_user["headers"],
+        ),
+        client.post(
+            "/api/bids",
+            json={"auction_id": a2["id"], "amount": 700.0},
+            headers=second_user["headers"],
+        ),
+    )
+
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [200, 400], (r1.text, r2.text)
+
+
 async def test_concurrent_equal_bids_only_one_wins(client, registered_user, second_user):
     """Fire two equal bids on the same auction concurrently. The
     SELECT...FOR UPDATE row lock must serialise them so the second one

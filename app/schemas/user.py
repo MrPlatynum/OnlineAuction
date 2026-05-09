@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserCreate(BaseModel):
-    username: str
+    username: str = Field(min_length=3, max_length=32)
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 class UserLogin(BaseModel):
@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     notify_winning: bool = True
     notify_ending: bool = True
     notify_sold: bool = True
+    notify_bid_received: bool = True
 
 
 class NotificationSettings(BaseModel):
@@ -36,8 +37,9 @@ class NotificationSettings(BaseModel):
     notify_winning: bool
     notify_ending: bool
     notify_sold: bool
+    notify_bid_received: bool = True
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: str = Field(min_length=8, max_length=128)

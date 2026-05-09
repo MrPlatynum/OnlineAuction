@@ -1,6 +1,7 @@
 from app.schemas.auction import (
     AuctionCreate,
     AuctionResponse,
+    AuctionUpdate,
     PaginatedAuctionsResponse,
 )
 from app.schemas.balance import DepositRequest, WithdrawRequest
@@ -24,6 +25,7 @@ __all__ = [
     "NotificationResponse",
     "AuctionCreate",
     "AuctionResponse",
+    "AuctionUpdate",
     "PaginatedAuctionsResponse",
     "BidCreate",
     "BidResponse",

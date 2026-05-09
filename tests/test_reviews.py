@@ -1,15 +1,56 @@
 """Reviews router — leave / list / delete seller reviews."""
 
 
+async def _buy_from_seller(client, seller_headers, buyer_headers, *, bin_price=200, title="Lot"):
+    """Create a BIN auction by ``seller`` and have ``buyer`` purchase
+    it. Returns the auction id. Required setup for any review — the
+    handler now requires the reviewer to have actually transacted with
+    the seller."""
+    auction = (await client.post(
+        "/api/auctions",
+        json={
+            "title": title,
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": bin_price,
+        },
+        headers=seller_headers,
+    )).json()
+    r = await client.post(
+        f"/api/auctions/{auction['id']}/buy-now",
+        headers=buyer_headers,
+    )
+    assert r.status_code == 200, r.text
+    return auction["id"]
+
+
 async def test_create_review_for_seller(client, registered_user, second_user):
+    auction_id = await _buy_from_seller(
+        client, registered_user["headers"], second_user["headers"]
+    )
     payload = {
         "seller_id": registered_user["user"]["id"],
+        "auction_id": auction_id,
         "rating": 5,
         "comment": "Отличный продавец",
     }
     r = await client.post("/api/reviews", json=payload, headers=second_user["headers"])
     assert r.status_code == 200
     assert "id" in r.json()
+
+
+async def test_review_without_purchase_rejected(
+    client, registered_user, second_user
+):
+    """Second user has never won anything from registered_user — must 403."""
+    payload = {
+        "seller_id": registered_user["user"]["id"],
+        "rating": 5,
+    }
+    r = await client.post("/api/reviews", json=payload, headers=second_user["headers"])
+    assert r.status_code == 403
 
 
 async def test_review_on_self_rejected(client, registered_user):
@@ -44,22 +85,12 @@ async def test_duplicate_review_on_same_auction_rejected(
 ):
     """The handler explicitly forbids leaving two reviews from the
     same reviewer on the same auction (avoids review-bombing)."""
-    auction = (await client.post(
-        "/api/auctions",
-        json={
-            "title": "Lot",
-            "description": "...",
-            "starting_price": 100.0,
-            "duration_minutes": 60,
-            "auction_type": "bin",
-            "bin_price": 200.0,
-        },
-        headers=registered_user["headers"],
-    )).json()
-
+    auction_id = await _buy_from_seller(
+        client, registered_user["headers"], second_user["headers"]
+    )
     base = {
         "seller_id": registered_user["user"]["id"],
-        "auction_id": auction["id"],
+        "auction_id": auction_id,
         "rating": 5,
     }
     r1 = await client.post("/api/reviews", json=base, headers=second_user["headers"])
@@ -70,9 +101,12 @@ async def test_duplicate_review_on_same_auction_rejected(
 
 async def test_delete_own_review_works(client, registered_user, second_user):
     seller_id = registered_user["user"]["id"]
+    auction_id = await _buy_from_seller(
+        client, registered_user["headers"], second_user["headers"]
+    )
     created = (await client.post(
         "/api/reviews",
-        json={"seller_id": seller_id, "rating": 4},
+        json={"seller_id": seller_id, "auction_id": auction_id, "rating": 4},
         headers=second_user["headers"],
     )).json()
 
@@ -89,9 +123,12 @@ async def test_delete_someone_elses_review_forbidden(
     """403 (not 404) on someone else's review — leaks existence but
     distinguishes ownership, which is the documented behaviour."""
     seller_id = registered_user["user"]["id"]
+    auction_id = await _buy_from_seller(
+        client, registered_user["headers"], second_user["headers"]
+    )
     created = (await client.post(
         "/api/reviews",
-        json={"seller_id": seller_id, "rating": 4},
+        json={"seller_id": seller_id, "auction_id": auction_id, "rating": 4},
         headers=second_user["headers"],
     )).json()
 
@@ -106,9 +143,15 @@ async def test_seller_reviews_returns_stats_and_list(
     client, registered_user, second_user
 ):
     seller_id = registered_user["user"]["id"]
+    auction_id = await _buy_from_seller(
+        client, registered_user["headers"], second_user["headers"]
+    )
     await client.post(
         "/api/reviews",
-        json={"seller_id": seller_id, "rating": 5, "comment": "A+"},
+        json={
+            "seller_id": seller_id, "auction_id": auction_id,
+            "rating": 5, "comment": "A+",
+        },
         headers=second_user["headers"],
     )
     r = await client.get(f"/api/sellers/{seller_id}/reviews")

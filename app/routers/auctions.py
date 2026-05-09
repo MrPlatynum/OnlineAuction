@@ -17,7 +17,12 @@ from app.models import (
     Subscription,
     User,
 )
-from app.schemas import AuctionCreate, AuctionResponse, PaginatedAuctionsResponse
+from app.schemas import (
+    AuctionCreate,
+    AuctionResponse,
+    AuctionUpdate,
+    PaginatedAuctionsResponse,
+)
 from app.services.auction_scheduler import cancel_auction, schedule_auction
 from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
@@ -222,11 +227,11 @@ async def buy_now(
 async def get_auctions(
     page: int = Query(1, ge=1),
     page_size: int = Query(12, ge=1, le=50),
-    status: str = Query("active", regex="^(active|completed|all)$"),
+    status: str = Query("active", pattern="^(active|completed|all)$"),
     search: Optional[str] = Query(None),
     min_price: Optional[float] = Query(None, ge=0),
     max_price: Optional[float] = Query(None, ge=0),
-    sort_by: str = Query("time", regex="^(time|price_asc|price_desc)$"),
+    sort_by: str = Query("time", pattern="^(time|price_asc|price_desc)$"),
     created_by: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     auction_type: Optional[str] = Query(None),
@@ -360,7 +365,7 @@ async def get_auction(auction_id: int, db: AsyncSession = Depends(get_db)):
 @router.patch("/auctions/{auction_id}")
 async def update_auction(
     auction_id: int,
-    data: dict,
+    data: AuctionUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -378,32 +383,36 @@ async def update_auction(
     if has_bids:
         raise HTTPException(400, "Нельзя редактировать лот — на него уже есть ставки")
 
-    if "title" in data and data["title"]:
-        auction.title = data["title"].strip()
-    if "description" in data:
-        auction.description = data["description"].strip()
-    if "category_id" in data:
-        auction.category_id = data["category_id"]
-    if "starting_price" in data and data["starting_price"]:
-        auction.starting_price = float(data["starting_price"])
-        auction.current_price = float(data["starting_price"])
-    if "bin_price" in data:
-        auction.bin_price = float(data["bin_price"]) if data["bin_price"] else None
-    if "auction_type" in data:
-        auction.auction_type = data["auction_type"]
+    fields = data.model_fields_set
+
+    if "title" in fields and data.title:
+        auction.title = data.title.strip()
+    if "description" in fields and data.description is not None:
+        auction.description = data.description.strip()
+    if "category_id" in fields:
+        auction.category_id = data.category_id
+    if "starting_price" in fields and data.starting_price is not None:
+        auction.starting_price = data.starting_price
+        auction.current_price = data.starting_price
+    if "bin_price" in fields:
+        auction.bin_price = data.bin_price
+    if "auction_type" in fields and data.auction_type is not None:
+        auction.auction_type = data.auction_type
     extended = False
-    if "extend_minutes" in data and data["extend_minutes"] and auction.is_active:
-        mins = int(data["extend_minutes"])
-        if 1 <= mins <= 10080:
-            auction.end_time = auction.end_time + timedelta(minutes=mins)
-            extended = True
-    if "image_urls" in data and isinstance(data["image_urls"], list):
+    if (
+        "extend_minutes" in fields
+        and data.extend_minutes is not None
+        and auction.is_active
+    ):
+        auction.end_time = auction.end_time + timedelta(minutes=data.extend_minutes)
+        extended = True
+    if "image_urls" in fields and data.image_urls is not None:
         await db.execute(
             sql_delete(AuctionImage).where(AuctionImage.auction_id == auction_id)
         )
-        for i, url in enumerate(data["image_urls"]):
+        for i, url in enumerate(data.image_urls):
             db.add(AuctionImage(auction_id=auction_id, url=url, order=i))
-        auction.image_url = data["image_urls"][0] if data["image_urls"] else None
+        auction.image_url = data.image_urls[0] if data.image_urls else None
 
     await db.commit()
     await db.refresh(auction)
@@ -420,8 +429,14 @@ async def delete_auction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Row-lock the auction so the scheduler's _wait_and_complete can't
+    # try to settle it between our checks and the commit. Cancellation
+    # happens *before* the commit too, so the in-memory task is gone by
+    # the time the row disappears.
     auction = (
-        await db.execute(select(Auction).where(Auction.id == auction_id))
+        await db.execute(
+            select(Auction).where(Auction.id == auction_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if not auction:
         raise HTTPException(status_code=404, detail="Auction not found")
@@ -438,9 +453,9 @@ async def delete_auction(
     if auction.is_completed and auction.winner_id:
         raise HTTPException(status_code=400, detail="Нельзя удалить лот с победителем")
 
+    cancel_auction(auction_id)
     await db.delete(auction)
     await db.commit()
-    cancel_auction(auction_id)
     return {"message": "Лот удалён"}
 
 
@@ -449,43 +464,43 @@ async def get_my_participation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    my_bids = (
-        await db.execute(select(Bid).where(Bid.user_id == current_user.id))
-    ).scalars().all()
-    auction_ids = list({bid.auction_id for bid in my_bids})
+    total_bids = await db.scalar(
+        select(func.count()).select_from(Bid).where(Bid.user_id == current_user.id)
+    )
 
-    if auction_ids:
-        participating_auctions = (
-            await db.execute(
-                select(Auction)
-                .where(Auction.id.in_(auction_ids))
-                .order_by(Auction.end_time.desc())
-            )
-        ).scalars().all()
-    else:
-        participating_auctions = []
+    # My latest bid per auction in one query (Postgres DISTINCT ON).
+    # Replaces the per-auction LIMIT-1 lookup that turned this endpoint
+    # into N+1 for any active bidder.
+    my_last_bids_sub = (
+        select(
+            Bid.auction_id.label("auction_id"),
+            Bid.amount.label("my_amount"),
+        )
+        .where(Bid.user_id == current_user.id)
+        .order_by(Bid.auction_id, Bid.timestamp.desc())
+        .distinct(Bid.auction_id)
+        .subquery()
+    )
+    participating_rows = (
+        await db.execute(
+            select(Auction, my_last_bids_sub.c.my_amount)
+            .join(my_last_bids_sub, my_last_bids_sub.c.auction_id == Auction.id)
+            .order_by(Auction.end_time.desc())
+        )
+    ).all()
 
     active_bids = []
     won_auctions = []
     lost_auctions = []
 
-    for auction in participating_auctions:
-        my_last_bid = (
-            await db.execute(
-                select(Bid)
-                .where(Bid.auction_id == auction.id, Bid.user_id == current_user.id)
-                .order_by(Bid.timestamp.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-
+    for auction, my_amount in participating_rows:
         auction_data = {
             "auction_id": auction.id,
             "title": auction.title,
             "image_url": auction.image_url,
             "current_price": float(auction.current_price),
-            "my_bid": float(my_last_bid.amount) if my_last_bid else 0,
-            "is_winning": auction.current_price == my_last_bid.amount if my_last_bid else False,
+            "my_bid": float(my_amount) if my_amount is not None else 0,
+            "is_winning": auction.current_price == my_amount,
             "end_time": auction.end_time.isoformat(),
             "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
             "is_active": auction.is_active,
@@ -506,25 +521,36 @@ async def get_my_participation(
             .order_by(Auction.is_active.desc(), Auction.start_time.desc())
         )
     ).scalars().all()
-    created_auctions = []
-    for auction in my_auctions:
-        bids_count = await db.scalar(
-            select(func.count()).select_from(Bid).where(Bid.auction_id == auction.id)
+
+    # One aggregate for bid counts across all of my auctions.
+    my_auction_ids = [a.id for a in my_auctions]
+    bid_counts: dict[int, int] = {}
+    if my_auction_ids:
+        bid_counts = dict(
+            (await db.execute(
+                select(Bid.auction_id, func.count(Bid.id))
+                .where(Bid.auction_id.in_(my_auction_ids))
+                .group_by(Bid.auction_id)
+            )).all()
         )
-        created_auctions.append({
+
+    created_auctions = [
+        {
             "auction_id": auction.id,
             "title": auction.title,
             "current_price": float(auction.current_price),
             "starting_price": float(auction.starting_price),
             "is_active": auction.is_active,
             "winner_id": auction.winner_id,
-            "bids_count": bids_count,
+            "bids_count": bid_counts.get(auction.id, 0),
             "image_url": auction.image_url,
             "end_time": auction.end_time.isoformat() if auction.end_time else None,
             "time_remaining": max(
                 0, int((auction.end_time - utcnow()).total_seconds())
             ) if auction.end_time and auction.is_active else 0,
-        })
+        }
+        for auction in my_auctions
+    ]
 
     active_bids.sort(key=lambda x: x["time_remaining"])
     won_auctions.sort(key=lambda x: x["end_time"], reverse=True)
@@ -536,7 +562,7 @@ async def get_my_participation(
         "lost_auctions": lost_auctions,
         "created_auctions": created_auctions,
         "stats": {
-            "total_bids": len(my_bids),
+            "total_bids": total_bids,
             "won_count": len(won_auctions),
             "active_count": len(active_bids),
             "created_count": len(my_auctions),

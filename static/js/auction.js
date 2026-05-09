@@ -177,11 +177,11 @@
     const slidesEl=$('lotSlides'),dotsEl=$('lotDots'),prevBtn=$('lotPrev'),nextBtn=$('lotNext'),counter=$('lotCounter'),placeholder=$('imgPlaceholder');
     if (urls.length&&slidesEl) {
       if (placeholder) placeholder.style.display='none';
-      slidesEl.innerHTML=urls.map((u,i)=>`<img class="lot-slide${i===0?' active':''}" src="${u}" alt="${esc(a.title)}" data-idx="${i}">`).join('');
+      slidesEl.innerHTML=urls.map((u,i)=>`<img class="lot-slide${i===0?' active':''}" src="${esc(u)}" alt="${esc(a.title)}" data-idx="${i}">`).join('');
       // Thumbnails
       const thumbsEl=$('lotThumbs');
       if (thumbsEl&&urls.length>1) {
-        thumbsEl.innerHTML=urls.map((u,i)=>`<div class="lot-thumb${i===0?' active':''}" onclick="lotGoTo(${i});updateThumbs(${i})"><img src="${u}" alt="${i+1}"></div>`).join('');
+        thumbsEl.innerHTML=urls.map((u,i)=>`<div class="lot-thumb${i===0?' active':''}" onclick="lotGoTo(${i});updateThumbs(${i})"><img src="${esc(u)}" alt="${i+1}"></div>`).join('');
       }
       if (urls.length>1) {
         dotsEl.innerHTML=urls.map((_,i)=>`<span class="lot-dot${i===0?' active':''}" onclick="lotGoTo(${i})"></span>`).join('');
@@ -556,7 +556,7 @@
         ? (rev.reviewer_avatar_url.startsWith('http') ? rev.reviewer_avatar_url : `${API}${rev.reviewer_avatar_url}`)
         : null;
       const avatarHtml = avatarSrc
-        ? `<img src="${avatarSrc}" alt="${esc(rev.reviewer_username)}">`
+        ? `<img src="${esc(avatarSrc)}" alt="${esc(rev.reviewer_username)}">`
         : (rev.reviewer_username || '?')[0].toUpperCase();
 
       const isThisLot = rev.auction_id === +auctionId;
@@ -674,7 +674,7 @@
     $('editModal').style.display='flex';
   }
   function closeEditModal(){$('editModal').style.display='none';}
-  function renderEditImgPreview(){const el=$('editImgPreview');if(!el)return;const allCount=editImageUrls.length+editNewFiles.length;el.innerHTML=[...editImageUrls.map((url,i)=>{const src=String(url).startsWith('http')?url:API+url;return`<div class="multi-img-thumb${i===0?' is-cover':''}"><img src="${src}"><button class="thumb-del" type="button" onclick="removeEditImg('url',${i})">✕</button></div>`;}),...editNewFiles.map((f,i)=>`<div class="multi-img-thumb${(editImageUrls.length+i)===0?' is-cover':''}"><img src="${URL.createObjectURL(f)}"><button class="thumb-del" type="button" onclick="removeEditImg('file',${i})">✕</button></div>`)].join('');const addBtn=document.querySelector('label[for="editImageFile"]');if(addBtn)addBtn.style.display=allCount>=5?'none':'inline-flex';}
+  function renderEditImgPreview(){const el=$('editImgPreview');if(!el)return;const allCount=editImageUrls.length+editNewFiles.length;el.innerHTML=[...editImageUrls.map((url,i)=>{const src=String(url).startsWith('http')?url:API+url;return`<div class="multi-img-thumb${i===0?' is-cover':''}"><img src="${esc(src)}"><button class="thumb-del" type="button" onclick="removeEditImg('url',${i})">✕</button></div>`;}),...editNewFiles.map((f,i)=>`<div class="multi-img-thumb${(editImageUrls.length+i)===0?' is-cover':''}"><img src="${URL.createObjectURL(f)}"><button class="thumb-del" type="button" onclick="removeEditImg('file',${i})">✕</button></div>`)].join('');const addBtn=document.querySelector('label[for="editImageFile"]');if(addBtn)addBtn.style.display=allCount>=5?'none':'inline-flex';}
   function removeEditImg(type,idx){if(type==='url')editImageUrls.splice(idx,1);else editNewFiles.splice(idx,1);renderEditImgPreview();}
   function setExtend(mins){$('editExtend').value=mins;}
   async function saveEdit(){const btn=$('editSaveBtn');btn.disabled=true;btn.textContent='Сохраняем…';$('editError').style.display='none';try{const uploadedUrls=[];for(const f of editNewFiles){const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/api/upload-image`,{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});if(r.ok){const d=await r.json();uploadedUrls.push(d.image_url);}}const allUrls=[...editImageUrls,...uploadedUrls];const subSel=$('editCategory'),parentSel=$('editCategoryParent');const catVal=(subSel&&subSel.value&&subSel.style.display!=='none')?subSel.value:(parentSel?parentSel.value:'');const payload={title:$('editTitle').value.trim(),description:$('editDescription').value.trim(),category_id:catVal?+catVal:null,starting_price:$('editPrice').value?+$('editPrice').value:null,bin_price:$('editBinPrice').value?+$('editBinPrice').value:null,image_urls:allUrls};const ext=+$('editExtend').value;if(ext>0)payload.extend_minutes=ext;const r=await fetch(`${API}/api/auctions/${auctionId}`,{method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)});if(r.ok){closeEditModal();showToast('✅ Сохранено','Лот успешно обновлён','ok');setTimeout(()=>location.reload(),1200);}else{const err=await r.json();$('editError').textContent=err.detail||'Ошибка сохранения';$('editError').style.display='block';}}catch{$('editError').textContent='Ошибка соединения';$('editError').style.display='block';}finally{btn.disabled=false;btn.textContent='Сохранить';}}

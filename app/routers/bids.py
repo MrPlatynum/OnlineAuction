@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import Auction, Bid, NotificationType, User
 from app.schemas import BidCreate, BidResponse, PaginatedBidsResponse
-from app.services.balance import effective_committed_balance
+from app.services.balance import effective_committed_balance, lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
@@ -94,6 +94,12 @@ async def place_bid(
 
     if bid_amount <= auction.current_price:
         raise HTTPException(status_code=400, detail="Bid must be higher than current price")
+
+    # Lock the bidder's user row before reading balance / committed-elsewhere.
+    # Without this, two concurrent bids by the same user on *different* auctions
+    # both pass the available-balance check independently (each holds a different
+    # auction lock) and end up over-committing past the user's actual balance.
+    await lock_users_by_id(db, current_user.id)
 
     committed_elsewhere = await effective_committed_balance(
         db, current_user.id, bid.auction_id, auction.current_price

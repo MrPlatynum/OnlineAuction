@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -9,21 +9,45 @@ from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["reviews"])
 
+# Hard cap on the reviews list returned per seller. Stats (total, avg,
+# distribution) are still computed over the full set; only the listed
+# rows are bounded so a seller with thousands of reviews doesn't pull
+# the whole table into memory on every page view.
+_REVIEWS_LIST_CAP = 50
+
 
 @router.get("/sellers/{seller_id}/reviews")
 async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db)):
+    base_filter = Review.seller_id == seller_id
+
+    total = await db.scalar(
+        select(func.count()).select_from(Review).where(base_filter)
+    )
+
+    avg = 0
+    dist = {i: 0 for i in range(1, 6)}
+    if total:
+        avg_val = await db.scalar(
+            select(func.avg(Review.rating)).where(base_filter)
+        )
+        avg = round(float(avg_val), 1)
+        for rating, cnt in (
+            await db.execute(
+                select(Review.rating, func.count(Review.id))
+                .where(base_filter)
+                .group_by(Review.rating)
+            )
+        ).all():
+            dist[rating] = cnt
+
     reviews = (
         await db.execute(
             select(Review)
-            .where(Review.seller_id == seller_id)
+            .where(base_filter)
             .order_by(Review.created_at.desc())
+            .limit(_REVIEWS_LIST_CAP)
         )
     ).scalars().all()
-    total = len(reviews)
-    avg = round(sum(r.rating for r in reviews) / total, 1) if total else 0
-    dist = {i: 0 for i in range(1, 6)}
-    for r in reviews:
-        dist[r.rating] = dist.get(r.rating, 0) + 1
 
     reviewer_ids = [r.reviewer_id for r in reviews]
     if reviewer_ids:
@@ -74,6 +98,22 @@ async def create_review(
     ).scalar_one_or_none()
     if not seller:
         raise HTTPException(404, "Продавец не найден")
+
+    # Reviewer must have actually transacted with this seller — won a
+    # completed auction or bought via /buy-now (both set winner_id).
+    # Without this, reviews can be spammed at any seller.
+    qualifying_q = select(Auction.id).where(
+        Auction.created_by == data.seller_id,
+        Auction.winner_id == current_user.id,
+        Auction.is_completed == True,
+    )
+    if data.auction_id:
+        qualifying_q = qualifying_q.where(Auction.id == data.auction_id)
+    if not (await db.execute(qualifying_q.limit(1))).scalar_one_or_none():
+        raise HTTPException(
+            403, "Можно оставить отзыв только продавцу, у которого вы что-то выиграли"
+        )
+
     if data.auction_id:
         exists = (
             await db.execute(

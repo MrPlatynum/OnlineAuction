@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -21,36 +21,66 @@ async def get_my_subscriptions(
             .order_by(Subscription.created_at.desc())
         )
     ).scalars().all()
+    if not subs:
+        return []
+
+    seller_ids = [s.seller_id for s in subs]
+
+    # Bulk-fetch sellers, lot counts, and review stats for the whole
+    # subscription set in three aggregate queries instead of four
+    # round-trips per subscription.
+    sellers = {
+        u.id: u
+        for u in (
+            await db.execute(select(User).where(User.id.in_(seller_ids)))
+        ).scalars()
+    }
+
+    lot_stats: dict[int, tuple[int, int]] = {}
+    for sid, total, active in (
+        await db.execute(
+            select(
+                Auction.created_by,
+                func.count(Auction.id),
+                func.coalesce(
+                    func.sum(case((Auction.is_active, 1), else_=0)), 0
+                ),
+            )
+            .where(Auction.created_by.in_(seller_ids))
+            .group_by(Auction.created_by)
+        )
+    ).all():
+        lot_stats[sid] = (int(total), int(active))
+
+    review_stats: dict[int, tuple[int, float]] = {}
+    for sid, cnt, avg in (
+        await db.execute(
+            select(
+                Review.seller_id,
+                func.count(Review.id),
+                func.avg(Review.rating),
+            )
+            .where(Review.seller_id.in_(seller_ids))
+            .group_by(Review.seller_id)
+        )
+    ).all():
+        review_stats[sid] = (int(cnt), round(float(avg), 1) if avg else 0)
 
     result = []
     for sub in subs:
-        seller = (
-            await db.execute(select(User).where(User.id == sub.seller_id))
-        ).scalar_one_or_none()
+        seller = sellers.get(sub.seller_id)
         if not seller:
             continue
-        lots_count = await db.scalar(
-            select(func.count())
-            .select_from(Auction)
-            .where(Auction.created_by == seller.id)
-        )
-        active_lots_count = await db.scalar(
-            select(func.count())
-            .select_from(Auction)
-            .where(Auction.created_by == seller.id, Auction.is_active == True)
-        )
-        reviews = (
-            await db.execute(select(Review).where(Review.seller_id == seller.id))
-        ).scalars().all()
-        avg = round(sum(r.rating for r in reviews) / len(reviews), 1) if reviews else 0
+        lots_count, active_lots_count = lot_stats.get(seller.id, (0, 0))
+        reviews_count, avg_rating = review_stats.get(seller.id, (0, 0))
         result.append({
             "seller_id": seller.id,
             "username": seller.username,
             "avatar_url": seller.avatar_url,
             "lots_count": lots_count,
             "active_lots_count": active_lots_count,
-            "reviews_count": len(reviews),
-            "avg_rating": avg,
+            "reviews_count": reviews_count,
+            "avg_rating": avg_rating,
             "subscribed_at": sub.created_at.isoformat(),
         })
     return result
