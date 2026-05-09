@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import BASE_DIR, CORS_ORIGINS, LOCAL_CORS_REGEX, STATIC_DIR
 from app.routers import (
@@ -46,6 +47,43 @@ class _JsonFormatter(logging.Formatter):
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)
+
+
+_SECURITY_HEADERS = {
+    # Stop content-sniffing — uploaded "image" returned with a wrong
+    # Content-Type can't be re-interpreted as HTML/script by the browser.
+    "X-Content-Type-Options": "nosniff",
+    # No iframing. The app has no embed-in-iframe use case, and refusing
+    # framing kills clickjacking even if a chrome-rendered page is reused.
+    "X-Frame-Options": "DENY",
+    # Don't leak full URLs (with query params) to third-party origins on
+    # navigation; keep the origin so analytics / referrer logs still work.
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    # Disable browser feature surface that the app doesn't use.
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add a small set of safe-by-default security headers to every
+    response. HSTS is opt-in (``HSTS_ENABLED=true``) — it's only safe
+    once the app is served exclusively over HTTPS, which is a deployment
+    decision, not a code one."""
+
+    def __init__(self, app, hsts_enabled: bool = False):
+        super().__init__(app)
+        self.hsts_enabled = hsts_enabled
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        if self.hsts_enabled:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=31536000; includeSubDomains",
+            )
+        return response
 
 
 def setup_logging():
@@ -105,6 +143,10 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+    )
+    fastapi_app.add_middleware(
+        SecurityHeadersMiddleware,
+        hsts_enabled=os.getenv("HSTS_ENABLED", "").lower() in {"true", "1", "yes"},
     )
 
     fastapi_app.include_router(health.router)

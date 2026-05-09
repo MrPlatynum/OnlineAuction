@@ -21,6 +21,7 @@ async def update_notification_settings(
     current_user.notify_winning = settings.notify_winning
     current_user.notify_ending = settings.notify_ending
     current_user.notify_sold = settings.notify_sold
+    current_user.notify_bid_received = settings.notify_bid_received
 
     await db.commit()
     return {"message": "Settings updated successfully"}
@@ -41,10 +42,16 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
             .order_by(Auction.start_time.desc())
         )
     ).scalars().all()
-    my_bids = (
-        await db.execute(select(Bid).where(Bid.user_id == user.id))
-    ).scalars().all()
-    bid_auction_ids = list({b.auction_id for b in my_bids})
+    total_bids = await db.scalar(
+        select(func.count()).select_from(Bid).where(Bid.user_id == user.id)
+    )
+    bid_auction_ids = [
+        aid for (aid,) in (
+            await db.execute(
+                select(Bid.auction_id).where(Bid.user_id == user.id).distinct()
+            )
+        ).all()
+    ]
 
     won_count = await db.scalar(
         select(func.count())
@@ -89,7 +96,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
         "auctions": auction_list,
         "stats": {
             "created_count": len(auctions),
-            "total_bids": len(my_bids),
+            "total_bids": total_bids,
             "won_count": won_count,
             "lost_count": lost_count,
         },

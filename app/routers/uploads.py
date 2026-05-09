@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import uuid
 
@@ -13,7 +14,21 @@ from app.utils.images import validate_and_normalise_image
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api", tags=["uploads"])
+
+
+def _safely_remove(path: str) -> None:
+    """Best-effort delete of an old upload file. Logs on failure
+    instead of swallowing — a stale file blocks nothing functional, but
+    silent failures hide a misconfigured UPLOAD_DIR."""
+    if not os.path.exists(path):
+        return
+    try:
+        os.remove(path)
+    except OSError as exc:
+        logger.warning("Could not remove old upload %s: %s", path, exc)
 
 
 async def _read_under_limit(file: UploadFile, max_bytes: int) -> bytes:
@@ -68,12 +83,7 @@ async def upload_avatar(
 
     if current_user.avatar_url:
         old_filename = current_user.avatar_url.split("/")[-1]
-        old_path = os.path.join(UPLOAD_DIR, old_filename)
-        if os.path.exists(old_path):
-            try:
-                os.remove(old_path)
-            except Exception:
-                pass
+        _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
@@ -93,12 +103,7 @@ async def delete_avatar(
 ):
     if current_user.avatar_url:
         old_filename = current_user.avatar_url.split("/")[-1]
-        old_path = os.path.join(UPLOAD_DIR, old_filename)
-        if os.path.exists(old_path):
-            try:
-                os.remove(old_path)
-            except Exception:
-                pass
+        _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
         current_user.avatar_url = None
         await db.commit()
     return {"ok": True}

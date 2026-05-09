@@ -86,7 +86,7 @@ async def notify_user(
             should_send_email = True
         elif notification_type == NotificationType.AUCTION_SOLD and user.notify_sold:
             should_send_email = True
-        elif notification_type == NotificationType.BID_PLACED and user.notify_sold:
+        elif notification_type == NotificationType.BID_PLACED and user.notify_bid_received:
             should_send_email = True
 
         if should_send_email:

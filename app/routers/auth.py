@@ -76,8 +76,6 @@ async def change_password(
 ):
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Новый пароль должен быть не менее 6 символов")
     current_user.hashed_password = hash_password(data.new_password)
     await db.commit()
     return {"message": "Пароль успешно изменён"}
