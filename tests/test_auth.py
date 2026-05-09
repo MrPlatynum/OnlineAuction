@@ -57,7 +57,9 @@ async def test_me_returns_current_user(client, registered_user):
 
 async def test_me_without_token_rejected(client):
     response = await client.get("/api/me")
-    assert response.status_code == 403  # HTTPBearer returns 403 when no token
+    # FastAPI ≥ 0.116 returns 401 (semantically correct: no creds = unauthenticated)
+    # — earlier versions returned 403 for the same condition.
+    assert response.status_code == 401
 
 
 async def test_bcrypt_hash_upgraded_to_argon2_on_login(client):

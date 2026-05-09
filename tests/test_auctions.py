@@ -27,7 +27,7 @@ async def test_create_auction_authenticated(client, registered_user):
 
 async def test_create_auction_unauthenticated(client):
     response = await client.post("/api/auctions", json=_make_auction_payload())
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 async def test_get_auction_by_id(client, registered_user):
