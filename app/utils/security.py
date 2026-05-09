@@ -19,7 +19,19 @@ from app.database import get_db
 from app.models import User
 from app.utils.time import utcnow
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# argon2id is the primary scheme for new hashes; bcrypt stays in the
+# verifier chain so existing accounts still log in. Tunables follow the
+# OWASP cheat sheet (2024) for argon2id: m = 19 MiB, t = 2, p = 1.
+# ``deprecated="auto"`` flags non-primary schemes (i.e. bcrypt) so
+# ``needs_rehash`` returns True on a successful login and the row gets
+# rotated to argon2id transparently.
+pwd_context = CryptContext(
+    schemes=["argon2", "bcrypt"],
+    deprecated="auto",
+    argon2__time_cost=2,
+    argon2__memory_cost=19456,
+    argon2__parallelism=1,
+)
 security = HTTPBearer()
 
 
@@ -29,6 +41,16 @@ def hash_password(password: str) -> str:
 
 def is_modern_password_hash(hashed_password: str) -> bool:
     return pwd_context.identify(hashed_password) is not None
+
+
+def needs_rehash(hashed_password: str) -> bool:
+    """True if the stored hash should be rotated on the next successful
+    login — either it's the legacy SHA256+key format from before passlib
+    was wired up, or it's a deprecated scheme (bcrypt now that argon2id
+    is primary)."""
+    if not is_modern_password_hash(hashed_password):
+        return True
+    return pwd_context.needs_update(hashed_password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

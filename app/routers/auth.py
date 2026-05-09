@@ -15,7 +15,7 @@ from app.utils.security import (
     create_access_token,
     get_current_user,
     hash_password,
-    is_modern_password_hash,
+    needs_rehash,
     verify_password,
 )
 
@@ -52,7 +52,7 @@ async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(ge
     if not db_user or not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not is_modern_password_hash(db_user.hashed_password):
+    if needs_rehash(db_user.hashed_password):
         db_user.hashed_password = hash_password(user.password)
         await db.commit()
         await db.refresh(db_user)
