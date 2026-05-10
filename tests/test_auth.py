@@ -93,3 +93,34 @@ async def test_bcrypt_hash_upgraded_to_argon2_on_login(client):
             select(User.hashed_password).where(User.username == "legacy")
         )
     assert stored.startswith("$argon2"), stored
+
+
+def test_hash_password_rejects_oversized_input():
+    """Defensive cap inside ``hash_password``: Pydantic enforces 128
+    chars on the API boundary, but a direct caller (or a future
+    schema with no max_length) shouldn't be able to feed multi-MB
+    strings into argon2."""
+    import pytest
+
+    from app.utils.security import PASSWORD_INPUT_LIMIT, hash_password
+
+    oversized = "x" * (PASSWORD_INPUT_LIMIT + 1)
+    with pytest.raises(ValueError):
+        hash_password(oversized)
+
+
+def test_verify_password_rejects_oversized_input():
+    """An oversized password can never be a valid credential — we
+    never accept it for hashing — so reject without spending CPU on
+    argon2/bcrypt verification."""
+    from app.utils.security import (
+        PASSWORD_INPUT_LIMIT,
+        hash_password,
+        verify_password,
+    )
+
+    real_hash = hash_password("password123")
+    assert verify_password("password123", real_hash) is True
+    assert verify_password("x" * (PASSWORD_INPUT_LIMIT + 1), real_hash) is False
+
+

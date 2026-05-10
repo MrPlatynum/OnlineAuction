@@ -28,6 +28,7 @@ from app.routers import (
 )
 from app.services.auction_scheduler import schedule_active_auctions, shutdown_scheduler
 from app.services.migrations import seed_categories
+from app.services.notifications import flush_pending_emails
 from app.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -120,6 +121,7 @@ async def lifespan(fastapi_app: FastAPI):
         yield
     finally:
         await shutdown_scheduler()
+        await flush_pending_emails()
         logger.info("Application shutdown complete")
 
 

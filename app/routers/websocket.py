@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from collections import defaultdict
+import time
+from collections import defaultdict, deque
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -23,6 +24,14 @@ router = APIRouter()
 MAX_AUCTION_WS_PER_IP = 20
 _auction_ws_per_ip: dict[str, int] = defaultdict(int)
 
+# Cap incoming messages per /ws/auction connection: every receive_text
+# triggers a SELECT auctions, so an attacker can DoS Postgres through
+# the socket even within the per-IP connection cap. Sliding window
+# count over the last 60s; messages above the cap are silently dropped
+# without hitting the DB.
+WS_AUCTION_MSG_WINDOW_SECS = 60
+WS_AUCTION_MSG_MAX_PER_WINDOW = 30
+
 
 def _client_ip(websocket: WebSocket) -> str:
     return websocket.client.host if websocket.client else "unknown"
@@ -40,11 +49,19 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
         return
 
     _auction_ws_per_ip[ip] += 1
+    msg_timestamps: deque[float] = deque()
     await manager.connect(websocket, auction_id)
     try:
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+
+                now = time.monotonic()
+                while msg_timestamps and now - msg_timestamps[0] > WS_AUCTION_MSG_WINDOW_SECS:
+                    msg_timestamps.popleft()
+                if len(msg_timestamps) >= WS_AUCTION_MSG_MAX_PER_WINDOW:
+                    continue
+                msg_timestamps.append(now)
 
                 async with SessionLocal() as db:
                     auction = (

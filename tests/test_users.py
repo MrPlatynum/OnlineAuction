@@ -42,6 +42,36 @@ async def test_update_notification_settings_persists(client, registered_user):
     assert r.status_code == 200
 
 
+async def test_profile_caps_auctions_list_but_keeps_total(client, registered_user):
+    """A power-seller with 100+ lots used to serialise the entire list
+    on every profile hit — now capped at 100 with the true total still
+    surfaced via ``stats.created_count``."""
+    from app import database as _db_module
+    from app.models import Auction
+    from app.utils.time import utcnow
+
+    user_id = registered_user["user"]["id"]
+    async with _db_module.SessionLocal() as db:
+        for i in range(105):
+            db.add(Auction(
+                title=f"Lot {i}",
+                description="...",
+                starting_price=100,
+                current_price=100,
+                start_time=utcnow(),
+                end_time=utcnow(),
+                created_by=user_id,
+                auction_type="bid",
+            ))
+        await db.commit()
+
+    r = await client.get(f"/api/users/{registered_user['user']['username']}")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["auctions"]) == 100
+    assert body["stats"]["created_count"] == 105
+
+
 async def test_notification_settings_require_auth(client):
     r = await client.put(
         "/api/notification-settings",
