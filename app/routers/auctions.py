@@ -393,21 +393,32 @@ async def update_auction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Lock the row so a concurrent place_bid / complete_auction can't
+    # mutate state between our checks and the commit.
     auction = (
-        await db.execute(select(Auction).where(Auction.id == auction_id))
+        await db.execute(
+            select(Auction).where(Auction.id == auction_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if not auction:
         raise HTTPException(404, "Аукцион не найден")
     if auction.created_by != current_user.id:
         raise HTTPException(403, "Это не ваш лот")
+    if not auction.is_active:
+        raise HTTPException(400, "Лот уже завершён — редактирование недоступно")
 
+    fields = data.model_fields_set
     has_bids = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
-    if has_bids:
-        raise HTTPException(400, "Нельзя редактировать лот — на него уже есть ставки")
-
-    fields = data.model_fields_set
+    # Once there are bids, the only safe edit is extending the deadline:
+    # changing title/price/category after a bidder has committed money is
+    # bait-and-switch.
+    if has_bids and fields - {"extend_minutes"}:
+        raise HTTPException(
+            400,
+            "На лоте уже есть ставки — можно только продлить срок (extend_minutes)",
+        )
 
     if "title" in fields and data.title:
         auction.title = data.title.strip()
@@ -423,11 +434,7 @@ async def update_auction(
     if "auction_type" in fields and data.auction_type is not None:
         auction.auction_type = data.auction_type
     extended = False
-    if (
-        "extend_minutes" in fields
-        and data.extend_minutes is not None
-        and auction.is_active
-    ):
+    if "extend_minutes" in fields and data.extend_minutes is not None:
         auction.end_time = auction.end_time + timedelta(minutes=data.extend_minutes)
         extended = True
     if "image_urls" in fields and data.image_urls is not None:

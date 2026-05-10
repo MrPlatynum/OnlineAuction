@@ -83,6 +83,116 @@ async def test_relative_and_absolute_image_urls_accepted(client, registered_user
     assert r.status_code == 200, r.text
 
 
+async def _seed_active_auction(client, headers, **overrides):
+    response = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(**overrides),
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+async def test_update_auction_owner_can_edit_when_no_bids(client, registered_user):
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    response = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"title": "Renamed", "description": "Updated"},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 200, response.text
+    refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    assert refreshed["title"] == "Renamed"
+    assert refreshed["description"] == "Updated"
+
+
+async def test_update_auction_non_owner_forbidden(client, registered_user, second_user):
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    response = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"title": "Hijacked"},
+        headers=second_user["headers"],
+    )
+    assert response.status_code == 403
+
+
+async def test_update_auction_not_found(client, registered_user):
+    response = await client.patch(
+        "/api/auctions/99999",
+        json={"title": "x"},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 404
+
+
+async def test_update_auction_rejects_inactive_lot(client, registered_user):
+    """Once a lot is settled, no further field edits are permitted —
+    otherwise the seller could rewrite history of a sold item."""
+    from sqlalchemy import update
+
+    from app import database as _db_module
+    from app.models import Auction
+
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    async with _db_module.SessionLocal() as db:
+        await db.execute(
+            update(Auction)
+            .where(Auction.id == auction["id"])
+            .values(is_active=False, is_completed=True)
+        )
+        await db.commit()
+
+    response = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"title": "Renamed"},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 400
+
+
+async def test_update_auction_blocks_field_edit_when_bids_exist(
+    client, registered_user, second_user
+):
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200
+
+    response = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"title": "Bait and switch"},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 400
+
+
+async def test_update_auction_extend_minutes_allowed_with_bids(
+    client, registered_user, second_user
+):
+    """Extending the deadline is the one edit safe to allow after a bid
+    landed — a longer auction never harms an existing bidder."""
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200
+
+    before = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    response = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"extend_minutes": 30},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 200, response.text
+    after = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    assert after["end_time"] > before["end_time"]
+
+
 async def test_list_auctions_paginated(client, registered_user):
     for i in range(3):
         await client.post(
