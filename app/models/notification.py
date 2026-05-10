@@ -21,7 +21,9 @@ class Notification(Base):
     type = Column(String, index=True, nullable=False)
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-    auction_id = Column(Integer, nullable=True)
+    auction_id = Column(
+        Integer, ForeignKey("auctions.id", ondelete="SET NULL"), nullable=True
+    )
     auction_title = Column(String, nullable=True)
     is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)

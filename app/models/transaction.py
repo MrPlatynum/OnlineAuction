@@ -22,7 +22,9 @@ class Transaction(Base):
     amount = Column(Numeric(12, 2), nullable=False)
     balance_after = Column(Numeric(12, 2), nullable=False)
     description = Column(String, nullable=True)
-    auction_id = Column(Integer, nullable=True)
+    auction_id = Column(
+        Integer, ForeignKey("auctions.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime, default=utcnow, nullable=False)
     user = relationship("User", foreign_keys=[user_id])
 
