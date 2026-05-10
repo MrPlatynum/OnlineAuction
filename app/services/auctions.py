@@ -3,26 +3,13 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Auction, AuctionImage, Bid, NotificationType, User
+from app.models import Auction, Bid, NotificationType, User
 from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
 
 logger = logging.getLogger(__name__)
-
-
-async def get_image_urls(auction: Auction, db: AsyncSession):
-    imgs = (
-        await db.execute(
-            select(AuctionImage)
-            .where(AuctionImage.auction_id == auction.id)
-            .order_by(AuctionImage.order)
-        )
-    ).scalars().all()
-    if imgs:
-        return [i.url for i in imgs]
-    return [auction.image_url] if auction.image_url else []
 
 
 async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
