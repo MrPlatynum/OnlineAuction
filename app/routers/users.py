@@ -35,13 +35,21 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # Cap recent auctions in the response: a power-seller with thousands
+    # of lots would otherwise serialise the whole list on every profile
+    # hit. ``created_count`` below preserves the true total for the UI.
+    USER_PROFILE_AUCTIONS_LIMIT = 100
     auctions = (
         await db.execute(
             select(Auction)
             .where(Auction.created_by == user.id)
             .order_by(Auction.start_time.desc())
+            .limit(USER_PROFILE_AUCTIONS_LIMIT)
         )
     ).scalars().all()
+    created_count = await db.scalar(
+        select(func.count()).select_from(Auction).where(Auction.created_by == user.id)
+    )
     total_bids = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.user_id == user.id)
     )
@@ -95,7 +103,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
         },
         "auctions": auction_list,
         "stats": {
-            "created_count": len(auctions),
+            "created_count": created_count,
             "total_bids": total_bids,
             "won_count": won_count,
             "lost_count": lost_count,

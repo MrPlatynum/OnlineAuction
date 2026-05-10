@@ -21,6 +21,26 @@ def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
     task.add_done_callback(_pending_email_tasks.discard)
 
 
+async def flush_pending_emails(timeout: float = 5.0) -> None:
+    """Drain in-flight SMTP roundtrips on shutdown. Called from the
+    FastAPI lifespan ``finally`` so a SIGTERM doesn't drop emails that
+    were already on the wire."""
+    if not _pending_email_tasks:
+        return
+    pending = list(_pending_email_tasks)
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(*pending, return_exceptions=True),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Pending email tasks did not finish within %.1fs (%d still in flight)",
+            timeout, len(_pending_email_tasks),
+        )
+
+
 async def create_notification(
     db: AsyncSession,
     user_id: int,

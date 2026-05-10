@@ -34,8 +34,16 @@ pwd_context = CryptContext(
 )
 security = HTTPBearer()
 
+# Defensive cap on raw password input. Pydantic enforces max_length=128
+# on register / change-password, but UserLogin.password is unbounded —
+# without this cap a multi-MB password input would let an attacker
+# spend our CPU on argon2/bcrypt verification.
+PASSWORD_INPUT_LIMIT = 1024
+
 
 def hash_password(password: str) -> str:
+    if len(password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
+        raise ValueError("Password input exceeds limit")
     return pwd_context.hash(password)
 
 
@@ -54,6 +62,10 @@ def needs_rehash(hashed_password: str) -> bool:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # An over-cap input can never be a valid credential — we never
+    # accept it for hashing — so reject without spending CPU.
+    if len(plain_password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
+        return False
     if is_modern_password_hash(hashed_password):
         return pwd_context.verify(plain_password, hashed_password)
     keys_to_check = [SECRET_KEY, *LEGACY_PASSWORD_KEYS]

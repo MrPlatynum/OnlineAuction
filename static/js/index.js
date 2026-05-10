@@ -1136,7 +1136,6 @@ function buildPageList(current, total) {
             }
             
             ws.onopen = () => {
-                console.log(`WebSocket connected for auction ${auctionId}`);
                 reconnectAttempts[auctionId] = 0; // Сброс счетчика при успешном подключении
                 
                 // Ping каждые 25 секунд
@@ -1293,7 +1292,6 @@ function buildPageList(current, total) {
             if (applyBtn) applyBtn.addEventListener('click', applyFilters);
             
             filtersInitialized = true;
-            console.log('✅ Фильтры инициализированы');
         }
 
         // initFiltersUI и первичный рендер будут вызваны из wire() ниже
