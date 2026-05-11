@@ -113,11 +113,13 @@ async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
     entry, because schedule_auction has already replaced it with the new
     task. Without the identity check the new task would be orphaned from
     cancel_auction / shutdown."""
-    auction = await _seed_auction(registered_user["user"]["id"], end_in_seconds=0.3)
+    # End_time wide enough that the test can commit the extension before
+    # the original tick fires (asyncio sleep granularity + DB round-trip).
+    auction = await _seed_auction(registered_user["user"]["id"], end_in_seconds=1.5)
     schedule_auction(auction)
     first_task = _completion_tasks[auction.id]
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.3)
     async with _db_module.SessionLocal() as db:
         auc = (
             await db.execute(select(Auction).where(Auction.id == auction.id))
@@ -125,9 +127,9 @@ async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
         auc.end_time = auc.end_time + timedelta(seconds=300)
         await db.commit()
 
-    # Wait for the old tick to fire, hit the end_time check, call
-    # schedule_auction, and complete its finally block.
-    await asyncio.sleep(0.5)
+    # Sleep past the original deadline so the first tick fires, sees the
+    # extended end_time, calls schedule_auction, and exits via finally.
+    await asyncio.sleep(1.6)
 
     assert auction.id in _completion_tasks
     new_task = _completion_tasks[auction.id]

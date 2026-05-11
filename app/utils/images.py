@@ -12,6 +12,12 @@ import io
 from fastapi import HTTPException
 from PIL import Image, UnidentifiedImageError
 
+# Cap decoded pixel count to defuse decompression-bomb uploads: a 50 KB
+# PNG can declare 50000 × 50000 dimensions in its header, and Pillow
+# will happily allocate 7.5 GB to decode it. 25 MP (≈ 5000 × 5000) is
+# generous for auction photos and well under Pillow's default 89 MP.
+Image.MAX_IMAGE_PIXELS = 25_000_000
+
 # PIL format ID -> (canonical content_type, file extension).
 _PIL_FORMAT_TO_META: dict[str, tuple[str, str]] = {
     "JPEG": ("image/jpeg", "jpg"),
@@ -32,11 +38,18 @@ def validate_and_normalise_image(data: bytes) -> tuple[bytes, str, str]:
     try:
         with Image.open(io.BytesIO(data)) as probe:
             probe.verify()
+    except Image.DecompressionBombError:
+        # Pixel count exceeds Image.MAX_IMAGE_PIXELS — decompression-bomb
+        # vector, refuse before allocating the decode buffer.
+        raise HTTPException(status_code=400, detail="Image is too large to decode") from None
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
         raise HTTPException(status_code=400, detail="File is not a valid image") from None
 
     # ``verify()`` consumes the stream — re-open for the actual encode.
-    img = Image.open(io.BytesIO(data))
+    try:
+        img = Image.open(io.BytesIO(data))
+    except Image.DecompressionBombError:
+        raise HTTPException(status_code=400, detail="Image is too large to decode") from None
     fmt = img.format
     if fmt not in _PIL_FORMAT_TO_META:
         raise HTTPException(status_code=400, detail="Unsupported image type")

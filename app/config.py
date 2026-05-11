@@ -64,7 +64,23 @@ CORS_ORIGINS = [
     # malicious page trick the browser into authenticated CORS calls.
     if origin.strip() and origin.strip().lower() != "null"
 ]
-LOCAL_CORS_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+# AUCTION_ENV is the project-scoped environment name (dev/local/test
+# enable developer conveniences; anything else is treated as prod).
+# Bare ``ENV`` was too generic — collided with cloud platforms that
+# inject their own ENV value (e.g. AWS Elastic Beanstalk).
+AUCTION_ENV = os.getenv("AUCTION_ENV", "").lower()
+
+# Localhost CORS regex is a dev convenience: a fresh checkout serving
+# the SPA from :5500 / :3000 talks to the API on :8000. In production
+# the regex must be off — without it, any page hosted on a literal
+# ``localhost`` subdomain (e.g. attacker-controlled ``localhost.evil``
+# resolved via /etc/hosts) could make credentialed requests once the
+# user is logged in. CORS_ORIGINS handles legitimate production hosts.
+LOCAL_CORS_REGEX = (
+    r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    if AUCTION_ENV in {"dev", "local", "test"}
+    else None
+)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(BASE_DIR, 'static')

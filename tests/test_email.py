@@ -59,3 +59,24 @@ def test_none_auction_title_is_safe():
     )
     assert "Hello" in out
     assert "World" in out
+
+
+def test_public_base_url_is_html_escaped(monkeypatch):
+    """``PUBLIC_BASE_URL`` is operator-set but still env-supplied —
+    if a misconfig pushes ``"`` or ``<`` into it, the unquoted splice
+    into ``<a href="...">`` would break out of the attribute."""
+    from app.services import email as email_module
+
+    monkeypatch.setattr(
+        email_module, "PUBLIC_BASE_URL", 'http://x" onclick="alert(1)'
+    )
+
+    out = email_module.build_notification_email_html(
+        notification_type_value="auction_won",
+        title="Hello",
+        message="World",
+        auction_id=42,
+        auction_title=None,
+    )
+    assert 'onclick="alert(1)' not in out
+    assert "&quot;" in out

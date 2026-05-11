@@ -188,3 +188,32 @@ async def test_concurrent_buy_now_only_one_succeeds(
     seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
     # Seller starts at 1000, credited exactly once (+400), not twice.
     assert seller["balance"] == 1400.0
+
+
+async def test_deposit_beyond_max_balance_rejected(client, registered_user):
+    """A user firing /deposit at rate-limit ceiling could push their
+    balance past Numeric(12, 2)'s 9_999_999_999.99 max — the column
+    would overflow with an opaque DataError. Cap the visible balance
+    instead so the failure is a clean 400."""
+    from sqlalchemy import update
+
+    from app.database import SessionLocal
+    from app.models import User
+    from app.routers.balance import MAX_USER_BALANCE
+
+    # Force the account near the cap so a single deposit puts it over.
+    async with SessionLocal() as db:
+        await db.execute(
+            update(User)
+            .where(User.id == registered_user["user"]["id"])
+            .values(balance=MAX_USER_BALANCE - 100)
+        )
+        await db.commit()
+
+    r = await client.post(
+        "/api/deposit",
+        json={"amount": 200.0},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400
+    assert "Максимальный" in r.json()["detail"] or "макс" in r.json()["detail"].lower()
