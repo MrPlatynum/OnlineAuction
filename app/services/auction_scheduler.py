@@ -45,6 +45,7 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
     """
     from app.services.auctions import complete_auction
 
+    current = asyncio.current_task()
     try:
         await asyncio.sleep(_sleep_seconds(expected_end))
         async with _db_module.SessionLocal() as db:
@@ -66,12 +67,18 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
     except asyncio.CancelledError:
         raise
     finally:
-        _completion_tasks.pop(auction_id, None)
+        # Only clear the slot if it still references *this* task. After a
+        # reschedule (PATCH extend), schedule_auction has already replaced
+        # the dict entry with the new task — popping unconditionally would
+        # orphan that new task from cancel_auction / shutdown.
+        if _completion_tasks.get(auction_id) is current:
+            _completion_tasks.pop(auction_id, None)
 
 
 async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> None:
     from app.services.auctions import notify_auction_ending_soon
 
+    current = asyncio.current_task()
     try:
         await asyncio.sleep(_sleep_seconds(fire_at))
         async with _db_module.SessionLocal() as db:
@@ -98,7 +105,8 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
     except asyncio.CancelledError:
         raise
     finally:
-        _ending_soon_tasks.pop(auction_id, None)
+        if _ending_soon_tasks.get(auction_id) is current:
+            _ending_soon_tasks.pop(auction_id, None)
 
 
 def schedule_auction(auction: Auction) -> None:

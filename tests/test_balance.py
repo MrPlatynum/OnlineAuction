@@ -85,6 +85,49 @@ async def test_buy_now_own_lot_rejected(client, registered_user):
     assert response.status_code == 400
 
 
+async def test_withdraw_respects_committed_balance(client, registered_user, second_user):
+    """A user leading on an auction has those funds locked. /withdraw
+    used to ignore that and let the balance go effectively negative once
+    the auction settled — now it subtracts committed-balance up-front."""
+    auction = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Lot",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    # bob has $1000, bids $700 — committed = $700, available = $300.
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 700.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200
+
+    # Try to withdraw $500 — only $300 is actually free. Used to succeed.
+    r_blocked = await client.post(
+        "/api/withdraw",
+        json={"amount": 500.0},
+        headers=second_user["headers"],
+    )
+    assert r_blocked.status_code == 400
+    assert "удерж" in r_blocked.json()["detail"].lower()
+
+    # Withdrawing $300 (all that's free) succeeds.
+    r_ok = await client.post(
+        "/api/withdraw",
+        json={"amount": 300.0},
+        headers=second_user["headers"],
+    )
+    assert r_ok.status_code == 200, r_ok.text
+    assert r_ok.json()["balance"] == 700.0
+
+
 async def test_concurrent_deposits_all_apply(client, registered_user):
     """Two parallel /deposit calls on the same account must both apply.
     The row lock serialises the read-add-write so neither update is

@@ -87,6 +87,9 @@ async def place_bid(
     if not auction.is_active:
         raise HTTPException(status_code=400, detail="Auction is not active")
 
+    if auction.created_by == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя делать ставки на свой собственный лот")
+
     if utcnow() > auction.end_time:
         auction.is_active = False
         await db.commit()

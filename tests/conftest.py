@@ -92,3 +92,20 @@ async def second_user(client):
         "user": body["user"],
         "headers": {"Authorization": f"Bearer {body['token']}"},
     }
+
+
+@pytest_asyncio.fixture
+async def third_user(client):
+    payload = {
+        "username": "carol",
+        "email": "carol@example.com",
+        "password": "password123",
+    }
+    response = await client.post("/api/register", json=payload)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    return {
+        "token": body["token"],
+        "user": body["user"],
+        "headers": {"Authorization": f"Bearer {body['token']}"},
+    }

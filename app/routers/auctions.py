@@ -173,7 +173,12 @@ async def buy_now(
     if not auction.is_active:
         raise HTTPException(400, "Аукцион завершён")
     if utcnow() > auction.end_time:
+        # Past end_time but the scheduler tick hasn't fired yet. Mark the
+        # lot completed too — leaving is_completed=False leaves it in a
+        # half-finished state where get_committed_balance correctly drops
+        # it but completed-auction listings won't pick it up.
         auction.is_active = False
+        auction.is_completed = True
         await db.commit()
         raise HTTPException(400, "Аукцион завершён")
     if auction.auction_type != "bin":
@@ -461,9 +466,7 @@ async def delete_auction(
     db: AsyncSession = Depends(get_db),
 ):
     # Row-lock the auction so the scheduler's _wait_and_complete can't
-    # try to settle it between our checks and the commit. Cancellation
-    # happens *before* the commit too, so the in-memory task is gone by
-    # the time the row disappears.
+    # try to settle it between our checks and the commit.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()
@@ -484,9 +487,13 @@ async def delete_auction(
     if auction.is_completed and auction.winner_id:
         raise HTTPException(status_code=400, detail="Нельзя удалить лот с победителем")
 
-    cancel_auction(auction_id)
     await db.delete(auction)
     await db.commit()
+    # Cancel the in-memory scheduler tasks *after* the row is gone for
+    # good. If the commit fails (FK violation, lost connection) we still
+    # want the scheduler to settle the lot — popping its task before the
+    # commit would leave the row alive without anyone armed to complete it.
+    cancel_auction(auction_id)
     return {"message": "Лот удалён"}
 
 
