@@ -59,3 +59,41 @@ async def test_limiter_disabled_in_default_test_env(client):
         for _ in range(15)
     ]
     assert 429 not in statuses, statuses
+
+
+def test_client_key_falls_back_to_remote_address(monkeypatch):
+    """Without ``AUCTION_TRUST_PROXY`` the X-Forwarded-For header is
+    ignored — a spoofed value mustn't let a client escape its bucket
+    on a direct-internet listener."""
+    from starlette.requests import Request
+
+    from app.utils.rate_limit import _client_key
+
+    monkeypatch.delenv("AUCTION_TRUST_PROXY", raising=False)
+
+    scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"203.0.113.5")],
+        "client": ("10.0.0.1", 12345),
+    }
+    request = Request(scope)
+    assert _client_key(request) == "10.0.0.1"
+
+
+def test_client_key_uses_xff_when_proxy_trusted(monkeypatch):
+    """With ``AUCTION_TRUST_PROXY=true`` the leftmost X-Forwarded-For
+    entry wins — without this every request behind a reverse proxy
+    would share one bucket keyed on the proxy's own address."""
+    from starlette.requests import Request
+
+    from app.utils.rate_limit import _client_key
+
+    monkeypatch.setenv("AUCTION_TRUST_PROXY", "true")
+
+    scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"203.0.113.5, 10.0.0.1, 10.0.0.2")],
+        "client": ("10.0.0.1", 12345),
+    }
+    request = Request(scope)
+    assert _client_key(request) == "203.0.113.5"

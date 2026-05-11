@@ -132,3 +132,46 @@ async def test_delete_someone_elses_notification_returns_404(
         headers=registered_user["headers"],
     )
     assert r.status_code == 404
+
+
+async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
+    """notify_user gates the AUCTION_LOST email behind ``notify_lost``;
+    flipping it to False stops the fire-and-forget send. The fix
+    completes the coverage matrix — every NotificationType now has
+    its own user-pref toggle."""
+    from app.models import NotificationType, User
+    from app.services import notifications as notif_module
+
+    sent: list[tuple[str, str]] = []
+
+    def fake_send(to_email, subject, html):
+        sent.append((to_email, subject))
+
+    monkeypatch.setattr(notif_module, "_fire_and_forget_email", fake_send)
+
+    async with _db_module.SessionLocal() as db:
+        user = User(
+            username="loser",
+            email="loser@example.com",
+            hashed_password="x",
+            email_notifications=True,
+            notify_lost=True,
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+        await notif_module.notify_user(
+            db, user, NotificationType.AUCTION_LOST,
+            "Auction lost", "You lost", auction_id=None, auction_title=None,
+        )
+        assert len(sent) == 1
+
+        sent.clear()
+        user.notify_lost = False
+        await db.commit()
+        await notif_module.notify_user(
+            db, user, NotificationType.AUCTION_LOST,
+            "Auction lost", "You lost", auction_id=None, auction_title=None,
+        )
+        assert sent == []

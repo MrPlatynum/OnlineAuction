@@ -251,3 +251,80 @@ async def test_buy_now_past_end_time_marks_completed(client, registered_user, se
     refreshed = (await client.get(f"/api/auctions/{auction_id}")).json()
     assert refreshed["is_active"] is False
     assert refreshed["is_completed"] is True
+
+
+async def test_delete_own_empty_auction_succeeds(client, registered_user):
+    """Auction with no bids and no winner: the owner can delete it.
+    Cleans up the in-memory scheduler task as a side-effect."""
+    from app.services.auction_scheduler import _completion_tasks
+
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+    assert auction_id in _completion_tasks
+
+    r = await client.delete(
+        f"/api/auctions/{auction_id}", headers=registered_user["headers"]
+    )
+    assert r.status_code == 200, r.text
+    assert auction_id not in _completion_tasks
+
+    refreshed = await client.get(f"/api/auctions/{auction_id}")
+    assert refreshed.status_code == 404
+
+
+async def test_delete_others_auction_forbidden(client, registered_user, second_user):
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+
+    r = await client.delete(
+        f"/api/auctions/{auction_id}", headers=second_user["headers"]
+    )
+    assert r.status_code == 403
+
+
+async def test_delete_active_auction_with_bids_rejected(
+    client, registered_user, second_user
+):
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(starting_price=100.0),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200
+
+    r = await client.delete(
+        f"/api/auctions/{auction_id}", headers=registered_user["headers"]
+    )
+    assert r.status_code == 400
+
+
+async def test_delete_nonexistent_auction_returns_404(client, registered_user):
+    r = await client.delete(
+        "/api/auctions/99999", headers=registered_user["headers"]
+    )
+    assert r.status_code == 404
+
+
+async def test_delete_unauthenticated_rejected(client, registered_user):
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(),
+        headers=registered_user["headers"],
+    )
+    r = await client.delete(f"/api/auctions/{create.json()['id']}")
+    assert r.status_code == 401
