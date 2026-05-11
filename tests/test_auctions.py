@@ -206,3 +206,48 @@ async def test_list_auctions_paginated(client, registered_user):
     body = response.json()
     assert body["total"] == 3
     assert len(body["items"]) == 3
+
+
+async def test_buy_now_past_end_time_marks_completed(client, registered_user, second_user):
+    """If /buy-now is hit on a BIN lot whose end_time has already
+    passed (scheduler tick hasn't fired yet), the guard must mark
+    is_completed=True too — leaving it False stranded the row in a
+    half-finished state where completed-lot listings missed it."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app import database as _db_module
+    from app.models import Auction
+    from app.services.auction_scheduler import cancel_auction
+    from app.utils.time import utcnow
+
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(
+            auction_type="bin", bin_price=300.0, duration_minutes=60,
+        ),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+
+    # Cancel the scheduler task so it doesn't beat us to the punch, then
+    # backdate end_time directly in the DB to simulate "past end, tick
+    # hasn't fired".
+    cancel_auction(auction_id)
+    async with _db_module.SessionLocal() as db:
+        auc = (
+            await db.execute(select(Auction).where(Auction.id == auction_id))
+        ).scalar_one()
+        auc.end_time = utcnow() - timedelta(seconds=10)
+        await db.commit()
+
+    response = await client.post(
+        f"/api/auctions/{auction_id}/buy-now",
+        headers=second_user["headers"],
+    )
+    assert response.status_code == 400
+
+    refreshed = (await client.get(f"/api/auctions/{auction_id}")).json()
+    assert refreshed["is_active"] is False
+    assert refreshed["is_completed"] is True

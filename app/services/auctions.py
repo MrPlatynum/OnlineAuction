@@ -8,6 +8,7 @@ from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,14 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         )
     ).scalar_one_or_none()
     if not auction or not auction.is_active:
+        return
+
+    # PATCH /auctions/{id} may have extended end_time after the scheduler
+    # tick fired but before we acquired the row lock. Re-arm the tick at
+    # the new deadline and exit without settling.
+    if auction.end_time > utcnow():
+        from app.services.auction_scheduler import schedule_auction
+        schedule_auction(auction)
         return
 
     auction.is_active = False

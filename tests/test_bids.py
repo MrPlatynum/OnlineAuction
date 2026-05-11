@@ -30,6 +30,18 @@ async def test_place_bid_increases_current_price(client, registered_user, second
     assert refreshed["bids_count"] == 1
 
 
+async def test_owner_cannot_bid_on_own_auction(client, registered_user):
+    auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
+
+    response = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 200.0},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 400
+    assert "свой" in response.json()["detail"].lower()
+
+
 async def test_bid_below_current_price_rejected(client, registered_user, second_user):
     auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
 
@@ -64,7 +76,7 @@ async def test_bid_above_user_balance_rejected(client, registered_user, second_u
     assert "balance" in response.json()["detail"].lower()
 
 
-async def test_bid_outbid_replaces_leader(client, registered_user, second_user):
+async def test_bid_outbid_replaces_leader(client, registered_user, second_user, third_user):
     auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
 
     first = await client.post(
@@ -77,7 +89,7 @@ async def test_bid_outbid_replaces_leader(client, registered_user, second_user):
     second = await client.post(
         "/api/bids",
         json={"auction_id": auction["id"], "amount": 200.0},
-        headers=registered_user["headers"],
+        headers=third_user["headers"],
     )
     assert second.status_code == 200
 

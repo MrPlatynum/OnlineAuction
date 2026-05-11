@@ -63,7 +63,11 @@ async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
 
 @router.post("/upload-image")
 @limiter.limit("20/minute")
-async def upload_image(request: Request, file: UploadFile = File(...)):
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
     sanitised, ext = await _accept_image(file)
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)

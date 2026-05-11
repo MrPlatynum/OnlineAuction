@@ -86,3 +86,21 @@ async def test_unsupported_content_type_rejected(client, registered_user):
         "/api/upload-avatar", files=files, headers=registered_user["headers"]
     )
     assert r.status_code == 400, r.text
+
+
+async def test_upload_image_requires_auth(client):
+    """``/upload-image`` used to accept anonymous uploads, letting any
+    visitor consume disk + cycle through the image validator. Both
+    ``/upload-image`` and ``/upload-avatar`` now require a bearer token."""
+    files = {"file": ("test.png", _png_bytes(), "image/png")}
+    r = await client.post("/api/upload-image", files=files)
+    assert r.status_code == 401, r.text
+
+
+async def test_upload_image_authed_succeeds(client, registered_user):
+    files = {"file": ("test.png", _png_bytes(), "image/png")}
+    r = await client.post(
+        "/api/upload-image", files=files, headers=registered_user["headers"]
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["image_url"].startswith("/static/uploads/")

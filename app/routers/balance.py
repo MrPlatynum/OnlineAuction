@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
-from app.services.balance import lock_users_by_id
+from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.transactions import add_transaction
 from app.utils.money import money_to_float, to_decimal
 from app.utils.rate_limit import limiter
@@ -46,8 +46,19 @@ async def withdraw(
 ):
     amount = to_decimal(data.amount)
     await lock_users_by_id(db, current_user.id)
-    if current_user.balance < amount:
-        raise HTTPException(400, detail=f"Недостаточно средств. Доступно: ${current_user.balance:.2f}")
+    # Subtract what's locked up as the current leader of active auctions —
+    # otherwise a user could withdraw their balance while top-bidding on
+    # lots, leaving us unable to debit them at completion time.
+    committed = await get_committed_balance(db, current_user.id)
+    available = current_user.balance - committed
+    if available < amount:
+        raise HTTPException(
+            400,
+            detail=(
+                f"Недостаточно средств. Доступно: ${available:.2f} "
+                f"(${committed:.2f} удерживается на активных аукционах)."
+            ),
+        )
     current_user.balance = round(current_user.balance - amount, 2)
     add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
     await db.commit()
