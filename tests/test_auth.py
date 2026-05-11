@@ -149,6 +149,36 @@ async def test_change_password_invalidates_old_jwt(client, registered_user):
     assert me_new.status_code == 200
 
 
+async def test_change_password_closes_open_ws_notifications(client, registered_user):
+    """/ws/notifications validates token_version only at handshake. After
+    /change-password bumps the version, any already-open socket — including
+    one authenticated with a leaked token — must be closed so it stops
+    receiving pushes."""
+    from app.services.websocket_manager import manager
+
+    class _StubWS:
+        def __init__(self):
+            self.closed_with: int | None = None
+
+        async def close(self, code: int = 1000):
+            self.closed_with = code
+
+    stub_a, stub_b = _StubWS(), _StubWS()
+    user_id = registered_user["user"]["id"]
+    manager.user_connections[user_id] = [stub_a, stub_b]
+
+    r = await client.put(
+        "/api/change-password",
+        json={"current_password": registered_user["password"], "new_password": "newpass456"},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+
+    assert stub_a.closed_with == 1008
+    assert stub_b.closed_with == 1008
+    assert user_id not in manager.user_connections
+
+
 async def test_login_unknown_user_consumes_verify_time(client, registered_user, monkeypatch):
     """Unknown usernames used to short-circuit before verify_password,
     leaking 'user-exists' via response timing. The handler must now run

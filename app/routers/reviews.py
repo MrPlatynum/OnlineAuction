@@ -99,32 +99,35 @@ async def create_review(
     if not seller:
         raise HTTPException(404, "Продавец не найден")
 
-    # Reviewer must have actually transacted with this seller — won a
-    # completed auction or bought via /buy-now (both set winner_id).
-    # Without this, reviews can be spammed at any seller.
-    qualifying_q = select(Auction.id).where(
-        Auction.created_by == data.seller_id,
-        Auction.winner_id == current_user.id,
-        Auction.is_completed == True,
-    )
-    if data.auction_id:
-        qualifying_q = qualifying_q.where(Auction.id == data.auction_id)
-    if not (await db.execute(qualifying_q.limit(1))).scalar_one_or_none():
+    # Reviewer must have actually transacted with this seller — won the
+    # referenced completed auction (the only way Auction.winner_id is set
+    # is through complete_auction or /buy-now). Without this gate, anyone
+    # can post a review on any seller.
+    qualifying = (
+        await db.execute(
+            select(Auction.id).where(
+                Auction.id == data.auction_id,
+                Auction.created_by == data.seller_id,
+                Auction.winner_id == current_user.id,
+                Auction.is_completed == True,
+            ).limit(1)
+        )
+    ).scalar_one_or_none()
+    if not qualifying:
         raise HTTPException(
             403, "Можно оставить отзыв только продавцу, у которого вы что-то выиграли"
         )
 
-    if data.auction_id:
-        exists = (
-            await db.execute(
-                select(Review).where(
-                    Review.reviewer_id == current_user.id,
-                    Review.auction_id == data.auction_id,
-                )
+    exists = (
+        await db.execute(
+            select(Review).where(
+                Review.reviewer_id == current_user.id,
+                Review.auction_id == data.auction_id,
             )
-        ).scalar_one_or_none()
-        if exists:
-            raise HTTPException(400, "Вы уже оставили отзыв на этот аукцион")
+        )
+    ).scalar_one_or_none()
+    if exists:
+        raise HTTPException(400, "Вы уже оставили отзыв на этот аукцион")
     review = Review(
         seller_id=data.seller_id,
         reviewer_id=current_user.id,

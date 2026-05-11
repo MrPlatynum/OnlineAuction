@@ -44,9 +44,22 @@ async def test_create_review_for_seller(client, registered_user, second_user):
 async def test_review_without_purchase_rejected(
     client, registered_user, second_user
 ):
-    """Second user has never won anything from registered_user — must 403."""
+    """Second user has never won anything from registered_user — must 403
+    even when a real auction id is supplied."""
+    auction_id = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Untouched lot",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )).json()["id"]
     payload = {
         "seller_id": registered_user["user"]["id"],
+        "auction_id": auction_id,
         "rating": 5,
     }
     r = await client.post("/api/reviews", json=payload, headers=second_user["headers"])
@@ -54,7 +67,11 @@ async def test_review_without_purchase_rejected(
 
 
 async def test_review_on_self_rejected(client, registered_user):
-    payload = {"seller_id": registered_user["user"]["id"], "rating": 5}
+    payload = {
+        "seller_id": registered_user["user"]["id"],
+        "auction_id": 1,
+        "rating": 5,
+    }
     r = await client.post("/api/reviews", json=payload, headers=registered_user["headers"])
     assert r.status_code == 400
 
@@ -62,10 +79,25 @@ async def test_review_on_self_rejected(client, registered_user):
 async def test_review_on_unknown_seller_returns_404(client, second_user):
     r = await client.post(
         "/api/reviews",
-        json={"seller_id": 999_999, "rating": 4},
+        json={"seller_id": 999_999, "auction_id": 1, "rating": 4},
         headers=second_user["headers"],
     )
     assert r.status_code == 404
+
+
+async def test_review_without_auction_id_is_422(
+    client, registered_user, second_user
+):
+    """auction_id is required: omitting it must fail at Pydantic — the
+    field used to be optional, which let one reviewer post unlimited
+    reviews on the same seller (the (reviewer_id, auction_id) UNIQUE
+    constraint treats NULLs as distinct in Postgres)."""
+    r = await client.post(
+        "/api/reviews",
+        json={"seller_id": registered_user["user"]["id"], "rating": 5},
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 422
 
 
 async def test_rating_outside_1_5_rejected(client, registered_user, second_user):
@@ -74,7 +106,7 @@ async def test_rating_outside_1_5_rejected(client, registered_user, second_user)
     for bad in (0, 6, 99):
         r = await client.post(
             "/api/reviews",
-            json={"seller_id": registered_user["user"]["id"], "rating": bad},
+            json={"seller_id": registered_user["user"]["id"], "auction_id": 1, "rating": bad},
             headers=second_user["headers"],
         )
         assert r.status_code == 422, bad

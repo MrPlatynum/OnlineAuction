@@ -8,6 +8,7 @@ public API enforces ``duration_minutes >= 1``).
 import asyncio
 from datetime import timedelta
 
+import pytest
 from sqlalchemy import select
 
 from app import database as _db_module
@@ -104,6 +105,59 @@ async def test_complete_auction_skips_when_end_time_extended(registered_user):
             assert refreshed.is_completed is False
     finally:
         cancel_auction(auction.id)
+
+
+async def test_complete_auction_commits_money_before_notifying(
+    client, registered_user, second_user, monkeypatch
+):
+    """notify_user → create_notification used to commit the session
+    mid-completion, so a raise during the second notify left only a
+    partial set of notifications. Worse, if the *first* notify raised
+    before its own commit the entire financial state (balances,
+    transactions, is_completed) was rolled back. After the refactor
+    notifications run only after a single final commit — even if every
+    one of them blows up, the money has already moved."""
+    from datetime import timedelta
+
+    from app.models import Bid, User
+    from app.services import auctions as auctions_service
+    from app.services.auctions import complete_auction
+
+    auction = await _seed_auction(
+        registered_user["user"]["id"], end_in_seconds=300
+    )
+    async with _db_module.SessionLocal() as db:
+        db.add(Bid(amount=250, user_id=second_user["user"]["id"], auction_id=auction.id))
+        auc = (await db.execute(select(Auction).where(Auction.id == auction.id))).scalar_one()
+        auc.current_price = 250
+        auc.end_time = utcnow() - timedelta(seconds=10)
+        await db.commit()
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("notification dispatch failed")
+
+    monkeypatch.setattr(auctions_service, "notify_user", boom)
+
+    with pytest.raises(RuntimeError):
+        async with _db_module.SessionLocal() as db:
+            await complete_auction(auction.id, db)
+
+    async with _db_module.SessionLocal() as db:
+        settled = (
+            await db.execute(select(Auction).where(Auction.id == auction.id))
+        ).scalar_one()
+        assert settled.is_active is False
+        assert settled.is_completed is True
+        assert settled.winner_id == second_user["user"]["id"]
+
+        bidder = (
+            await db.execute(select(User).where(User.id == second_user["user"]["id"]))
+        ).scalar_one()
+        seller = (
+            await db.execute(select(User).where(User.id == registered_user["user"]["id"]))
+        ).scalar_one()
+        assert bidder.balance == 1000 - 250
+        assert seller.balance == 1000 + 250
 
 
 async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
