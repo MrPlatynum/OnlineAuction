@@ -208,14 +208,70 @@ async def test_list_auctions_paginated(client, registered_user):
     assert len(body["items"]) == 3
 
 
+async def test_bin_lot_seeds_current_price_from_bin_price(client, registered_user):
+    """A BIN listing is a fixed-price sale: starting_price is meaningless.
+    Whatever the form submits as starting_price, the server must seed
+    current_price from bin_price — otherwise the listing card shows one
+    number ($100) and /buy-now charges another ($300)."""
+    listing = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Fixed-price seed test",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": 300.0,
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    assert listing["starting_price"] == 300.0
+    assert listing["current_price"] == 300.0
+    assert listing["bin_price"] == 300.0
+
+
+async def test_update_bin_price_syncs_current_price(client, registered_user):
+    """PATCH bin_price on a BIN listing must drag current_price along —
+    otherwise the listing card still shows the old number while
+    /buy-now charges the new one (and `auction.current_price` is the
+    figure the listing renders)."""
+    listing = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Fixed-price update test",
+            "description": "...",
+            "starting_price": 200.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": 200.0,
+        },
+        headers=registered_user["headers"],
+    )).json()
+    assert listing["current_price"] == 200.0
+
+    r = await client.patch(
+        f"/api/auctions/{listing['id']}",
+        json={"bin_price": 450.0},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+
+    refreshed = (await client.get(f"/api/auctions/{listing['id']}")).json()
+    assert refreshed["bin_price"] == 450.0
+    assert refreshed["current_price"] == 450.0
+    assert refreshed["starting_price"] == 450.0
+
+
 async def test_buy_now_past_end_time_defers_to_scheduler(
-    client, registered_user, second_user, third_user
+    client, registered_user, second_user
 ):
     """A /buy-now arriving after end_time but before the scheduler tick
     must reject (400) without mutating auction state. complete_auction
     is the single path that finalises a lot — flipping is_active or
-    is_completed from the handler short-circuits its later tick and
-    strands any existing bidders with no payout."""
+    is_completed from the handler short-circuits its later tick. BIN
+    lots reject bids (fixed-price), so the test exercises the empty-lot
+    case where the scheduler should still close the listing cleanly."""
     from datetime import timedelta
 
     from sqlalchemy import select
@@ -235,13 +291,6 @@ async def test_buy_now_past_end_time_defers_to_scheduler(
     )
     auction_id = create.json()["id"]
 
-    bid = await client.post(
-        "/api/bids",
-        json={"auction_id": auction_id, "amount": 150.0},
-        headers=second_user["headers"],
-    )
-    assert bid.status_code == 200, bid.text
-
     cancel_auction(auction_id)
     async with _db_module.SessionLocal() as db:
         auc = (
@@ -252,7 +301,7 @@ async def test_buy_now_past_end_time_defers_to_scheduler(
 
     response = await client.post(
         f"/api/auctions/{auction_id}/buy-now",
-        headers=third_user["headers"],
+        headers=second_user["headers"],
     )
     assert response.status_code == 400
 
@@ -267,12 +316,7 @@ async def test_buy_now_past_end_time_defers_to_scheduler(
     settled = (await client.get(f"/api/auctions/{auction_id}")).json()
     assert settled["is_active"] is False
     assert settled["is_completed"] is True
-    assert settled["winner_id"] == second_user["user"]["id"]
-
-    bidder = (await client.get("/api/me", headers=second_user["headers"])).json()
-    seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
-    assert bidder["balance"] == 1000.0 - 150.0
-    assert seller["balance"] == 1000.0 + 150.0
+    assert settled["winner_id"] is None
 
 
 async def test_late_bid_past_end_time_defers_to_scheduler(
