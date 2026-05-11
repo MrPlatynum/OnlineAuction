@@ -173,13 +173,11 @@ async def buy_now(
     if not auction.is_active:
         raise HTTPException(400, "Аукцион завершён")
     if utcnow() > auction.end_time:
-        # Past end_time but the scheduler tick hasn't fired yet. Mark the
-        # lot completed too — leaving is_completed=False leaves it in a
-        # half-finished state where get_committed_balance correctly drops
-        # it but completed-auction listings won't pick it up.
-        auction.is_active = False
-        auction.is_completed = True
-        await db.commit()
+        # Don't flip is_active / is_completed here. complete_auction is the
+        # single path that finalises a lot (winner_id + balance transfer +
+        # notifications); writing terminal flags from a request handler
+        # short-circuits the scheduler's later tick and strands the lot
+        # with no payout for any bidders already on it.
         raise HTTPException(400, "Аукцион завершён")
     if auction.auction_type != "bin":
         raise HTTPException(400, "Этот аукцион не поддерживает покупку сразу")
