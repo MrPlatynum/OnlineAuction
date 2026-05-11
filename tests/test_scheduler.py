@@ -6,7 +6,10 @@ public API enforces ``duration_minutes >= 1``).
 """
 
 import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
+from typing import Union
 
 import pytest
 from sqlalchemy import select
@@ -19,6 +22,30 @@ from app.services.auction_scheduler import (
     schedule_auction,
 )
 from app.utils.time import utcnow
+
+
+async def _wait_until(
+    predicate: Callable[[], Union[bool, Awaitable[bool]]],
+    *,
+    timeout: float = 5.0,
+    interval: float = 0.05,
+) -> None:
+    """Poll ``predicate`` until it returns truthy or timeout elapses.
+
+    Replaces hand-tuned ``asyncio.sleep(N)`` calls that gambled the
+    test against the scheduler's tick latency. Under CI load N was
+    often too small and the test flaked; under-loaded local runs
+    wasted time.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        result = predicate()
+        if asyncio.iscoroutine(result):
+            result = await result
+        if result:
+            return
+        await asyncio.sleep(interval)
+    raise AssertionError(f"condition not met within {timeout}s")
 
 
 async def _seed_auction(creator_id: int, end_in_seconds: float) -> Auction:
@@ -73,18 +100,19 @@ async def test_reschedule_replaces_existing_task(registered_user):
 
 
 async def test_auction_completes_when_end_time_passes(registered_user):
-    """End-to-end: schedule an auction ending in ~0.3s, wait, verify the
-    DB row was settled by the scheduler with no polling involved."""
+    """End-to-end: schedule an auction ending in ~0.3s, poll until the
+    scheduler tick settles the DB row."""
     auction = await _seed_auction(registered_user["user"]["id"], end_in_seconds=0.3)
     schedule_auction(auction)
-    await asyncio.sleep(0.8)
 
-    async with _db_module.SessionLocal() as db:
-        refreshed = (
-            await db.execute(select(Auction).where(Auction.id == auction.id))
-        ).scalar_one()
-        assert refreshed.is_active is False
-        assert refreshed.is_completed is True
+    async def settled() -> bool:
+        async with _db_module.SessionLocal() as db:
+            row = (
+                await db.execute(select(Auction).where(Auction.id == auction.id))
+            ).scalar_one()
+            return not row.is_active and row.is_completed
+
+    await _wait_until(settled, timeout=5.0)
 
 
 async def test_complete_auction_skips_when_end_time_extended(registered_user):
@@ -167,13 +195,13 @@ async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
     entry, because schedule_auction has already replaced it with the new
     task. Without the identity check the new task would be orphaned from
     cancel_auction / shutdown."""
-    # End_time wide enough that the test can commit the extension before
-    # the original tick fires (asyncio sleep granularity + DB round-trip).
-    auction = await _seed_auction(registered_user["user"]["id"], end_in_seconds=1.5)
+    # Short fuse so the original task fires soon after we commit the
+    # extension. The DB roundtrip takes single-digit ms, well under the
+    # tick deadline.
+    auction = await _seed_auction(registered_user["user"]["id"], end_in_seconds=0.5)
     schedule_auction(auction)
     first_task = _completion_tasks[auction.id]
 
-    await asyncio.sleep(0.3)
     async with _db_module.SessionLocal() as db:
         auc = (
             await db.execute(select(Auction).where(Auction.id == auction.id))
@@ -181,11 +209,12 @@ async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
         auc.end_time = auc.end_time + timedelta(seconds=300)
         await db.commit()
 
-    # Sleep past the original deadline so the first tick fires, sees the
-    # extended end_time, calls schedule_auction, and exits via finally.
-    await asyncio.sleep(1.6)
+    def replaced() -> bool:
+        current = _completion_tasks.get(auction.id)
+        return current is not None and current is not first_task
 
-    assert auction.id in _completion_tasks
+    await _wait_until(replaced, timeout=5.0)
+
     new_task = _completion_tasks[auction.id]
     assert new_task is not first_task
     assert not new_task.done()

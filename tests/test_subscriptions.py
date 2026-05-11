@@ -24,6 +24,17 @@ async def test_subscribe_to_self_rejected(client, registered_user):
     assert r.status_code == 400
 
 
+async def test_subscribe_to_nonexistent_seller_returns_404(client, second_user):
+    """Without the existence pre-check, the FK violation on insert used
+    to bubble out as a generic 500 — a confusing internal-error response
+    to what is just a stale link."""
+    r = await client.post(
+        "/api/sellers/999999/subscribe",
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 404
+
+
 async def test_duplicate_subscribe_rejected(client, registered_user, second_user):
     seller_id = registered_user["user"]["id"]
     r1 = await client.post(
