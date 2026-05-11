@@ -91,8 +91,10 @@ async def place_bid(
         raise HTTPException(status_code=400, detail="Нельзя делать ставки на свой собственный лот")
 
     if utcnow() > auction.end_time:
-        auction.is_active = False
-        await db.commit()
+        # Don't flip is_active here. complete_auction is the single path
+        # that finalises a lot (winner_id + balance transfer + notifications);
+        # writing is_active=False from a request handler short-circuits the
+        # scheduler's later tick and strands the lot with no payout.
         raise HTTPException(status_code=400, detail="Auction has ended")
 
     if bid_amount <= auction.current_price:

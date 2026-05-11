@@ -208,11 +208,14 @@ async def test_list_auctions_paginated(client, registered_user):
     assert len(body["items"]) == 3
 
 
-async def test_buy_now_past_end_time_marks_completed(client, registered_user, second_user):
-    """If /buy-now is hit on a BIN lot whose end_time has already
-    passed (scheduler tick hasn't fired yet), the guard must mark
-    is_completed=True too — leaving it False stranded the row in a
-    half-finished state where completed-lot listings missed it."""
+async def test_buy_now_past_end_time_defers_to_scheduler(
+    client, registered_user, second_user, third_user
+):
+    """A /buy-now arriving after end_time but before the scheduler tick
+    must reject (400) without mutating auction state. complete_auction
+    is the single path that finalises a lot — flipping is_active or
+    is_completed from the handler short-circuits its later tick and
+    strands any existing bidders with no payout."""
     from datetime import timedelta
 
     from sqlalchemy import select
@@ -220,6 +223,7 @@ async def test_buy_now_past_end_time_marks_completed(client, registered_user, se
     from app import database as _db_module
     from app.models import Auction
     from app.services.auction_scheduler import cancel_auction
+    from app.services.auctions import complete_auction
     from app.utils.time import utcnow
 
     create = await client.post(
@@ -231,9 +235,13 @@ async def test_buy_now_past_end_time_marks_completed(client, registered_user, se
     )
     auction_id = create.json()["id"]
 
-    # Cancel the scheduler task so it doesn't beat us to the punch, then
-    # backdate end_time directly in the DB to simulate "past end, tick
-    # hasn't fired".
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200, bid.text
+
     cancel_auction(auction_id)
     async with _db_module.SessionLocal() as db:
         auc = (
@@ -244,13 +252,93 @@ async def test_buy_now_past_end_time_marks_completed(client, registered_user, se
 
     response = await client.post(
         f"/api/auctions/{auction_id}/buy-now",
-        headers=second_user["headers"],
+        headers=third_user["headers"],
     )
     assert response.status_code == 400
 
     refreshed = (await client.get(f"/api/auctions/{auction_id}")).json()
-    assert refreshed["is_active"] is False
-    assert refreshed["is_completed"] is True
+    assert refreshed["is_active"] is True
+    assert refreshed["is_completed"] is False
+    assert refreshed["winner_id"] is None
+
+    async with _db_module.SessionLocal() as db:
+        await complete_auction(auction_id, db)
+
+    settled = (await client.get(f"/api/auctions/{auction_id}")).json()
+    assert settled["is_active"] is False
+    assert settled["is_completed"] is True
+    assert settled["winner_id"] == second_user["user"]["id"]
+
+    bidder = (await client.get("/api/me", headers=second_user["headers"])).json()
+    seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
+    assert bidder["balance"] == 1000.0 - 150.0
+    assert seller["balance"] == 1000.0 + 150.0
+
+
+async def test_late_bid_past_end_time_defers_to_scheduler(
+    client, registered_user, second_user, third_user
+):
+    """A /api/bids arriving after end_time but before the scheduler tick
+    must reject (400) without mutating auction state. Previously the
+    handler set is_active=False here, which then made complete_auction's
+    own is_active guard skip the lot — stranding the leading bidder
+    with no payout."""
+    from datetime import timedelta
+
+    from sqlalchemy import select
+
+    from app import database as _db_module
+    from app.models import Auction
+    from app.services.auction_scheduler import cancel_auction
+    from app.services.auctions import complete_auction
+    from app.utils.time import utcnow
+
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(starting_price=100.0, duration_minutes=60),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+
+    leader_bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 250.0},
+        headers=second_user["headers"],
+    )
+    assert leader_bid.status_code == 200, leader_bid.text
+
+    cancel_auction(auction_id)
+    async with _db_module.SessionLocal() as db:
+        auc = (
+            await db.execute(select(Auction).where(Auction.id == auction_id))
+        ).scalar_one()
+        auc.end_time = utcnow() - timedelta(seconds=10)
+        await db.commit()
+
+    late = await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 300.0},
+        headers=third_user["headers"],
+    )
+    assert late.status_code == 400
+
+    refreshed = (await client.get(f"/api/auctions/{auction_id}")).json()
+    assert refreshed["is_active"] is True
+    assert refreshed["is_completed"] is False
+
+    async with _db_module.SessionLocal() as db:
+        await complete_auction(auction_id, db)
+
+    settled = (await client.get(f"/api/auctions/{auction_id}")).json()
+    assert settled["is_active"] is False
+    assert settled["is_completed"] is True
+    assert settled["winner_id"] == second_user["user"]["id"]
+    assert settled["current_price"] == 250.0
+
+    bidder = (await client.get("/api/me", headers=second_user["headers"])).json()
+    seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
+    assert bidder["balance"] == 1000.0 - 250.0
+    assert seller["balance"] == 1000.0 + 250.0
 
 
 async def test_delete_own_empty_auction_succeeds(client, registered_user):
