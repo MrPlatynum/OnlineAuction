@@ -35,11 +35,15 @@ from app.services.migrations import seed_categories  # noqa: E402
 
 @pytest_asyncio.fixture(autouse=True)
 async def reset_db():
-    """Recreate the engine + schema on the current event loop before
-    each test. asyncpg pools connections per-loop, and pytest-asyncio
-    spawns a fresh loop per function — so we discard everything between
-    tests to avoid 'Future attached to a different loop' / 'Event loop
-    is closed' errors."""
+    """Recreate the engine + schema before each test.
+
+    The event loop is shared across the session (``asyncio_default_*_loop_scope =
+    session`` in ``pytest.ini``) — asyncpg's pool bindings hate being
+    torn down per-test, so we keep one loop alive. Test isolation
+    comes from this fixture instead: new engine + ``drop_all`` +
+    ``create_all`` between every test, so module-level state (e.g.
+    SQLAlchemy's connection pool, identity maps) starts fresh for each
+    function."""
     engine = create_async_engine(os.environ["DATABASE_URL"], poolclass=NullPool)
     _db_module.engine = engine
     _db_module.SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)

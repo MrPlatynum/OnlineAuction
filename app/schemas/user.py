@@ -29,6 +29,7 @@ class UserResponse(BaseModel):
     notify_ending: bool = True
     notify_sold: bool = True
     notify_bid_received: bool = True
+    notify_lost: bool = True
 
 
 class NotificationSettings(BaseModel):
@@ -38,6 +39,7 @@ class NotificationSettings(BaseModel):
     notify_ending: bool
     notify_sold: bool
     notify_bid_received: bool = True
+    notify_lost: bool = True
 
 
 class ChangePasswordRequest(BaseModel):

@@ -85,3 +85,50 @@ async def test_notification_settings_require_auth(client):
     )
     # No bearer token → HTTPBearer dependency rejects with 403.
     assert r.status_code in (401, 403)
+
+
+async def test_update_notification_settings(client, registered_user):
+    """PUT /notification-settings writes every flag through. The row's
+    ``notify_lost`` was added in this PR; defaults to True, so the
+    response body reflects the *post-update* state."""
+    payload = {
+        "email_notifications": False,
+        "notify_outbid": False,
+        "notify_winning": True,
+        "notify_ending": False,
+        "notify_sold": True,
+        "notify_bid_received": False,
+        "notify_lost": False,
+    }
+    r = await client.put(
+        "/api/notification-settings",
+        json=payload,
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+
+    me = (await client.get("/api/me", headers=registered_user["headers"])).json()
+    for key, value in payload.items():
+        assert me[key] is value, f"{key}: expected {value}, got {me[key]}"
+
+
+async def test_update_notification_settings_requires_auth(client):
+    r = await client.put(
+        "/api/notification-settings",
+        json={
+            "email_notifications": True,
+            "notify_outbid": True,
+            "notify_winning": True,
+            "notify_ending": True,
+            "notify_sold": True,
+        },
+    )
+    assert r.status_code == 401
+
+
+async def test_notify_lost_defaults_true_for_existing_users(client, registered_user):
+    """Migration backfills server_default=true, so users created via
+    /register before AND after this PR have notify_lost=True at first
+    look — keeps existing /me consumers stable."""
+    me = (await client.get("/api/me", headers=registered_user["headers"])).json()
+    assert me["notify_lost"] is True

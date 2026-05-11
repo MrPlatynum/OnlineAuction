@@ -22,6 +22,7 @@ async def update_notification_settings(
     current_user.notify_ending = settings.notify_ending
     current_user.notify_sold = settings.notify_sold
     current_user.notify_bid_received = settings.notify_bid_received
+    current_user.notify_lost = settings.notify_lost
 
     await db.commit()
     return {"message": "Settings updated successfully"}

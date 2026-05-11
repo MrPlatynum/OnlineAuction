@@ -26,6 +26,7 @@ class User(Base):
     notify_ending = Column(Boolean, default=True, nullable=False)
     notify_sold = Column(Boolean, default=True, nullable=False)
     notify_bid_received = Column(Boolean, default=True, nullable=False)
+    notify_lost = Column(Boolean, default=True, nullable=False)
 
     bids = relationship("Bid", back_populates="user")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
