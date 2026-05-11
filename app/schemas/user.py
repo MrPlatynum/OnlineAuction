@@ -12,7 +12,11 @@ class UserCreate(BaseModel):
 
 class UserLogin(BaseModel):
     username: str
-    password: str
+    # Match UserCreate / ChangePasswordRequest. Without an explicit cap a
+    # multi-MB JSON body would parse before verify_password's internal
+    # limit kicked in; 128 chars is well above NIST's recommended minimum
+    # and what most major sites accept (AWS, Stripe, etc.).
+    password: str = Field(max_length=128)
 
 
 class UserResponse(BaseModel):

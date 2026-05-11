@@ -94,6 +94,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
     if is_modern_password_hash(hashed_password):
         return pwd_context.verify(plain_password, hashed_password)
+    # Legacy SHA256 verification is microsecond-fast; without this argon2
+    # warmup on the dummy hash a /login against a legacy account would
+    # return in µs while a modern-account login takes ~50 ms (argon2)
+    # and an unknown-user login takes ~50 ms (consume_password_verify_time).
+    # The timing split distinguishes "legacy", "modern", and "no such
+    # user" branches over the wire.
+    pwd_context.verify(plain_password, _dummy_password_hash())
     keys_to_check = [SECRET_KEY, *LEGACY_PASSWORD_KEYS]
     for key in keys_to_check:
         legacy_hash = hashlib.sha256((plain_password + key).encode()).hexdigest()

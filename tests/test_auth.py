@@ -49,6 +49,18 @@ async def test_login_with_wrong_password_returns_401(client, registered_user):
     assert response.status_code == 401
 
 
+async def test_login_oversized_password_rejected_at_schema(client, registered_user):
+    """UserLogin.password caps at 128 chars (matches UserCreate /
+    ChangePasswordRequest). Without this, /login would parse a multi-MB
+    JSON body before verify_password's internal byte-limit kicked in —
+    pointless CPU and memory for a request that can't possibly succeed."""
+    response = await client.post("/api/login", json={
+        "username": registered_user["user"]["username"],
+        "password": "x" * 129,
+    })
+    assert response.status_code == 422
+
+
 async def test_me_returns_current_user(client, registered_user):
     response = await client.get("/api/me", headers=registered_user["headers"])
     assert response.status_code == 200
