@@ -11,6 +11,7 @@ from app.schemas import (
     UserLogin,
     UserResponse,
 )
+from app.services.websocket_manager import manager
 from app.utils.rate_limit import limiter
 from app.utils.security import (
     consume_password_verify_time,
@@ -112,5 +113,17 @@ async def change_password(
     # of the very session they used to change the password.
     current_user.token_version = (current_user.token_version or 0) + 1
     await db.commit()
+
+    # /ws/notifications verifies token_version only at handshake; without
+    # closing existing sockets, a leaked-token connection keeps receiving
+    # pushes long after the legitimate user rotates their credentials.
+    stale_sockets = list(manager.user_connections.get(current_user.id, []))
+    for ws in stale_sockets:
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+        manager.disconnect_user(ws, current_user.id)
+
     new_token = create_user_access_token(current_user)
     return {"message": "Пароль успешно изменён", "token": new_token}

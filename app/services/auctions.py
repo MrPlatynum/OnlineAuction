@@ -81,6 +81,13 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         )
     ).scalar_one_or_none()
 
+    # Buffer notification work. notify_user → create_notification commits
+    # the session, so dispatching mid-completion would prematurely commit
+    # the financial state and then a later raise (SMTP failure, network
+    # blip on the second WS push) would leave only a partial set of
+    # notifications behind.
+    pending_notifications: list[tuple[User, NotificationType, str, str]] = []
+
     if last_bid:
         auction.winner_id = last_bid.user_id
         locked_users = await lock_users_by_id(
@@ -116,29 +123,32 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 continue
 
             if user_id == last_bid.user_id:
-                await notify_user(
-                    db, user, NotificationType.AUCTION_WON,
+                pending_notifications.append((
+                    user, NotificationType.AUCTION_WON,
                     "🎉 Поздравляем! Вы выиграли аукцион!",
                     f"Вы выиграли лот за ${last_bid.amount:.2f}. Средства списаны с вашего баланса.",
-                    auction.id, auction.title, manager,
-                )
+                ))
             else:
-                await notify_user(
-                    db, user, NotificationType.AUCTION_LOST,
+                pending_notifications.append((
+                    user, NotificationType.AUCTION_LOST,
                     "Аукцион завершён",
                     f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner.username}.",
-                    auction.id, auction.title, manager,
-                )
+                ))
 
         if creator and creator.id != last_bid.user_id:
-            await notify_user(
-                db, creator, NotificationType.AUCTION_SOLD,
+            pending_notifications.append((
+                creator, NotificationType.AUCTION_SOLD,
                 "💰 Ваш лот продан!",
                 f"Лот продан за ${last_bid.amount:.2f}. Средства зачислены на ваш баланс.",
-                auction.id, auction.title, manager,
-            )
+            ))
 
     await db.commit()
+
+    for user, notif_type, title, message in pending_notifications:
+        await notify_user(
+            db, user, notif_type, title, message,
+            auction.id, auction.title, manager,
+        )
 
     await manager.broadcast({
         "type": "auction_ended",
