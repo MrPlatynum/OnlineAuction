@@ -40,6 +40,32 @@ security = HTTPBearer()
 # spend our CPU on argon2/bcrypt verification.
 PASSWORD_INPUT_LIMIT = 1024
 
+# Precomputed argon2id hash of a constant string used to keep /login
+# timing stable when the supplied username doesn't exist. Without this
+# the handler short-circuits before verify_password and "user-doesn't-
+# exist" returns in microseconds while a real-but-wrong password takes
+# ~50 ms — trivial to distinguish over the network. We verify against
+# this hash instead so both branches spend the same CPU. Hash is
+# evaluated lazily on first /login so the import-time cost stays zero.
+_DUMMY_HASH: str | None = None
+
+
+def _dummy_password_hash() -> str:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = pwd_context.hash("timing-stability-dummy")
+    return _DUMMY_HASH
+
+
+def consume_password_verify_time(password: str) -> None:
+    """Run the password verifier against a precomputed dummy hash and
+    discard the result. Used by /login when the username doesn't exist
+    so the response time matches the user-exists-but-wrong-password
+    branch."""
+    if len(password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
+        return
+    pwd_context.verify(password, _dummy_password_hash())
+
 
 def hash_password(password: str) -> str:
     if len(password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
@@ -83,6 +109,13 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def create_user_access_token(user: "User") -> str:
+    """Issue a token bound to the user's current ``token_version``.
+    A future bump (e.g. /change-password) invalidates this token at
+    get_current_user even though it hasn't expired yet."""
+    return create_access_token({"user_id": user.id, "tv": user.token_version})
+
+
 def decode_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -105,4 +138,12 @@ async def get_current_user(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Tokens issued before a password change carry the old token_version
+    # and must be rejected. Old tokens missing the claim default to 0,
+    # which matches the column default — so pre-migration tokens stay
+    # valid for their original 24 h lifetime instead of every existing
+    # user being kicked the moment this PR ships.
+    token_version = payload.get("tv", 0)
+    if token_version != user.token_version:
+        raise HTTPException(status_code=401, detail="Token invalidated")
     return user

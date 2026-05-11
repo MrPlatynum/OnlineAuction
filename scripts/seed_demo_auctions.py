@@ -9,8 +9,10 @@ spread across categories with varied prices, end times, and a mix of
 BID/BIN types.
 
 Idempotent on the user; auctions are appended every run. Refuses to
-run unless ``ENV in {dev, test}`` — the historical hardcoded ``demo``
-password risked planting a trivial account on a misconfigured prod.
+run unless ``AUCTION_ENV in {dev, test, local}`` — the historical
+hardcoded ``demo`` password risked planting a trivial account on a
+misconfigured prod. ``AUCTION_ENV`` is the project-scoped name; bare
+``ENV`` was too generic and clashed with cloud-provider conventions.
 """
 from __future__ import annotations
 
@@ -132,11 +134,11 @@ async def seed():
 
 
 if __name__ == "__main__":
-    env = os.getenv("ENV", "").lower()
+    env = os.getenv("AUCTION_ENV", "").lower()
     if env not in {"dev", "test", "local"}:
         sys.exit(
-            "Refusing to run: set ENV=dev (or test/local) to confirm this is "
-            "not a production database. Demo seeding plants a privileged "
-            "account and 25 active auctions.",
+            "Refusing to run: set AUCTION_ENV=dev (or test/local) to confirm "
+            "this is not a production database. Demo seeding plants a "
+            "privileged account and 25 active auctions.",
         )
     asyncio.run(seed())

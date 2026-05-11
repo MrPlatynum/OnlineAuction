@@ -11,6 +11,10 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    # Bumped by /change-password (and any future invalidation event) so
+    # tokens issued before the bump fail at /me / get_current_user. JWT
+    # carries the value as a ``tv`` claim; mismatch → 401.
+    token_version = Column(Integer, default=0, nullable=False)
     balance = Column(Numeric(12, 2), default=1000.0, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 

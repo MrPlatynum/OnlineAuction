@@ -65,11 +65,16 @@ def build_notification_email_html(
     message = html.escape(message or "")
     auction_title = html.escape(auction_title) if auction_title else None
     type_label = html.escape(notification_type_value.replace("_", " "))
+    # PUBLIC_BASE_URL is operator-set, but it's still env-supplied and
+    # spliced unquoted into an href — escape defensively so a misconfig
+    # like ``PUBLIC_BASE_URL='" onclick="..."'`` can't break out of the
+    # attribute. Cheap insurance for a single concat.
+    base_url = html.escape(PUBLIC_BASE_URL, quote=True)
 
     auction_link = ""
     if auction_id:
         auction_link = (
-            f'<a href="{PUBLIC_BASE_URL}/auction.html?id={auction_id}" '
+            f'<a href="{base_url}/auction.html?id={auction_id}" '
             f'class="button">Перейти к аукциону →</a>'
         )
 
@@ -289,7 +294,7 @@ def build_notification_email_html(
                         Вы получили это письмо, потому что участвуете в аукционах на <strong>Лотус</strong>.
                     </p>
                     <p class="footer-text">
-                        <a href="{PUBLIC_BASE_URL}/profile.html" class="footer-link">Изменить настройки уведомлений</a>
+                        <a href="{base_url}/profile.html" class="footer-link">Изменить настройки уведомлений</a>
                     </p>
                     <p class="footer-text" style="font-size: 11px; color: #6b7280; margin-top: 20px;">
                         © 2025 Лотус. Все права защищены.<br>

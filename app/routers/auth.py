@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -12,7 +13,8 @@ from app.schemas import (
 )
 from app.utils.rate_limit import limiter
 from app.utils.security import (
-    create_access_token,
+    consume_password_verify_time,
+    create_user_access_token,
     get_current_user,
     hash_password,
     needs_rehash,
@@ -46,10 +48,22 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
         hashed_password=hash_password(user.password),
     )
     db.add(db_user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Two concurrent /register calls can both pass the pre-check
+        # (no row exists yet) and race to insert the same username or
+        # email — Postgres unique-constraint enforcement makes the loser
+        # see IntegrityError. Return the same generic 400 as the
+        # pre-check so the response is timing- and message-stable.
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Пользователь с таким username или email уже существует",
+        ) from None
     await db.refresh(db_user)
 
-    token = create_access_token({"user_id": db_user.id})
+    token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
 
 
@@ -59,7 +73,12 @@ async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(ge
     db_user = (
         await db.execute(select(User).where(User.username == user.username))
     ).scalar_one_or_none()
-    if not db_user or not verify_password(user.password, db_user.hashed_password):
+    if db_user is None:
+        # Burn the same CPU a real verify would so we don't leak
+        # "username exists" via response timing.
+        consume_password_verify_time(user.password)
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if needs_rehash(db_user.hashed_password):
@@ -67,7 +86,7 @@ async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(ge
         await db.commit()
         await db.refresh(db_user)
 
-    token = create_access_token({"user_id": db_user.id})
+    token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
 
 
@@ -87,5 +106,11 @@ async def change_password(
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
     current_user.hashed_password = hash_password(data.new_password)
+    # Bump token_version so every JWT issued before this point fails
+    # get_current_user. The caller still has *this* request's token in
+    # their browser — return a fresh one so they don't get kicked out
+    # of the very session they used to change the password.
+    current_user.token_version = (current_user.token_version or 0) + 1
     await db.commit()
-    return {"message": "Пароль успешно изменён"}
+    new_token = create_user_access_token(current_user)
+    return {"message": "Пароль успешно изменён", "token": new_token}

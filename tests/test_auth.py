@@ -124,3 +124,81 @@ def test_verify_password_rejects_oversized_input():
     assert verify_password("x" * (PASSWORD_INPUT_LIMIT + 1), real_hash) is False
 
 
+
+async def test_change_password_invalidates_old_jwt(client, registered_user):
+    """JWT issued before /change-password must stop working — the
+    token_version bump makes get_current_user reject anything stamped
+    with the old version."""
+    old_headers = registered_user["headers"]
+
+    r = await client.put(
+        "/api/change-password",
+        json={"current_password": registered_user["password"], "new_password": "newpass456"},
+        headers=old_headers,
+    )
+    assert r.status_code == 200, r.text
+    new_token = r.json()["token"]
+    assert new_token
+
+    me_old = await client.get("/api/me", headers=old_headers)
+    assert me_old.status_code == 401
+
+    me_new = await client.get(
+        "/api/me", headers={"Authorization": f"Bearer {new_token}"}
+    )
+    assert me_new.status_code == 200
+
+
+async def test_login_unknown_user_consumes_verify_time(client, registered_user, monkeypatch):
+    """Unknown usernames used to short-circuit before verify_password,
+    leaking 'user-exists' via response timing. The handler must now run
+    the verifier against a precomputed dummy hash so both branches
+    spend the same CPU."""
+    calls: list[str] = []
+    from app.utils import security
+
+    original = security.consume_password_verify_time
+
+    def tracking(password):
+        calls.append("called")
+        return original(password)
+
+    monkeypatch.setattr(security, "consume_password_verify_time", tracking)
+    # The router imports the name directly; patch the local import too.
+    from app.routers import auth as auth_router
+    monkeypatch.setattr(auth_router, "consume_password_verify_time", tracking)
+
+    r = await client.post("/api/login", json={
+        "username": "does-not-exist",
+        "password": "anything",
+    })
+    assert r.status_code == 401
+    assert calls, "consume_password_verify_time was not invoked for unknown user"
+
+
+async def test_register_concurrent_duplicate_returns_400_not_500(client):
+    """Two simultaneous /register with the same username pass the
+    pre-check together and race to insert. Postgres unique-constraint
+    makes the loser raise IntegrityError; the handler must translate
+    that into 400 (same generic message), not bubble up as 500."""
+    import asyncio
+
+    payload = {
+        "username": "racer",
+        "email_template": "racer{}@example.com",
+        "password": "password123",
+    }
+    r_a, r_b = await asyncio.gather(
+        client.post("/api/register", json={
+            "username": payload["username"],
+            "email": payload["email_template"].format("a"),
+            "password": payload["password"],
+        }),
+        client.post("/api/register", json={
+            "username": payload["username"],
+            "email": payload["email_template"].format("b"),
+            "password": payload["password"],
+        }),
+    )
+    statuses = sorted([r_a.status_code, r_b.status_code])
+    assert statuses == [200, 400], (r_a.text, r_b.text)

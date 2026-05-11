@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from sqlalchemy import select
 
 from app.database import SessionLocal
-from app.models import Auction
+from app.models import Auction, User
 from app.services.websocket_manager import manager
 from app.utils.security import decode_token
 from app.utils.time import utcnow
@@ -128,6 +128,20 @@ async def notifications_websocket(
             return
     except HTTPException:
         logger.warning("WS notifications denied: invalid or expired token for user_id %s", user_id)
+        await websocket.close(code=1008)
+        return
+
+    # Same token_version invalidation as get_current_user: a token
+    # issued before /change-password must be rejected here too,
+    # otherwise the WS channel outlives the credential rotation.
+    async with SessionLocal() as db:
+        user = (
+            await db.execute(select(User).where(User.id == user_id))
+        ).scalar_one_or_none()
+    if user is None or payload.get("tv", 0) != user.token_version:
+        logger.warning(
+            "WS notifications denied: token_version mismatch for user_id %s", user_id
+        )
         await websocket.close(code=1008)
         return
 

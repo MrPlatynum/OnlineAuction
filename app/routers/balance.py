@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +15,13 @@ from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
+# Numeric(12, 2) accepts up to 9_999_999_999.99 before Postgres raises
+# ``numeric field overflow``. Cap user-visible balance well below that
+# so we can never hit the column ceiling: a determined attacker firing
+# the maximum per-call deposit at the rate-limit ceiling would still
+# saturate against this number, not blow up with a 500.
+MAX_USER_BALANCE = Decimal("10000000.00")
+
 
 @router.post("/deposit")
 @limiter.limit("30/minute")
@@ -27,7 +36,13 @@ async def deposit(
     # /withdraw on the same account serialise instead of racing on stale
     # in-memory copies and clobbering each other's update.
     await lock_users_by_id(db, current_user.id)
-    current_user.balance = round(current_user.balance + amount, 2)
+    new_balance = round(current_user.balance + amount, 2)
+    if new_balance > MAX_USER_BALANCE:
+        raise HTTPException(
+            400,
+            detail=f"Максимальный баланс — ${MAX_USER_BALANCE:.2f}",
+        )
+    current_user.balance = new_balance
     add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
     await db.commit()
     return {

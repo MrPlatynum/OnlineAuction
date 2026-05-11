@@ -104,3 +104,24 @@ async def test_upload_image_authed_succeeds(client, registered_user):
     )
     assert r.status_code == 200, r.text
     assert r.json()["image_url"].startswith("/static/uploads/")
+
+
+async def test_decompression_bomb_rejected(client, registered_user, monkeypatch):
+    """A valid PNG header with declared dimensions above
+    Image.MAX_IMAGE_PIXELS must be refused instead of decoded — the
+    historical default would let a 50 KB upload pin a worker on a
+    multi-GB decode buffer."""
+    from PIL import Image
+
+    # Temporarily shrink the cap so we can stage a bomb without generating
+    # a giant fixture in CI.
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 100)
+
+    buf = io.BytesIO()
+    Image.new("RGB", (50, 50), color=(0, 0, 0)).save(buf, format="PNG")  # 2500px > 100
+    files = {"file": ("bomb.png", buf.getvalue(), "image/png")}
+    r = await client.post(
+        "/api/upload-avatar", files=files, headers=registered_user["headers"]
+    )
+    assert r.status_code == 400, r.text
+    assert "large" in r.json()["detail"].lower() or "decode" in r.json()["detail"].lower()
