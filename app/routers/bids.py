@@ -87,6 +87,16 @@ async def place_bid(
     if not auction.is_active:
         raise HTTPException(status_code=400, detail="Auction is not active")
 
+    if auction.auction_type == "bin":
+        # BIN lots are fixed-price listings, not auctions: buyers go through
+        # /buy-now. Accepting bids here would let one user push current_price
+        # past bin_price while another could still call /buy-now and grab the
+        # lot at the lower fixed price.
+        raise HTTPException(
+            status_code=400,
+            detail="Это лот с фиксированной ценой — ставки не принимаются, используйте «Купить сразу»",
+        )
+
     if auction.created_by == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя делать ставки на свой собственный лот")
 

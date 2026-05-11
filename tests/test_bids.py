@@ -30,6 +30,33 @@ async def test_place_bid_increases_current_price(client, registered_user, second
     assert refreshed["bids_count"] == 1
 
 
+async def test_bid_on_bin_lot_rejected(client, registered_user, second_user):
+    """BIN lots are fixed-price listings, not auctions — /bids must
+    refuse them. Without this, a bidder could push current_price past
+    bin_price while another user could still call /buy-now and grab the
+    lot at the lower fixed price."""
+    listing = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Fixed-price lot",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": 250.0,
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    r = await client.post(
+        "/api/bids",
+        json={"auction_id": listing["id"], "amount": 300.0},
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 400
+    assert "фиксированной" in r.json()["detail"].lower()
+
+
 async def test_owner_cannot_bid_on_own_auction(client, registered_user):
     auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
 

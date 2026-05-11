@@ -78,17 +78,27 @@ async def create_auction(
     start_time = utcnow()
     end_time = start_time + timedelta(minutes=auction.duration_minutes)
 
+    auction_type = auction.auction_type or "bid"
+    # BIN is a fixed-price listing — starting_price is meaningless there
+    # and would let the UI show "$10" on a lot the buyer actually pays
+    # $bin_price for. Coerce both seed prices to bin_price so what the
+    # listing card shows is what /buy-now charges.
+    if auction_type == "bin" and auction.bin_price is not None:
+        seed_price = auction.bin_price
+    else:
+        seed_price = auction.starting_price
+
     db_auction = Auction(
         title=auction.title,
         description=auction.description,
-        starting_price=auction.starting_price,
-        current_price=auction.starting_price,
+        starting_price=seed_price,
+        current_price=seed_price,
         image_url=auction.image_url,
         start_time=start_time,
         end_time=end_time,
         created_by=current_user.id,
         category_id=auction.category_id,
-        auction_type=auction.auction_type or "bid",
+        auction_type=auction_type,
         bin_price=auction.bin_price,
     )
     db.add(db_auction)
@@ -447,6 +457,16 @@ async def update_auction(
         for i, url in enumerate(data.image_urls):
             db.add(AuctionImage(auction_id=auction_id, url=url, order=i))
         auction.image_url = data.image_urls[0] if data.image_urls else None
+
+    # BIN is a fixed-price listing — bin_price IS the displayed/charged
+    # price. If the seller edits it (or switches the lot to BIN), drag
+    # starting_price / current_price along so the listing card and
+    # /buy-now stay in sync.
+    if auction.auction_type == "bin" and auction.bin_price is not None and (
+        "bin_price" in fields or "auction_type" in fields
+    ):
+        auction.starting_price = auction.bin_price
+        auction.current_price = auction.bin_price
 
     await db.commit()
     await db.refresh(auction)
