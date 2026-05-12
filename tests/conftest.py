@@ -25,6 +25,12 @@ os.environ.setdefault("AUCTION_RATE_LIMIT_ENABLED", "false")
 # calls to ``_run_one_tick``; we don't want a background ticker
 # hammering Postgres on every test, and SMTP would fail anyway.
 os.environ.setdefault("AUCTION_OUTBOX_WORKER_ENABLED", "false")
+# Each test recreates the engine and the scheduler runs inside the
+# same process — there's no second worker to race against and no
+# need to actually take the Postgres advisory lock. The scheduler-
+# election tests flip this back on around the specific calls they
+# need to test.
+os.environ.setdefault("AUCTION_SCHEDULER_ELECTION_ENABLED", "false")
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402

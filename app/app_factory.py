@@ -29,6 +29,10 @@ from app.routers import (
 from app.services.auction_scheduler import schedule_active_auctions, shutdown_scheduler
 from app.services.email_outbox import start_outbox_worker, stop_outbox_worker
 from app.services.migrations import seed_categories
+from app.services.scheduler_election import (
+    release_scheduler_lock,
+    try_become_scheduler_leader,
+)
 from app.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -115,14 +119,26 @@ async def lifespan(fastapi_app: FastAPI):
     # starting the server). Reference-data seeding is idempotent and
     # runs on every startup.
     await seed_categories()
-    await schedule_active_auctions()
+    # Leader-elect the scheduler via a Postgres advisory lock. Under
+    # ``uvicorn --workers N`` only the worker that wins the lock arms
+    # the per-auction asyncio.Tasks; followers serve HTTP/WS traffic
+    # only. The outbox worker uses ``SELECT FOR UPDATE SKIP LOCKED``
+    # and is intentionally safe to run in every worker.
+    is_leader = await try_become_scheduler_leader()
+    if is_leader:
+        await schedule_active_auctions()
     start_outbox_worker()
-    logger.info("Application startup complete (notifications enabled)")
+    logger.info(
+        "Application startup complete (scheduler %s)",
+        "leader" if is_leader else "follower",
+    )
     try:
         yield
     finally:
-        await shutdown_scheduler()
+        if is_leader:
+            await shutdown_scheduler()
         await stop_outbox_worker()
+        await release_scheduler_lock()
         logger.info("Application shutdown complete")
 
 
