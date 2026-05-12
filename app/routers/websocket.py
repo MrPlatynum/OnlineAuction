@@ -21,7 +21,7 @@ router = APIRouter()
 # slots for everyone — /ws/auction is unauthenticated, so without
 # this cap any peer can open thousands of connections and stall the
 # event loop on broadcast fan-out.
-MAX_AUCTION_WS_PER_IP = 20
+MAX_AUCTION_WS_PER_IP = 50
 _auction_ws_per_ip: dict[str, int] = defaultdict(int)
 
 # Cap incoming messages per /ws/auction connection: every receive_text
