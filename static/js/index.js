@@ -1019,9 +1019,75 @@ function buildPageList(current, total) {
             });
         });
 
+        // Observer, поднимающий WS на видимые карточки и закрывающий на
+        // ушедшие из viewport. Один экземпляр на страницу, заново
+        // привязываемся к новым [data-auction-id] после каждой перерисовки.
+        let auctionWsObserver = null;
+        function attachAuctionWsObserver() {
+            if (!auctionWsObserver) {
+                auctionWsObserver = new IntersectionObserver((entries) => {
+                    entries.forEach((entry) => {
+                        const id = +entry.target.dataset.auctionId;
+                        if (!id) return;
+                        if (entry.isIntersecting) {
+                            if (token && !websockets[id]) connectWebSocket(id);
+                        } else {
+                            const ws = websockets[id];
+                            if (!ws) return;
+                            safeCloseWs(ws);
+                            delete websockets[id];
+                        }
+                    });
+                }, { rootMargin: '200px' });
+            }
+            const container = document.getElementById('auctionsContainer');
+            if (!container) return;
+            container.querySelectorAll('[data-auction-id]').forEach((el) => {
+                auctionWsObserver.observe(el);
+            });
+        }
+
+        // Безопасное закрытие WebSocket с учётом состояния. Если ws ещё
+        // в CONNECTING (readyState=0), браузер логирует «closed before
+        // connection established» — это безобидно, но шумно. Дожидаемся
+        // onopen и закрываем уже установленное соединение.
+        function safeCloseWs(ws) {
+            if (!ws) return;
+            ws.intentionallyClosed = true;
+            if (ws.pingInterval) clearInterval(ws.pingInterval);
+            // При быстром скролле наблюдатель может попросить закрыть
+            // сокет, который ещё не успел соединиться — сетевая ошибка
+            // в такой момент не должна копить счётчик реконнектов.
+            const id = ws._auctionId;
+            if (id != null) reconnectAttempts[id] = 0;
+            try {
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    ws.addEventListener('open', () => {
+                        try { ws.close(1000, 'list refresh'); } catch (_) {}
+                    }, { once: true });
+                } else if (ws.readyState === WebSocket.OPEN) {
+                    ws.close(1000, 'list refresh');
+                }
+            } catch (_) {}
+        }
+
+        // Закрываем все активные WS-подключения и таймеры перед сменой
+        // содержимого списка. Без этого старые соединения копятся: сервер
+        // быстро упирается в лимит коннектов с IP и отдаёт 1008.
+        function clearAuctionConnections() {
+            Object.entries(websockets).forEach(([id, ws]) => {
+                safeCloseWs(ws);
+                delete websockets[id];
+            });
+            Object.values(timers).forEach(t => clearInterval(t));
+            Object.keys(timers).forEach(k => delete timers[k]);
+            Object.keys(reconnectAttempts).forEach(k => delete reconnectAttempts[k]);
+        }
+
         function displayAuctions(auctions) {
             const container = document.getElementById('auctionsContainer');
-            
+            clearAuctionConnections();
+
             if (auctions.length === 0) {
                 const hasFilters =
                     (currentFilters.search && currentFilters.search.length > 0) ||
@@ -1137,13 +1203,17 @@ function buildPageList(current, total) {
                 `;
             }).join('');
 
-            // Подключаем WebSocket для живой цены и запускаем таймеры
+            // Таймеры — на все лоты сразу: дёшево, идёт чисто по DOM.
             auctions.forEach(auction => {
-                if (token && auction.time_remaining > 0) {
-                    connectWebSocket(auction.id);
-                }
                 startTimer(auction.id, auction.time_remaining);
             });
+
+            // WS открываем только для тех лотов, чьи карточки в видимой
+            // области. Без этого 25-50 одновременных подключений с одного
+            // IP пробивают лимит сервера и часть карточек получает 1008
+            // Policy Violation. IntersectionObserver сам поднимает /
+            // закрывает соединение при скролле — естественный rate limit.
+            if (token) attachAuctionWsObserver();
         }
 
         function formatTime(seconds) {
@@ -1195,6 +1265,7 @@ function buildPageList(current, total) {
             if (websockets[auctionId]) return;
             
             const ws = new WebSocket(`${WS_URL}/ws/auction/${auctionId}`);
+            ws._auctionId = auctionId;
             
             if (!reconnectAttempts[auctionId]) {
                 reconnectAttempts[auctionId] = 0;
@@ -1218,16 +1289,26 @@ function buildPageList(current, total) {
                 }
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 delete websockets[auctionId];
 
                 if (ws.pingInterval) {
                     clearInterval(ws.pingInterval);
                 }
 
+                // Не реконнектиться при намеренном закрытии (смена страницы,
+                // фильтр) и при отказе сервера по политике (1008 — лимит
+                // подключений с IP, 1011 — внутренняя ошибка). Иначе
+                // получится reconnect-шторм против лимита коннектов.
+                if (ws.intentionallyClosed) return;
+                if (event && (event.code === 1000 || event.code === 1008 || event.code === 1011)) {
+                    return;
+                }
+
                 // Экспоненциальная задержка с half-jitter: при разовом
                 // падении сервера сотня вкладок не штормит обратно
                 // одной секундой — равномерно размазывается по [base/2, base].
+                if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
                 const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
                 const delay = base / 2 + Math.random() * (base / 2);
                 reconnectAttempts[auctionId]++;
@@ -1239,8 +1320,15 @@ function buildPageList(current, total) {
                 }, delay);
             };
 
-            ws.onerror = (error) => {
-                console.error(`WebSocket error for auction ${auctionId}:`, error);
+            ws.onerror = () => {
+                // WS error по сути дублирует событие onclose: браузер
+                // эмитит "error" непосредственно перед "close" на любом
+                // ненормальном разрыве (включая отказ сервера 1008 и
+                // наше же намеренное закрытие во время CONNECTING).
+                if (ws.intentionallyClosed) return;
+                if (reconnectAttempts[auctionId] >= 3) {
+                    console.warn(`WS auction ${auctionId}: repeated failures`);
+                }
             };
 
             websockets[auctionId] = ws;
