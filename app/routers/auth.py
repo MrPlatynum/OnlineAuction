@@ -1,5 +1,7 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,18 +14,25 @@ from app.schemas import (
     UserLogin,
     UserResponse,
 )
-from app.services.notifications import send_verification_email
+from app.services.notifications import (
+    send_password_changed_email,
+    send_password_reset_email,
+    send_verification_email,
+)
 from app.services.websocket_manager import manager
 from app.utils.rate_limit import limiter
 from app.utils.security import (
+    PASSWORD_RESET_THROTTLE_SECONDS,
     consume_password_verify_time,
     create_user_access_token,
     decode_email_verify_token,
+    decode_password_reset_token,
     get_current_user,
     hash_password,
     needs_rehash,
     verify_password,
 )
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -190,3 +199,101 @@ async def change_password(
 
     new_token = create_user_access_token(current_user)
     return {"message": "Пароль успешно изменён", "token": new_token}
+
+
+class PasswordResetRequestBody(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirmBody(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+# Generic responses kept identical regardless of whether the address
+# corresponds to a registered account — without this, response timing
+# or text could be used to enumerate users (the same protection
+# /register has had since #33).
+_GENERIC_REQUEST_RESPONSE = {
+    "message": (
+        "Если этот email зарегистрирован, мы отправили на него письмо "
+        "со ссылкой для сброса пароля. Ссылка действует 1 час."
+    )
+}
+
+
+@router.post("/password-reset/request")
+@limiter.limit("3/hour")
+async def password_reset_request(
+    request: Request,
+    data: PasswordResetRequestBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public — accepts an email and *if it exists* mails a reset link.
+    Always returns 200 with a generic message so the response shape
+    can't be used to probe which addresses are registered."""
+    user = (
+        await db.execute(select(User).where(User.email == data.email))
+    ).scalar_one_or_none()
+    if user is not None:
+        # Per-email floor on top of the per-IP slowapi limit. Without
+        # this, an attacker rotating IPs could trickle requests below
+        # the IP threshold and flood the target's inbox with reset
+        # mail.
+        now = utcnow()
+        last = user.password_reset_sent_at
+        throttle = timedelta(seconds=PASSWORD_RESET_THROTTLE_SECONDS)
+        if last is None or (now - last) >= throttle:
+            user.password_reset_sent_at = now
+            await db.commit()
+            await db.refresh(user)
+            send_password_reset_email(user)
+    return _GENERIC_REQUEST_RESPONSE
+
+
+@router.post("/password-reset/confirm")
+@limiter.limit("10/hour")
+async def password_reset_confirm(
+    request: Request,
+    data: PasswordResetConfirmBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public — accepts a token and the new password. Validates the
+    token's ``tv`` against the user's current ``token_version`` so a
+    second click on the same link (after a successful first reset)
+    fails: the first confirm bumped tv, the second's claim no longer
+    matches."""
+    user_id, claimed_tv = decode_password_reset_token(data.token)
+    user = (
+        await db.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if user is None or claimed_tv != user.token_version:
+        # Don't distinguish "user gone" from "token superseded" — both
+        # branches are equally a "this link doesn't work anymore" 400
+        # from the user's perspective.
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для сброса пароля"
+        )
+
+    user.hashed_password = hash_password(data.new_password)
+    # Bumping tv kills every other JWT this user holds — outstanding
+    # auth sessions, other in-flight reset links, all gone. The fresh
+    # password forces a re-login on /login (we don't auto-issue a
+    # token here: the user typed the new password into the reset
+    # form, they should type it again at /login as a confirmation).
+    user.token_version = (user.token_version or 0) + 1
+    await db.commit()
+
+    # Same WS cleanup as /change-password: any socket authenticated
+    # with the now-invalid tv stays connected without it. Close
+    # them so the next push doesn't reach the stale session.
+    stale_sockets = list(manager.user_connections.get(user.id, []))
+    for ws in stale_sockets:
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+        manager.disconnect_user(ws, user.id)
+
+    send_password_changed_email(user)
+    return {"message": "Пароль успешно сброшен"}

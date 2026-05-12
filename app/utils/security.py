@@ -126,6 +126,10 @@ def create_user_access_token(user: "User") -> str:
 EMAIL_VERIFY_PURPOSE = "email_verify"
 EMAIL_VERIFY_TOKEN_TTL_HOURS = 24
 
+PASSWORD_RESET_PURPOSE = "password_reset"
+PASSWORD_RESET_TOKEN_TTL_HOURS = 1
+PASSWORD_RESET_THROTTLE_SECONDS = 60
+
 
 def create_email_verify_token(user: "User") -> str:
     """Issue a stateless JWT carrying ``user.email`` as a claim. If the
@@ -143,6 +147,51 @@ def create_email_verify_token(user: "User") -> str:
         "exp": expire,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_password_reset_token(user: "User") -> str:
+    """Issue a stateless JWT carrying ``user.token_version`` so a
+    successful reset (which bumps tv) auto-invalidates any other
+    outstanding reset link for the same account. Signed with
+    ``AUCTION_SECRET_KEY`` (same as auth tokens), distinguished by
+    the ``purpose`` claim so an auth token can't be replayed at
+    /password-reset/confirm and vice versa."""
+    expire = utcnow() + timedelta(hours=PASSWORD_RESET_TOKEN_TTL_HOURS)
+    payload = {
+        "user_id": user.id,
+        "tv": user.token_version,
+        "purpose": PASSWORD_RESET_PURPOSE,
+        "exp": expire,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> tuple[int, int]:
+    """Returns ``(user_id, token_version)`` from a valid reset JWT.
+    400 on expiry / bad signature / wrong purpose — verification
+    failures are user-facing form errors, not session-auth failures
+    (where 401 would be correct)."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=400, detail="Ссылка для сброса пароля истекла"
+        ) from None
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для сброса пароля"
+        ) from None
+    if payload.get("purpose") != PASSWORD_RESET_PURPOSE:
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для сброса пароля"
+        )
+    user_id = payload.get("user_id")
+    tv = payload.get("tv")
+    if not isinstance(user_id, int) or not isinstance(tv, int):
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для сброса пароля"
+        )
+    return user_id, tv
 
 
 def decode_email_verify_token(token: str) -> tuple[int, str]:

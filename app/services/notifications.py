@@ -7,10 +7,12 @@ from app.config import PUBLIC_BASE_URL
 from app.models import Notification, NotificationType, User
 from app.services.email import (
     build_notification_email_html,
+    build_password_changed_email_html,
+    build_password_reset_email_html,
     build_verification_email_html,
     send_email_notification,
 )
-from app.utils.security import create_email_verify_token
+from app.utils.security import create_email_verify_token, create_password_reset_token
 
 # Strong references to in-flight email tasks so they don't get GC'd
 # mid-execution. Python only keeps weak refs to bare ``asyncio.create_task``
@@ -59,6 +61,34 @@ def send_verification_email(user: User) -> None:
     _fire_and_forget_email(
         user.email,
         "Подтвердите email — Лотус",
+        html_content,
+    )
+
+
+def send_password_reset_email(user: User) -> None:
+    """Fire-and-forget the password-reset link. The token's ``tv``
+    claim is read from the user's current ``token_version`` — a later
+    successful /password-reset/confirm bumps tv so this link (and any
+    other in-flight reset link for the same account) auto-invalidate."""
+    token = create_password_reset_token(user)
+    link = f"{PUBLIC_BASE_URL}/password-reset.html?token={token}"
+    html_content = build_password_reset_email_html(user.username, link)
+    _fire_and_forget_email(
+        user.email,
+        "Сброс пароля — Лотус",
+        html_content,
+    )
+
+
+def send_password_changed_email(user: User) -> None:
+    """Notification email sent right after /password-reset/confirm
+    succeeds. The legitimate user sees the trail even if the reset
+    was triggered by someone who'd taken over their inbox — they
+    can react before the attacker has time to dig in."""
+    html_content = build_password_changed_email_html(user.username)
+    _fire_and_forget_email(
+        user.email,
+        "Пароль изменён — Лотус",
         html_content,
     )
 
