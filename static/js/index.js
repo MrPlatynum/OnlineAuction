@@ -735,6 +735,17 @@ document.addEventListener('DOMContentLoaded', () => {
             syncFilterInputsFromState();
             renderSkeleton(6);
             await loadAuctions();
+            try {
+                const flashEmail = localStorage.getItem('flash_verify_email');
+                if (flashEmail) {
+                    localStorage.removeItem('flash_verify_email');
+                    showToast(
+                        'Подтвердите email',
+                        `Мы отправили письмо на ${flashEmail}. Чтобы делать ставки и создавать лоты — подтвердите адрес.`,
+                        'info'
+                    );
+                }
+            } catch (_) {}
 // Инициализация новой панели фильтров (если есть)
             if (typeof initFiltersUI === 'function') initFiltersUI();
         }
@@ -1420,6 +1431,11 @@ location.reload();
                     const data = await response.json();
                     token = data.token;
                     localStorage.setItem('token', token);
+                    // Surface the post-register hint via localStorage so it
+                    // survives the reload below (init reads + clears it).
+                    try {
+                        localStorage.setItem('flash_verify_email', email);
+                    } catch (_) {}
                     token = localStorage.getItem('token');
 location.reload();
                 } else {

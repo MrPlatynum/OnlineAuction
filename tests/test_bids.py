@@ -169,14 +169,10 @@ async def test_user_can_raise_their_own_bid_within_balance(
     assert r2.status_code == 200, r2.text
 
 
-async def test_outbid_user_can_reuse_their_full_balance(client, registered_user, second_user):
-    third_resp = await client.post("/api/register", json={
-        "username": "carol",
-        "email": "carol@example.com",
-        "password": "password123",
-    })
-    third = third_resp.json()
-    third_headers = {"Authorization": f"Bearer {third['token']}"}
+async def test_outbid_user_can_reuse_their_full_balance(
+    client, registered_user, second_user, third_user
+):
+    third_headers = third_user["headers"]
 
     a1 = await _create_auction(client, registered_user["headers"], title="Lot 1")
     a2 = await _create_auction(client, registered_user["headers"], title="Lot 2")
@@ -230,17 +226,14 @@ async def test_concurrent_cross_auction_bids_respect_balance(
     assert statuses == [200, 400], (r1.text, r2.text)
 
 
-async def test_concurrent_equal_bids_only_one_wins(client, registered_user, second_user):
+async def test_concurrent_equal_bids_only_one_wins(
+    client, registered_user, second_user, third_user
+):
     """Fire two equal bids on the same auction concurrently. The
     SELECT...FOR UPDATE row lock must serialise them so the second one
     fails the 'must be higher than current price' check instead of both
     silently winning."""
-    third_resp = await client.post("/api/register", json={
-        "username": "carol",
-        "email": "carol@example.com",
-        "password": "password123",
-    })
-    third_headers = {"Authorization": f"Bearer {third_resp.json()['token']}"}
+    third_headers = third_user["headers"]
 
     auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
 

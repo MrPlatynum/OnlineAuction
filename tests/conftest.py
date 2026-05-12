@@ -24,13 +24,30 @@ os.environ.setdefault("AUCTION_RATE_LIMIT_ENABLED", "false")
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import update  # noqa: E402
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
 
 import app.database as _db_module  # noqa: E402
 from app import app  # noqa: E402
 from app.database import Base  # noqa: E402
+from app.models import User  # noqa: E402
 from app.services.migrations import seed_categories  # noqa: E402
+
+
+async def _force_verified(username: str) -> None:
+    """Flip ``email_verified`` to True for a freshly-registered fixture
+    user. Existing tests pre-date the email-verification gate and would
+    otherwise hit 403 on every bid / buy-now / create-auction call; new
+    tests that *want* the unverified state use the
+    ``unverified_user`` fixture below instead."""
+    async with _db_module.SessionLocal() as session:
+        await session.execute(
+            update(User)
+            .where(User.username == username)
+            .values(email_verified=True)
+        )
+        await session.commit()
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -73,6 +90,8 @@ async def registered_user(client):
     response = await client.post("/api/register", json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
+    await _force_verified(payload["username"])
+    body["user"]["email_verified"] = True
     return {
         "token": body["token"],
         "user": body["user"],
@@ -91,6 +110,8 @@ async def second_user(client):
     response = await client.post("/api/register", json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
+    await _force_verified(payload["username"])
+    body["user"]["email_verified"] = True
     return {
         "token": body["token"],
         "user": body["user"],
@@ -108,8 +129,31 @@ async def third_user(client):
     response = await client.post("/api/register", json=payload)
     assert response.status_code == 200, response.text
     body = response.json()
+    await _force_verified(payload["username"])
+    body["user"]["email_verified"] = True
     return {
         "token": body["token"],
         "user": body["user"],
         "headers": {"Authorization": f"Bearer {body['token']}"},
+    }
+
+
+@pytest_asyncio.fixture
+async def unverified_user(client):
+    """Fresh registration with ``email_verified`` still False — for
+    tests of the verification gate (write endpoints must 403) and the
+    /verify-email flow itself."""
+    payload = {
+        "username": "dan",
+        "email": "dan@example.com",
+        "password": "password123",
+    }
+    response = await client.post("/api/register", json=payload)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    return {
+        "token": body["token"],
+        "user": body["user"],
+        "headers": {"Authorization": f"Bearer {body['token']}"},
+        "email": payload["email"],
     }

@@ -28,7 +28,7 @@ from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auctions"])
@@ -72,7 +72,7 @@ def _auction_to_dict(auction: Auction, bids_count: int) -> dict:
 @router.post("/auctions", response_model=AuctionResponse)
 async def create_auction(
     auction: AuctionCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     start_time = utcnow()
@@ -166,7 +166,7 @@ async def create_auction(
 @router.post("/auctions/{auction_id}/buy-now")
 async def buy_now(
     auction_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     # Row-lock the auction first. Two simultaneous /buy-now calls (or

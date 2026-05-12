@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Подтверждение email — Лотус</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/common.css">
+  <style>
+    .verify-wrap {
+      min-height: calc(100vh - 80px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+    .verify-card {
+      max-width: 480px;
+      width: 100%;
+      background: var(--bg-2, #0f1722);
+      border: 1px solid var(--border, #223147);
+      border-radius: 20px;
+      padding: 40px 32px;
+      text-align: center;
+    }
+    .verify-icon {
+      font-size: 56px;
+      margin-bottom: 20px;
+      line-height: 1;
+    }
+    .verify-title {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 12px 0;
+      color: var(--text-1, #eaf2ff);
+    }
+    .verify-message {
+      color: var(--text-2, #9fb0c2);
+      line-height: 1.6;
+      margin: 0 0 24px 0;
+    }
+    .verify-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+
+<header class="navbar">
+  <div class="nav-inner">
+    <a class="nav-logo" href="index.html">
+      <div class="nav-logo-icon"></div>
+      <span class="nav-logo-text">Лотус</span>
+    </a>
+    <div class="flex-1"></div>
+  </div>
+</header>
+
+<div class="verify-wrap">
+  <div class="verify-card" id="verifyCard">
+    <div class="verify-icon" id="verifyIcon">⏳</div>
+    <div class="verify-title" id="verifyTitle">Подтверждаем email…</div>
+    <div class="verify-message" id="verifyMessage">Минуточку.</div>
+    <div class="verify-actions" id="verifyActions" style="display:none;">
+      <a class="btn btn-primary" href="index.html">К аукционам</a>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/common.js"></script>
+<script src="/static/js/verify-email.js"></script>
+</body>
+</html>

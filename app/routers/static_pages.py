@@ -47,3 +47,8 @@ async def read_user():
     return _page("user.html")
 
 
+@router.get("/verify-email.html")
+async def read_verify_email():
+    return _page("verify-email.html")
+
+

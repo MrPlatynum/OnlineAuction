@@ -88,6 +88,59 @@ def build_notification_email_html(
     }
     icon, accent_color = icon_map.get(notification_type_value, ('🔔', '#2dd4bf'))
 
+    return _render_email(
+        accent_color=accent_color,
+        icon=icon,
+        type_label=type_label,
+        title=title,
+        message=message,
+        body_card=(
+            f'<div class="auction-card"><div class="auction-label">Лот</div>'
+            f'<div class="auction-name">{auction_title}</div></div>'
+            if auction_title else ""
+        ),
+        cta=auction_link,
+        base_url=base_url,
+    )
+
+
+def build_verification_email_html(username: str, verify_link: str) -> str:
+    """Email body for the post-register verification flow. The CTA goes
+    to ``${PUBLIC_BASE_URL}/verify-email.html?token=<jwt>`` so the
+    landing page can POST the token to /api/verify-email."""
+    safe_username = html.escape(username or "")
+    safe_link = html.escape(verify_link, quote=True)
+    base_url = html.escape(PUBLIC_BASE_URL, quote=True)
+    cta = (
+        f'<a href="{safe_link}" class="button">Подтвердить email →</a>'
+    )
+    return _render_email(
+        accent_color='#2dd4bf',
+        icon='✉️',
+        type_label='email verification',
+        title=f'Здравствуйте, {safe_username}!',
+        message=(
+            'Чтобы делать ставки и выставлять лоты на Лотус, подтвердите '
+            'этот email. Ссылка действует 24 часа — после истечения '
+            'запросите новую в настройках профиля.'
+        ),
+        body_card="",
+        cta=cta,
+        base_url=base_url,
+    )
+
+
+def _render_email(
+    *,
+    accent_color: str,
+    icon: str,
+    type_label: str,
+    title: str,
+    message: str,
+    body_card: str,
+    cta: str,
+    base_url: str,
+) -> str:
     return f"""
     <!DOCTYPE html>
     <html lang="ru">
@@ -273,14 +326,9 @@ def build_notification_email_html(
 
                     <p class="message">{message}</p>
 
-                    {f'''
-                    <div class="auction-card">
-                        <div class="auction-label">Лот</div>
-                        <div class="auction-name">{auction_title}</div>
-                    </div>
-                    ''' if auction_title else ''}
+                    {body_card}
 
-                    {auction_link}
+                    {cta}
 
                     <div class="divider"></div>
 

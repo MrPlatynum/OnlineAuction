@@ -27,6 +27,7 @@ class UserResponse(BaseModel):
     balance: float
     created_at: Optional[datetime] = None
     avatar_url: Optional[str] = None
+    email_verified: bool = False
     email_notifications: bool = True
     notify_outbid: bool = True
     notify_winning: bool = True

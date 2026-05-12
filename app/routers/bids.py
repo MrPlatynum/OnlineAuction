@@ -11,7 +11,7 @@ from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
 from app.utils.rate_limit import limiter
-from app.utils.security import get_current_user
+from app.utils.security import require_verified_user
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["bids"])
@@ -68,7 +68,7 @@ async def get_auction_bids(
 async def place_bid(
     request: Request,
     bid: BidCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     bid_amount = to_decimal(bid.amount)
