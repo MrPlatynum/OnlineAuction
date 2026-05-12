@@ -296,8 +296,13 @@
 
   // Quick-bid: добавляет к минимальной ставке (текущая+0.01) указанную сумму
   function bumpBid(amount) {
-    const min = currentPriceValue !== null ? currentPriceValue + 0.01 : 0;
-    const target = Math.round((min + amount) * 100) / 100;
+    // Прибавляем к текущей цене, а не к минимально допустимой
+    // (current + 0.01). Иначе на лоте с круглой стартовой ценой
+    // («55») кнопка «+5» давала «60.01» — некрасиво и неудобно.
+    // При current = 55 кнопка «+5» теперь даёт ровно 60, что
+    // всё равно строго больше текущей цены — сервер примет.
+    const base = currentPriceValue !== null ? currentPriceValue : 0;
+    const target = Math.round((base + amount) * 100) / 100;
     const inp = $('bidAmount');
     if (inp) {
       inp.value = target.toFixed(2);
@@ -677,7 +682,7 @@
   function renderEditImgPreview(){const el=$('editImgPreview');if(!el)return;const allCount=editImageUrls.length+editNewFiles.length;el.innerHTML=[...editImageUrls.map((url,i)=>{const src=String(url).startsWith('http')?url:API+url;return`<div class="multi-img-thumb${i===0?' is-cover':''}"><img src="${esc(src)}"><button class="thumb-del" type="button" onclick="removeEditImg('url',${i})">✕</button></div>`;}),...editNewFiles.map((f,i)=>`<div class="multi-img-thumb${(editImageUrls.length+i)===0?' is-cover':''}"><img src="${URL.createObjectURL(f)}"><button class="thumb-del" type="button" onclick="removeEditImg('file',${i})">✕</button></div>`)].join('');const addBtn=document.querySelector('label[for="editImageFile"]');if(addBtn)addBtn.style.display=allCount>=5?'none':'inline-flex';}
   function removeEditImg(type,idx){if(type==='url')editImageUrls.splice(idx,1);else editNewFiles.splice(idx,1);renderEditImgPreview();}
   function setExtend(mins){$('editExtend').value=mins;}
-  async function saveEdit(){const btn=$('editSaveBtn');btn.disabled=true;btn.textContent='Сохраняем…';$('editError').style.display='none';try{const uploadedUrls=[];for(const f of editNewFiles){const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/api/upload-image`,{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});if(r.ok){const d=await r.json();uploadedUrls.push(d.image_url);}}const allUrls=[...editImageUrls,...uploadedUrls];const subSel=$('editCategory'),parentSel=$('editCategoryParent');const catVal=(subSel&&subSel.value&&subSel.style.display!=='none')?subSel.value:(parentSel?parentSel.value:'');const payload={title:$('editTitle').value.trim(),description:$('editDescription').value.trim(),category_id:catVal?+catVal:null,starting_price:$('editPrice').value?+$('editPrice').value:null,bin_price:$('editBinPrice').value?+$('editBinPrice').value:null,image_urls:allUrls};const ext=+$('editExtend').value;if(ext>0)payload.extend_minutes=ext;const r=await fetch(`${API}/api/auctions/${auctionId}`,{method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)});if(r.ok){closeEditModal();showToast('✅ Сохранено','Лот успешно обновлён','ok');setTimeout(()=>location.reload(),1200);}else{const err=await r.json();$('editError').textContent=err.detail||'Ошибка сохранения';$('editError').style.display='block';}}catch{$('editError').textContent='Ошибка соединения';$('editError').style.display='block';}finally{btn.disabled=false;btn.textContent='Сохранить';}}
+  async function saveEdit(){const btn=$('editSaveBtn');btn.disabled=true;btn.textContent='Сохраняем…';$('editError').style.display='none';try{const uploadedUrls=[];for(const f of editNewFiles){const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/api/upload-image`,{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});if(r.ok){const d=await r.json();uploadedUrls.push(d.image_url);}}const allUrls=[...editImageUrls,...uploadedUrls];const subSel=$('editCategory'),parentSel=$('editCategoryParent');const catVal=(subSel&&subSel.value&&subSel.style.display!=='none')?subSel.value:(parentSel?parentSel.value:'');const payload={title:$('editTitle').value.trim(),description:$('editDescription').value.trim(),category_id:catVal?+catVal:null,starting_price:$('editPrice').value?+$('editPrice').value:null,bin_price:$('editBinPrice').value?+$('editBinPrice').value:null,image_urls:allUrls};const ext=+$('editExtend').value;if(ext>0)payload.extend_minutes=ext;const r=await fetch(`${API}/api/auctions/${auctionId}`,{method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)});if(r.ok){closeEditModal();showToast('✅ Сохранено','Лот успешно обновлён','ok');setTimeout(()=>location.reload(),1200);}else{const err=await r.json();$('editError').textContent=window.formatError(err,'Ошибка сохранения');$('editError').style.display='block';}}catch{$('editError').textContent='Ошибка соединения';$('editError').style.display='block';}finally{btn.disabled=false;btn.textContent='Сохранить';}}
 
   async function buyNow(){if(!token){showToast('Ошибка','Войдите в аккаунт','bad');return;}const btn=$('binBtn');if(btn){btn.disabled=true;btn.textContent='Покупаем…';}try{const r=await apiFetch(`${API}/api/auctions/${auctionId}/buy-now`,{method:'POST'});if(r.ok){const d=await r.json();showToast('🎉 Покупка совершена!',`Вы купили лот за ${fmtMoney(d.price)}`,'ok');setTimeout(()=>location.reload(),2000);}else{const err=await r.json();showToast('Ошибка',err.detail||'Не удалось купить лот','bad');if(btn){btn.disabled=false;btn.textContent='⚡ Купить сразу';}}}catch{showToast('Ошибка','Нет соединения','bad');if(btn){btn.disabled=false;btn.textContent='⚡ Купить сразу';}}}
 
@@ -688,9 +693,9 @@
   // Expose handlers for inline onclick="..." in auction.html
   Object.assign(window, {
     buyNow, bumpBid, closeEditModal, filterReviewsByRating, goAuth,
-    lotGoTo, lotSlide, openEditModal, placeBid, saveEdit, setExtend,
-    submitReview, switchLotTab, toggleSubscription, toggleThisLotOnly,
-    updateReviewCounter,
+    lotGoTo, lotSlide, openEditModal, placeBid, removeEditImg, saveEdit,
+    setExtend, submitReview, switchLotTab, toggleSubscription,
+    toggleThisLotOnly, updateReviewCounter,
   });
 
   // Deep-link: auction.html?id=...#reviews открывает таб «Отзывы» сразу

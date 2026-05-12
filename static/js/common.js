@@ -48,6 +48,60 @@
       .finally(() => clearTimeout(timer));
   };
 
+  // FastAPI/Pydantic возвращает 422 с массивом detail[]: каждый элемент
+  // вида {loc: ["body","field"], msg: "...", type: "..."}. Поле обычной
+  // ошибки (4xx с одним detail-стринг) — просто string. Дать одно
+  // понятное сообщение для пользователя.
+  const FIELD_RU = {
+    title: 'Название',
+    description: 'Описание',
+    starting_price: 'Стартовая цена',
+    bin_price: 'Цена «Купить сразу»',
+    duration_minutes: 'Длительность',
+    image_url: 'Изображение',
+    image_urls: 'Изображения',
+    category_id: 'Категория',
+    auction_type: 'Тип лота',
+    extend_minutes: 'Продление',
+  };
+  function _humanizePydanticItem(it) {
+    const loc = Array.isArray(it.loc) ? it.loc : [];
+    const field = loc.length > 1 ? loc[loc.length - 1] : (loc[0] || '');
+    const ru = FIELD_RU[field] || field;
+    const m = (it.msg || '').toLowerCase();
+    if (m.includes('string should have at most')) {
+      const maxMatch = (it.ctx && it.ctx.max_length) || (it.msg.match(/at most (\d+)/) || [])[1];
+      return `${ru}: слишком длинно${maxMatch ? ` (макс. ${maxMatch} симв.)` : ''}`;
+    }
+    if (m.includes('string should have at least')) {
+      return `${ru}: обязательное поле`;
+    }
+    if (m.includes('greater than') || m.includes('input should be greater')) {
+      return `${ru}: должно быть больше 0`;
+    }
+    if (m.includes('less than or equal') || m.includes('less than')) {
+      return `${ru}: значение слишком большое`;
+    }
+    if (m.includes('field required') || m.includes('missing')) {
+      return `${ru}: обязательное поле`;
+    }
+    if (m.includes('url must be')) {
+      return `${ru}: некорректный URL`;
+    }
+    if (m.includes('input should be')) {
+      return `${ru}: недопустимое значение`;
+    }
+    return `${ru}: ${it.msg || 'ошибка валидации'}`;
+  }
+  window.formatError = function(err, fallback) {
+    const detail = err && err.detail;
+    if (Array.isArray(detail)) {
+      return detail.map(_humanizePydanticItem).join('; ') || (fallback || 'Ошибка валидации');
+    }
+    if (typeof detail === 'string') return detail;
+    return fallback || 'Ошибка';
+  };
+
   // Перенаправляет любой блок-контейнер в состояние «не удалось загрузить» с кнопкой повтора
   window.renderLoadError = function(container, msg, onRetry) {
     if (!container) return;

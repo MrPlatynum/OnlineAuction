@@ -516,6 +516,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const WS_URL  = window.WS_BASE;
         let token = localStorage.getItem('token');
         let currentUser = null;
+        // Зеркалим currentUser на window, чтобы inline-обработчики в
+        // шаблоне (например, кнопка «Выставить свой лот») могли
+        // отличить гостя от авторизованного. Используется как
+        // window.currentUser? showCreateModal() : showAuth().
+        window.currentUser = null;
         let websockets = {};
         let timers = {};
         let reconnectAttempts = {};
@@ -760,6 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // если токена нет — гость
             if (!token) {
                 currentUser = null;
+                window.currentUser = null;
                 return null;
             }
 
@@ -780,6 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.removeItem('token');
                 token = null;
                 currentUser = null;
+                window.currentUser = null;
                 return null;
             }
 
@@ -789,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentUser = await response.json();
+            window.currentUser = currentUser;
 
             // безопасно обновляем UI, если элементы существуют
             const userNameEl = document.getElementById('userName');
@@ -934,6 +942,52 @@ function buildPageList(current, total) {
             const y = headerEl.getBoundingClientRect().top + window.pageYOffset - navH - 12;
             window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
         }
+
+        // Магнитный снэп: когда пользователь после прокрутки hero останавливается
+        // в «промежуточной» зоне (верх ленты лотов ещё ниже навбара, но уже близко),
+        // плавно докатываем к началу лотов. Подражает поведению кнопки «Смотреть лоты»,
+        // только запускается само, без клика. Срабатывает после ~150 мс простоя в скролле.
+        (function setupAuctionsSnap() {
+            // Уважать пользовательский запрос на минимум анимаций
+            if (typeof matchMedia === 'function'
+                && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+            let timer = null;
+            let isAutoScrolling = false;
+            // Активна ли зона снэпа: верх «.page-header» (или фоллбек на ленту лотов)
+            // находится в коридоре [navH+12, navH+12+SNAP_ZONE_PX] от верха viewport.
+            // Меньше значение — позже срабатывает, ближе к самому началу лотов.
+            const SNAP_ZONE_PX = 120;
+            const DEBOUNCE_MS = 150;
+            const COOLDOWN_MS = 700;
+
+            function maybeSnap() {
+                if (isAutoScrolling) return;
+                // не вмешиваемся при открытой модалке (auth / create / sort dropdown и пр.)
+                if (document.body.classList.contains('modal-open')) return;
+                // если фокус в поле ввода (поиск, фильтр) — пользователь печатает, не трогаем
+                const ae = document.activeElement;
+                if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+
+                const headerEl = document.querySelector('.page-header')
+                              || document.getElementById('auctionsContainer');
+                if (!headerEl) return;
+                const nav = document.querySelector('.navbar');
+                const navH = nav ? nav.getBoundingClientRect().height : 60;
+                const offset = navH + 12;
+                const top = headerEl.getBoundingClientRect().top;
+                if (top > offset && top < offset + SNAP_ZONE_PX) {
+                    isAutoScrolling = true;
+                    scrollToAuctionsTop();
+                    setTimeout(() => { isAutoScrolling = false; }, COOLDOWN_MS);
+                }
+            }
+
+            window.addEventListener('scroll', () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(maybeSnap, DEBOUNCE_MS);
+            }, { passive: true });
+        })();
 
         function goToPage(n) {
             const target = Math.max(1, Math.min(n, totalPages));
@@ -1536,7 +1590,7 @@ location.reload();
                 } else {
                     const error = await response.json();
                     if (errorDiv) {
-                        errorDiv.textContent = error.detail || 'Ошибка создания аукциона';
+                        errorDiv.textContent = window.formatError(error, 'Ошибка создания аукциона');
                         errorDiv.style.display = 'block';
                     }
                 }
