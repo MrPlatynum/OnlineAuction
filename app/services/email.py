@@ -104,6 +104,58 @@ def build_notification_email_html(
     )
 
 
+def build_password_reset_email_html(username: str, reset_link: str) -> str:
+    """Email body for the /password-reset/request flow. The CTA goes
+    to ``${PUBLIC_BASE_URL}/password-reset.html?token=<jwt>`` so the
+    landing page can POST the token + new password to
+    /api/password-reset/confirm."""
+    safe_username = html.escape(username or "")
+    safe_link = html.escape(reset_link, quote=True)
+    base_url = html.escape(PUBLIC_BASE_URL, quote=True)
+    cta = f'<a href="{safe_link}" class="button">Сбросить пароль →</a>'
+    return _render_email(
+        accent_color='#f59e0b',
+        icon='🔑',
+        type_label='password reset',
+        title=f'Сброс пароля для {safe_username}',
+        message=(
+            'Кто-то — надеемся, что вы — запросил сброс пароля для этой '
+            'учётной записи. Ссылка действует 1 час. Если это были '
+            'не вы, проигнорируйте письмо: пароль останется прежним, '
+            'и старая ссылка перестанет работать после первого сброса.'
+        ),
+        body_card="",
+        cta=cta,
+        base_url=base_url,
+    )
+
+
+def build_password_changed_email_html(username: str) -> str:
+    """Notification body sent after a successful /password-reset/confirm.
+    No CTA — just a "your password was changed" notice so the legitimate
+    user notices if their account was reset without their knowledge."""
+    safe_username = html.escape(username or "")
+    base_url = html.escape(PUBLIC_BASE_URL, quote=True)
+    cta = (
+        f'<a href="{base_url}/index.html" class="button">Войти в Лотус →</a>'
+    )
+    return _render_email(
+        accent_color='#22c55e',
+        icon='✅',
+        type_label='password changed',
+        title=f'Пароль изменён, {safe_username}',
+        message=(
+            'Пароль для этой учётной записи только что был успешно '
+            'сброшен. Если это были не вы — напишите нам немедленно: '
+            'кто-то получил доступ к вашему email-ящику и сменил '
+            'пароль, нужно отозвать сессии и проверить активность.'
+        ),
+        body_card="",
+        cta=cta,
+        base_url=base_url,
+    )
+
+
 def build_verification_email_html(username: str, verify_link: str) -> str:
     """Email body for the post-register verification flow. The CTA goes
     to ``${PUBLIC_BASE_URL}/verify-email.html?token=<jwt>`` so the

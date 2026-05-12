@@ -52,3 +52,13 @@ async def read_verify_email():
     return _page("verify-email.html")
 
 
+@router.get("/forgot-password.html")
+async def read_forgot_password():
+    return _page("forgot-password.html")
+
+
+@router.get("/password-reset.html")
+async def read_password_reset():
+    return _page("password-reset.html")
+
+
