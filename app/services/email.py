@@ -17,35 +17,34 @@ from app.config import (
 logger = logging.getLogger(__name__)
 
 
-async def send_email_notification(to_email: str, subject: str, html_content: str):
-    """Send an email notification.
+async def send_email_notification(to_email: str, subject: str, html_content: str) -> None:
+    """Send one email synchronously over SMTP.
+
+    Surfaces ``aiosmtplib`` exceptions to the caller — the outbox
+    worker relies on that to decide between "mark sent" and "schedule
+    retry". The previous swallow-and-log behaviour was right for
+    fire-and-forget tasks (nobody could act on the failure anyway);
+    now that the outbox owns retry, a silent send would be a bug.
 
     Uses ``aiosmtplib`` so the SMTP handshake, login, and send all
-    happen on the asyncio event loop without blocking it. The previous
-    ``smtplib`` implementation was a sync API that, called inside an
-    ``async def``, blocked the entire FastAPI worker for the duration
-    of the SMTP roundtrip — defeating the purpose of having an async
-    framework in the first place.
+    happen on the asyncio event loop without blocking it.
     """
-    try:
-        msg = MIMEMultipart('alternative')
-        msg['From'] = EMAIL_FROM
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(html_content, 'html'))
+    msg = MIMEMultipart('alternative')
+    msg['From'] = EMAIL_FROM
+    msg['To'] = to_email
+    msg['Subject'] = subject
+    msg.attach(MIMEText(html_content, 'html'))
 
-        await aiosmtplib.send(
-            msg,
-            hostname=SMTP_SERVER,
-            port=SMTP_PORT,
-            start_tls=True,
-            username=SMTP_USERNAME or None,
-            password=SMTP_PASSWORD or None,
-        )
+    await aiosmtplib.send(
+        msg,
+        hostname=SMTP_SERVER,
+        port=SMTP_PORT,
+        start_tls=True,
+        username=SMTP_USERNAME or None,
+        password=SMTP_PASSWORD or None,
+    )
 
-        logger.info("Email sent to %s: %s", to_email, subject)
-    except Exception:
-        logger.exception("Failed to send email to %s", to_email)
+    logger.info("Email sent to %s: %s", to_email, subject)
 
 
 def build_notification_email_html(

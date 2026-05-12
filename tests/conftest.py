@@ -21,6 +21,10 @@ os.environ.setdefault(
 # login, deposit) which would trip the production limits. The dedicated
 # test ``test_rate_limit_*`` files re-enable it explicitly per-test.
 os.environ.setdefault("AUCTION_RATE_LIMIT_ENABLED", "false")
+# Outbox worker is exercised by tests/test_email_outbox.py via direct
+# calls to ``_run_one_tick``; we don't want a background ticker
+# hammering Postgres on every test, and SMTP would fail anyway.
+os.environ.setdefault("AUCTION_OUTBOX_WORKER_ENABLED", "false")
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -48,6 +52,22 @@ async def _force_verified(username: str) -> None:
             .values(email_verified=True)
         )
         await session.commit()
+
+
+@pytest_asyncio.fixture(autouse=True)
+def _suppress_outbox_enqueue(monkeypatch):
+    """Default behaviour for *every* test: emails sent during a
+    request go nowhere. Existing tests that need to assert the call
+    happened (email-verification, password-reset) install their own
+    monkeypatch which wins over this fixture. Test files that
+    actually exercise the outbox queue itself use
+    ``monkeypatch.setattr`` to put the real implementation back
+    before invoking the worker."""
+    from app.services import notifications as notif_mod
+
+    monkeypatch.setattr(
+        notif_mod, "_fire_and_forget_email", lambda *_a, **_kw: None
+    )
 
 
 @pytest_asyncio.fixture(autouse=True)
