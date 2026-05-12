@@ -123,6 +123,56 @@ def create_user_access_token(user: "User") -> str:
     return create_access_token({"user_id": user.id, "tv": user.token_version})
 
 
+EMAIL_VERIFY_PURPOSE = "email_verify"
+EMAIL_VERIFY_TOKEN_TTL_HOURS = 24
+
+
+def create_email_verify_token(user: "User") -> str:
+    """Issue a stateless JWT carrying ``user.email`` as a claim. If the
+    user later changes their email the token's claim no longer matches
+    the row, so old verification links auto-invalidate without a
+    server-side revocation list. Signed with ``AUCTION_SECRET_KEY``
+    (same as auth tokens), but the ``purpose`` claim makes them
+    distinguishable so an auth token can't be replayed at /verify-email
+    and vice versa."""
+    expire = utcnow() + timedelta(hours=EMAIL_VERIFY_TOKEN_TTL_HOURS)
+    payload = {
+        "user_id": user.id,
+        "email": user.email,
+        "purpose": EMAIL_VERIFY_PURPOSE,
+        "exp": expire,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_email_verify_token(token: str) -> tuple[int, str]:
+    """Returns ``(user_id, email)`` from a valid email-verify JWT.
+    Raises ``HTTPException(400)`` on expiry, bad signature, or wrong
+    purpose — verification failures are user-facing input errors, not
+    auth failures, so they get 400 instead of decode_token's 401."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=400, detail="Ссылка для подтверждения email истекла"
+        ) from None
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для подтверждения email"
+        ) from None
+    if payload.get("purpose") != EMAIL_VERIFY_PURPOSE:
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для подтверждения email"
+        )
+    user_id = payload.get("user_id")
+    email = payload.get("email")
+    if not isinstance(user_id, int) or not isinstance(email, str):
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для подтверждения email"
+        )
+    return user_id, email
+
+
 def decode_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -154,3 +204,17 @@ async def get_current_user(
     if token_version != user.token_version:
         raise HTTPException(status_code=401, detail="Token invalidated")
     return user
+
+
+async def require_verified_user(
+    current_user: "User" = Depends(get_current_user),
+) -> "User":
+    """Gate for write actions that require a confirmed email: place bid,
+    buy now, create auction. Verified users pass through unchanged;
+    unverified get a 403 with a hint pointing at the resend endpoint."""
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Подтвердите email прежде чем выполнить это действие",
+        )
+    return current_user

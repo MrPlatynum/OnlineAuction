@@ -147,17 +147,12 @@ async def test_concurrent_deposits_all_apply(client, registered_user):
 
 
 async def test_concurrent_buy_now_only_one_succeeds(
-    client, registered_user, second_user
+    client, registered_user, second_user, third_user
 ):
     """Two simultaneous /buy-now on the same BIN lot must serialise via
     SELECT FOR UPDATE — only one buyer is debited and the seller is
     credited exactly once."""
-    third_resp = await client.post("/api/register", json={
-        "username": "carol",
-        "email": "carol@example.com",
-        "password": "password123",
-    })
-    third_headers = {"Authorization": f"Bearer {third_resp.json()['token']}"}
+    third_headers = third_user["headers"]
 
     auction = (await client.post(
         "/api/auctions",

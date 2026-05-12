@@ -340,7 +340,15 @@
         <div class="card">
           <div class="card-title" style="margin-bottom:16px;">Профиль</div>
           <div class="profile-info-row"><span class="profile-info-label">Имя пользователя</span><span class="profile-info-value" id="infoUsername">—</span></div>
-          <div class="profile-info-row"><span class="profile-info-label">Email</span><span class="profile-info-value" id="infoEmail">—</span></div>
+          <div class="profile-info-row">
+            <span class="profile-info-label">Email</span>
+            <span class="profile-info-value" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+              <span id="infoEmail">—</span>
+              <span id="emailVerifiedBadge" style="display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(34,197,94,0.12);color:#22c55e;text-transform:uppercase;letter-spacing:0.5px;">Подтверждён</span>
+              <span id="emailUnverifiedBadge" style="display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(245,158,11,0.12);color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;">Не подтверждён</span>
+              <button class="btn btn-secondary btn-sm" id="resendVerifyBtn" style="display:none;" onclick="resendVerification()">Отправить повторно</button>
+            </span>
+          </div>
           <div class="profile-info-row"><span class="profile-info-label">Баланс</span><span class="profile-info-value" id="infoBalance" style="color:var(--green)">—</span></div>
           <div class="profile-info-row"><span class="profile-info-label">Дата регистрации</span><span class="profile-info-value" id="infoCreatedAt">—</span></div>
         </div>

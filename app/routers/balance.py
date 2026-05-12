@@ -11,7 +11,7 @@ from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.transactions import add_transaction
 from app.utils.money import money_to_float, to_decimal
 from app.utils.rate_limit import limiter
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, require_verified_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
@@ -28,7 +28,7 @@ MAX_USER_BALANCE = Decimal("10000000.00")
 async def deposit(
     request: Request,
     data: DepositRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
@@ -56,7 +56,7 @@ async def deposit(
 async def withdraw(
     request: Request,
     data: WithdrawRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)

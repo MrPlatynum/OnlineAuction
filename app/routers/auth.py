@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,11 +12,13 @@ from app.schemas import (
     UserLogin,
     UserResponse,
 )
+from app.services.notifications import send_verification_email
 from app.services.websocket_manager import manager
 from app.utils.rate_limit import limiter
 from app.utils.security import (
     consume_password_verify_time,
     create_user_access_token,
+    decode_email_verify_token,
     get_current_user,
     hash_password,
     needs_rehash,
@@ -64,8 +67,68 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
         ) from None
     await db.refresh(db_user)
 
+    # Kick off the verification email after the row is persistent so a
+    # later rollback can't leave us mailing a non-existent user; the
+    # send itself is fire-and-forget so /register doesn't block on SMTP.
+    send_verification_email(db_user)
+
     token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+@router.post("/verify-email")
+@limiter.limit("20/hour")
+async def verify_email(
+    request: Request,
+    data: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public — landing page POSTs the token from the email link here.
+    Idempotent: a click on an already-consumed link still returns 200 so
+    a double-fire (user clicking the link twice, or a link prefetcher
+    racing the user) doesn't look like an error."""
+    user_id, claimed_email = decode_email_verify_token(data.token)
+    user = (
+        await db.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if user is None:
+        # Don't distinguish "user gone" from "bad token" — the latter
+        # branch is more common (expired / typo), and both warrant the
+        # same 400 from the user's perspective.
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для подтверждения email"
+        )
+    # Reject tokens issued before an email change. Without this an old
+    # link would still verify the *new* email address.
+    if user.email != claimed_email:
+        raise HTTPException(
+            status_code=400, detail="Неверная ссылка для подтверждения email"
+        )
+    if not user.email_verified:
+        user.email_verified = True
+        await db.commit()
+    return {"message": "Email подтверждён"}
+
+
+@router.post("/verify-email/resend")
+@limiter.limit("3/hour")
+async def resend_verification_email(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    """Auth-gated so an attacker can't burn another user's daily inbox
+    by triggering resends against their email. Already-verified users
+    get a 400 instead of silently re-mailing them."""
+    if current_user.email_verified:
+        raise HTTPException(
+            status_code=400, detail="Email уже подтверждён"
+        )
+    send_verification_email(current_user)
+    return {"message": "Письмо отправлено"}
 
 
 @router.post("/login", response_model=dict)

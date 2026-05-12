@@ -15,6 +15,11 @@ class User(Base):
     # tokens issued before the bump fail at /me / get_current_user. JWT
     # carries the value as a ``tv`` claim; mismatch → 401.
     token_version = Column(Integer, default=0, nullable=False)
+    # New registrations land as ``False`` and pick up True after the
+    # /verify-email click. Existing rows were backfilled to True by the
+    # migration (grandfather), so this is *only* False for accounts
+    # opened after the feature shipped.
+    email_verified = Column(Boolean, default=False, nullable=False)
     balance = Column(Numeric(12, 2), default=1000.0, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 

@@ -3,8 +3,14 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import PUBLIC_BASE_URL
 from app.models import Notification, NotificationType, User
-from app.services.email import build_notification_email_html, send_email_notification
+from app.services.email import (
+    build_notification_email_html,
+    build_verification_email_html,
+    send_email_notification,
+)
+from app.utils.security import create_email_verify_token
 
 # Strong references to in-flight email tasks so they don't get GC'd
 # mid-execution. Python only keeps weak refs to bare ``asyncio.create_task``
@@ -39,6 +45,22 @@ async def flush_pending_emails(timeout: float = 5.0) -> None:
             "Pending email tasks did not finish within %.1fs (%d still in flight)",
             timeout, len(_pending_email_tasks),
         )
+
+
+def send_verification_email(user: User) -> None:
+    """Fire-and-forget the post-register verification email. Same
+    pattern as notification emails: scheduled on the loop, strong-ref'd
+    so the GC doesn't kill it mid-send, drained on shutdown via
+    flush_pending_emails. Caller is expected to have committed the
+    User row so its id and current email are stable."""
+    token = create_email_verify_token(user)
+    link = f"{PUBLIC_BASE_URL}/verify-email.html?token={token}"
+    html_content = build_verification_email_html(user.username, link)
+    _fire_and_forget_email(
+        user.email,
+        "Подтвердите email — Лотус",
+        html_content,
+    )
 
 
 async def create_notification(

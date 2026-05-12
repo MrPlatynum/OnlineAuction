@@ -982,6 +982,9 @@ async function load() {
 
   if ($('infoUsername'))  $('infoUsername').textContent  = user.username || '—';
   if ($('infoEmail'))     $('infoEmail').textContent     = user.email    || '—';
+  if ($('emailVerifiedBadge'))   $('emailVerifiedBadge').style.display   = user.email_verified ? 'inline-flex' : 'none';
+  if ($('emailUnverifiedBadge')) $('emailUnverifiedBadge').style.display = user.email_verified ? 'none' : 'inline-flex';
+  if ($('resendVerifyBtn'))      $('resendVerifyBtn').style.display      = user.email_verified ? 'none' : 'inline-flex';
   if ($('infoBalance'))   $('infoBalance').textContent   = '$' + Number(user.balance || 0).toFixed(2);
   if ($('infoCreatedAt')) $('infoCreatedAt').textContent = user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('ru-RU') : '—';
   loadNotifSettings(user);
@@ -1106,4 +1109,34 @@ async function doDeposit() {
   } finally { btn.disabled = false; btn.textContent = 'Пополнить'; }
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDeposit(); });
+
+async function resendVerification() {
+  const btn = document.getElementById('resendVerifyBtn');
+  if (!btn) return;
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Отправка…';
+  try {
+    const r = await window.apiFetch(`${window.API}/api/verify-email/resend`, {
+      method: 'POST',
+    });
+    if (r.ok) {
+      window.showToast('Письмо отправлено', 'Проверьте почтовый ящик, ссылка действует 24 часа', 'ok');
+    } else if (r.status === 429) {
+      window.showToast('Слишком часто', 'Подождите и попробуйте позже', 'warn');
+    } else {
+      let detail = 'Не удалось отправить письмо';
+      try {
+        const data = await r.json();
+        if (data && data.detail) detail = data.detail;
+      } catch (_) {}
+      window.showToast('Ошибка', detail, 'err');
+    }
+  } catch (_) {
+    window.showToast('Нет связи', 'Попробуйте позже', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
 
