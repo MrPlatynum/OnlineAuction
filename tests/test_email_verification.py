@@ -96,19 +96,30 @@ async def test_unverified_user_cannot_create_auction(client, unverified_user):
     assert r.status_code == 403
 
 
-async def test_unverified_user_can_view_and_deposit(client, unverified_user):
-    """Medium gate: write actions (bid / buy / create) require verify,
-    everything else stays open. Without this, an unverified user can't
-    even top up their balance to be ready for after verification."""
-    r_view = await client.get("/api/auctions")
-    assert r_view.status_code == 200
-
+async def test_unverified_user_cannot_deposit_or_withdraw(client, unverified_user):
+    """Both money-mutation endpoints require a confirmed email — without
+    that gate a throwaway account could move money around and complicate
+    refund flows even before it tried to bid."""
     r_deposit = await client.post(
         "/api/deposit",
         json={"amount": 100},
         headers=unverified_user["headers"],
     )
-    assert r_deposit.status_code == 200, r_deposit.text
+    assert r_deposit.status_code == 403
+
+    r_withdraw = await client.post(
+        "/api/withdraw",
+        json={"amount": 50},
+        headers=unverified_user["headers"],
+    )
+    assert r_withdraw.status_code == 403
+
+
+async def test_unverified_user_can_still_view_listings(client, unverified_user):
+    """Read-only browsing of /api/auctions stays open so an unverified
+    user can decide what they'd want to bid on before confirming."""
+    r_view = await client.get("/api/auctions")
+    assert r_view.status_code == 200
 
 
 async def test_verify_email_with_valid_token(client, unverified_user):
