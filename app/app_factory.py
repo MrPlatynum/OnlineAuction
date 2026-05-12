@@ -62,6 +62,40 @@ _SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     # Disable browser feature surface that the app doesn't use.
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    # Same-origin everything by default; the rest of the policy is
+    # the minimum surface the app actually needs.
+    #
+    # ``script-src 'self'`` blocks inline event handlers and inline
+    # <script> blocks — the per-page JS used to ship ~190 inline
+    # ``onclick``/``onchange`` attributes; those are now wired via a
+    # delegated dispatcher reading ``data-action``/``data-args`` (see
+    # ``static/js/common.js``).
+    #
+    # ``style-src 'self' 'unsafe-inline'`` is a pragmatic compromise:
+    # the templates use hundreds of inline ``style=""`` attributes
+    # for one-off layout tweaks. Inline styles can't execute script
+    # the way inline scripts can, so loosening style-src is a much
+    # smaller risk than loosening script-src.
+    #
+    # ``connect-src`` covers fetch + WebSocket; same-origin only.
+    # ``img-src`` allows uploaded covers (``self``), data URLs
+    # (avatar crop preview) and external HTTPS (existing seed lots
+    # point at remote image hosts).
+    # ``font-src`` covers the Google Fonts ``Inter`` link used on
+    # every page.
+    # ``frame-ancestors 'none'`` is the CSP-native equivalent of the
+    # ``X-Frame-Options: DENY`` already set above.
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    ),
 }
 
 

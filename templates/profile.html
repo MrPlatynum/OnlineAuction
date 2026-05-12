@@ -36,7 +36,7 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
         <span class="notif-badge" id="notifBadge" style="display:none;"></span>
       </button>
-      <div class="nav-user" id="navUserPill" style="display:none;" onclick="showPanel('settings')">
+      <div class="nav-user" id="navUserPill" style="display:none;" data-action="showPanel" data-args="settings">
         <div class="nav-avatar" id="navAvatarPill">?</div>
         <div>
           <div class="nav-user-name" id="navUserNamePill">—</div>
@@ -68,11 +68,11 @@
 
     <!-- Hero block -->
     <div class="sb-hero">
-      <div class="sb-avatar" id="avatar" onclick="$('avatarInput').click()" title="Сменить аватар">
+      <div class="sb-avatar" id="avatar" data-action="clickById" data-args="avatarInput" title="Сменить аватар">
         <span id="avatarLetter">?</span>
         <div class="sb-avatar-overlay">📷</div>
       </div>
-      <input type="file" id="avatarInput" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="uploadAvatar(this)">
+      <input type="file" id="avatarInput" accept="image/jpeg,image/png,image/webp" style="display:none;" data-change="uploadAvatar">
       <div class="sb-name" id="name">Загрузка…</div>
       <div class="sb-email" id="email">—</div>
     </div>
@@ -80,37 +80,37 @@
 
     <!-- Navigation -->
     <div class="sb-section-label">Обзор</div>
-    <button class="sb-item active" data-panel="overview" onclick="showPanel('overview')">
+    <button class="sb-item active" data-panel="overview" data-action="showPanel" data-args="overview">
       <span class="sb-item-icon">📊</span> Статистика
     </button>
-    <button class="sb-item" data-panel="balance" onclick="showPanel('balance')">
+    <button class="sb-item" data-panel="balance" data-action="showPanel" data-args="balance">
       <span class="sb-item-icon">💳</span> Баланс
       <span class="sb-item-badge" id="balBadge" style="background:var(--bg-4);color:var(--text-2);font-size:10px;font-weight:700;">—</span>
     </button>
 
     <div class="sb-section-label">Аукционы</div>
-    <button class="sb-item" data-panel="my-bids" onclick="showPanel('my-bids')">
+    <button class="sb-item" data-panel="my-bids" data-action="showPanel" data-args="my-bids">
       <span class="sb-item-icon">🎯</span> Мои ставки
     </button>
-    <button class="sb-item" data-panel="created" onclick="showPanel('created')">
+    <button class="sb-item" data-panel="created" data-action="showPanel" data-args="created">
       <span class="sb-item-icon">📦</span> Мои лоты
     </button>
 
     <div class="sb-section-label">Прочее</div>
-    <button class="sb-item" data-panel="subs" onclick="showPanel('subs')">
+    <button class="sb-item" data-panel="subs" data-action="showPanel" data-args="subs">
       <span class="sb-item-icon">🔔</span> Подписки
     </button>
-    <button class="sb-item" data-panel="notifications" onclick="showPanel('notifications')">
+    <button class="sb-item" data-panel="notifications" data-action="showPanel" data-args="notifications">
       <span class="sb-item-icon">📨</span> Уведомления
       <span class="sb-item-badge" id="sbNotifBadge" style="display:none;"></span>
     </button>
-    <button class="sb-item" data-panel="badges" onclick="showPanel('badges')">
+    <button class="sb-item" data-panel="badges" data-action="showPanel" data-args="badges">
       <span class="sb-item-icon">🏅</span> Значки
     </button>
 
     <div class="sb-divider"></div>
 
-    <button class="sb-item" data-panel="settings" onclick="showPanel('settings')">
+    <button class="sb-item" data-panel="settings" data-action="showPanel" data-args="settings">
       <span class="sb-item-icon">⚙️</span> Настройки
     </button>
     <a href="index.html" class="sb-item" style="text-decoration:none;">
@@ -119,7 +119,7 @@
 
     <div style="flex:1;min-height:10px;"></div>
     <div class="sb-divider"></div>
-    <button class="sb-item" onclick="logout()" style="color:var(--red);">
+    <button class="sb-item" data-action="logout" style="color:var(--red);">
       <span class="sb-item-icon">🚪</span> Выйти
     </button>
 
@@ -143,8 +143,8 @@
           <div class="balance-hero-sub">Доступно для вывода</div>
         </div>
         <div class="balance-hero-actions">
-          <button class="btn btn-primary" onclick="focusDeposit()">+ Пополнить</button>
-          <button class="btn btn-secondary" onclick="focusWithdraw()">↑ Вывести</button>
+          <button class="btn btn-primary" data-action="focusDeposit">+ Пополнить</button>
+          <button class="btn btn-secondary" data-action="focusWithdraw">↑ Вывести</button>
         </div>
       </div>
 
@@ -156,17 +156,17 @@
           <div class="balance-form-title">💳 Пополнение</div>
           <div class="balance-form-desc">Средства поступят мгновенно</div>
           <div class="amount-presets" id="depositPresets">
-            <button class="amount-preset" onclick="setAmount('deposit',100)">$100</button>
-            <button class="amount-preset" onclick="setAmount('deposit',500)">$500</button>
-            <button class="amount-preset" onclick="setAmount('deposit',1000)">$1 000</button>
-            <button class="amount-preset" onclick="setAmount('deposit',5000)">$5 000</button>
+            <button class="amount-preset" data-action="setAmount" data-args="deposit|100">$100</button>
+            <button class="amount-preset" data-action="setAmount" data-args="deposit|500">$500</button>
+            <button class="amount-preset" data-action="setAmount" data-args="deposit|1000">$1 000</button>
+            <button class="amount-preset" data-action="setAmount" data-args="deposit|5000">$5 000</button>
           </div>
           <div class="amount-input-wrap">
             <span class="amount-currency">$</span>
             <input class="amount-input" id="depositInput" type="number" min="1" max="100000"
-              placeholder="Введите сумму" oninput="clearPresets('deposit')">
+              placeholder="Введите сумму" data-input="clearPresets" data-args="deposit">
           </div>
-          <button class="btn btn-primary" style="width:100%;height:40px;" id="depositPanelBtn" onclick="doDepositPanel()">Пополнить</button>
+          <button class="btn btn-primary" style="width:100%;height:40px;" id="depositPanelBtn" data-action="doDepositPanel">Пополнить</button>
           <div class="balance-form-result" id="depositResult"></div>
         </div>
 
@@ -175,17 +175,17 @@
           <div class="balance-form-title">🏦 Вывод средств</div>
           <div class="balance-form-desc">Обработка до 3 рабочих дней</div>
           <div class="amount-presets" id="withdrawPresets">
-            <button class="amount-preset" onclick="setAmount('withdraw',100)">$100</button>
-            <button class="amount-preset" onclick="setAmount('withdraw',500)">$500</button>
-            <button class="amount-preset" onclick="setAmount('withdraw',1000)">$1 000</button>
-            <button class="amount-preset" onclick="setAmount('withdraw','all')">Всё</button>
+            <button class="amount-preset" data-action="setAmount" data-args="withdraw|100">$100</button>
+            <button class="amount-preset" data-action="setAmount" data-args="withdraw|500">$500</button>
+            <button class="amount-preset" data-action="setAmount" data-args="withdraw|1000">$1 000</button>
+            <button class="amount-preset" data-action="setAmount" data-args="withdraw|all">Всё</button>
           </div>
           <div class="amount-input-wrap">
             <span class="amount-currency">$</span>
             <input class="amount-input" id="withdrawInput" type="number" min="1" max="100000"
-              placeholder="Введите сумму" oninput="clearPresets('withdraw')">
+              placeholder="Введите сумму" data-input="clearPresets" data-args="withdraw">
           </div>
-          <button class="btn btn-secondary" style="width:100%;height:40px;" id="withdrawBtn" onclick="doWithdraw()">Вывести</button>
+          <button class="btn btn-secondary" style="width:100%;height:40px;" id="withdrawBtn" data-action="doWithdraw">Вывести</button>
           <div class="balance-form-result" id="withdrawResult"></div>
         </div>
 
@@ -198,7 +198,7 @@
           <span id="txTotal" style="font-size:12px;color:var(--text-3);"></span>
         </div>
         <div id="txList"><div class="tx-empty"><div class="tx-empty-icon">📋</div>Загрузка…</div></div>
-        <button class="btn btn-secondary tx-load-more" id="txLoadMore" style="display:none;" onclick="loadMoreTx()">Загрузить ещё</button>
+        <button class="btn btn-secondary tx-load-more" id="txLoadMore" style="display:none;" data-action="loadMoreTx">Загрузить ещё</button>
       </div>
     </div>
 
@@ -254,9 +254,9 @@
         <div class="panel-subtitle">История вашего участия в аукционах</div>
       </div>
       <div class="settings-tabs" style="margin-bottom:20px;">
-        <button class="settings-tab active" data-btab="active" onclick="showBidsTab('active')">🔥 Активные</button>
-        <button class="settings-tab"        data-btab="won"    onclick="showBidsTab('won')">🏆 Выиграно</button>
-        <button class="settings-tab"        data-btab="lost"   onclick="showBidsTab('lost')">💔 Проиграно</button>
+        <button class="settings-tab active" data-btab="active" data-action="showBidsTab" data-args="active">🔥 Активные</button>
+        <button class="settings-tab"        data-btab="won"    data-action="showBidsTab" data-args="won">🏆 Выиграно</button>
+        <button class="settings-tab"        data-btab="lost"   data-action="showBidsTab" data-args="lost">💔 Проиграно</button>
       </div>
       <div id="btab-active">
         <div id="listActive"><div class="part-empty"><div class="part-empty-icon">🔥</div>Загрузка…</div></div>
@@ -276,8 +276,8 @@
         <div class="panel-subtitle">Аукционы которые вы создали</div>
       </div>
       <div class="settings-tabs" style="margin-bottom:20px;">
-        <button class="settings-tab active" data-ctab="active-offers" onclick="showCreatedTab('active-offers')">Активные</button>
-        <button class="settings-tab"        data-ctab="finished-offers" onclick="showCreatedTab('finished-offers')">Завершённые</button>
+        <button class="settings-tab active" data-ctab="active-offers" data-action="showCreatedTab" data-args="active-offers">Активные</button>
+        <button class="settings-tab"        data-ctab="finished-offers" data-action="showCreatedTab" data-args="finished-offers">Завершённые</button>
       </div>
       <div id="ctab-active-offers">
         <div class="part-list" id="listCreatedActive"><div class="part-empty"><div class="part-empty-icon">📦</div>Загрузка…</div></div>
@@ -302,7 +302,7 @@
         <div>
           <div class="panel-title">Уведомления</div>
         </div>
-        <button class="notif-mark-all-btn" onclick="markAllReadPanel()">Прочитать все</button>
+        <button class="notif-mark-all-btn" data-action="markAllReadPanel">Прочитать все</button>
       </div>
       <div class="notif-panel-cards" id="notifPanelList">
         <div class="notif-panel-empty">Загрузка…</div>
@@ -328,11 +328,11 @@
       </div>
 
       <div class="settings-tabs">
-        <button class="settings-tab active" data-stab="account"        onclick="showSettingsTab('account')">Аккаунт</button>
-        <button class="settings-tab"        data-stab="security"       onclick="showSettingsTab('security')">Безопасность</button>
-        <button class="settings-tab"        data-stab="notif-settings" onclick="showSettingsTab('notif-settings')">Уведомления</button>
-        <button class="settings-tab"        data-stab="appearance"     onclick="showSettingsTab('appearance')">Внешний вид</button>
-        <button class="settings-tab"        data-stab="danger"         onclick="showSettingsTab('danger')" style="color:var(--red);">Опасная зона</button>
+        <button class="settings-tab active" data-stab="account"        data-action="showSettingsTab" data-args="account">Аккаунт</button>
+        <button class="settings-tab"        data-stab="security"       data-action="showSettingsTab" data-args="security">Безопасность</button>
+        <button class="settings-tab"        data-stab="notif-settings" data-action="showSettingsTab" data-args="notif-settings">Уведомления</button>
+        <button class="settings-tab"        data-stab="appearance"     data-action="showSettingsTab" data-args="appearance">Внешний вид</button>
+        <button class="settings-tab"        data-stab="danger"         data-action="showSettingsTab" data-args="danger" style="color:var(--red);">Опасная зона</button>
       </div>
 
       <!-- Аккаунт -->
@@ -346,7 +346,7 @@
               <span id="infoEmail">—</span>
               <span id="emailVerifiedBadge" style="display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(34,197,94,0.12);color:#22c55e;text-transform:uppercase;letter-spacing:0.5px;">Подтверждён</span>
               <span id="emailUnverifiedBadge" style="display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(245,158,11,0.12);color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;">Не подтверждён</span>
-              <button class="btn btn-secondary btn-sm" id="resendVerifyBtn" style="display:none;" onclick="resendVerification()">Отправить повторно</button>
+              <button class="btn btn-secondary btn-sm" id="resendVerifyBtn" style="display:none;" data-action="resendVerification">Отправить повторно</button>
             </span>
           </div>
           <div class="profile-info-row"><span class="profile-info-label">Баланс</span><span class="profile-info-value" id="infoBalance" style="color:var(--green)">—</span></div>
@@ -357,8 +357,8 @@
           <div style="display:flex;align-items:center;gap:16px;">
             <div id="settingsAvatar" style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--accent),#b87314);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#000;overflow:hidden;flex-shrink:0;"></div>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <button class="btn btn-secondary btn-sm" onclick="$('avatarInput').click()">📷 Загрузить фото</button>
-              <button class="btn btn-danger btn-sm" id="deleteAvatarBtn" onclick="deleteAvatar()" style="display:none;">🗑 Удалить аватар</button>
+              <button class="btn btn-secondary btn-sm" data-action="clickById" data-args="avatarInput">📷 Загрузить фото</button>
+              <button class="btn btn-danger btn-sm" id="deleteAvatarBtn" data-action="deleteAvatar" style="display:none;">🗑 Удалить аватар</button>
             </div>
           </div>
         </div>
@@ -375,7 +375,7 @@
           </div>
           <div class="field">
             <label class="field-label">Новый пароль</label>
-            <input class="field-input" type="password" id="pwNew" placeholder="Минимум 6 символов" autocomplete="new-password" oninput="checkStrength()">
+            <input class="field-input" type="password" id="pwNew" placeholder="Минимум 6 символов" autocomplete="new-password" data-input="checkStrength">
             <div class="pw-strength">
               <div class="pw-bar" id="pwBar1"></div>
               <div class="pw-bar" id="pwBar2"></div>
@@ -392,7 +392,7 @@
           </div>
           <div class="action-row">
             <span class="action-status" id="pwStatus"></span>
-            <button class="btn btn-primary" onclick="changePassword()">Изменить пароль</button>
+            <button class="btn btn-primary" data-action="changePassword">Изменить пароль</button>
           </div>
         </div>
       </div>
@@ -403,28 +403,28 @@
           <div class="card-title" style="margin-bottom:16px;">Email-рассылка</div>
           <div class="setting-row">
             <div class="setting-info"><div class="setting-label">Email-уведомления</div><div class="setting-desc">Главный переключатель всех рассылок</div></div>
-            <label class="toggle"><input type="checkbox" id="s_email" onchange="onNotifChange()"><span class="toggle-track"></span></label>
+            <label class="toggle"><input type="checkbox" id="s_email" data-change="onNotifChange"><span class="toggle-track"></span></label>
           </div>
           <div class="setting-row">
             <div class="setting-info"><div class="setting-label">Перебили ставку</div><div class="setting-desc">Когда кто-то предложил больше</div></div>
-            <label class="toggle"><input type="checkbox" id="s_outbid" onchange="onNotifChange()"><span class="toggle-track"></span></label>
+            <label class="toggle"><input type="checkbox" id="s_outbid" data-change="onNotifChange"><span class="toggle-track"></span></label>
           </div>
           <div class="setting-row">
             <div class="setting-info"><div class="setting-label">Победа в аукционе</div><div class="setting-desc">Когда вы выигрываете лот</div></div>
-            <label class="toggle"><input type="checkbox" id="s_winning" onchange="onNotifChange()"><span class="toggle-track"></span></label>
+            <label class="toggle"><input type="checkbox" id="s_winning" data-change="onNotifChange"><span class="toggle-track"></span></label>
           </div>
           <div class="setting-row">
             <div class="setting-info"><div class="setting-label">Аукцион скоро завершится</div><div class="setting-desc">За 5 минут до окончания</div></div>
-            <label class="toggle"><input type="checkbox" id="s_ending" onchange="onNotifChange()"><span class="toggle-track"></span></label>
+            <label class="toggle"><input type="checkbox" id="s_ending" data-change="onNotifChange"><span class="toggle-track"></span></label>
           </div>
           <div class="setting-row">
             <div class="setting-info"><div class="setting-label">Ваш лот продан</div><div class="setting-desc">Когда кто-то выиграл ваш лот</div></div>
-            <label class="toggle"><input type="checkbox" id="s_sold" onchange="onNotifChange()"><span class="toggle-track"></span></label>
+            <label class="toggle"><input type="checkbox" id="s_sold" data-change="onNotifChange"><span class="toggle-track"></span></label>
           </div>
         </div>
         <div class="action-row">
           <span class="action-status" id="notifStatus"></span>
-          <button class="btn btn-primary" id="saveNotifBtn" onclick="saveNotifications()" disabled>Сохранить</button>
+          <button class="btn btn-primary" id="saveNotifBtn" data-action="saveNotifications" disabled>Сохранить</button>
         </div>
       </div>
 
@@ -433,9 +433,9 @@
         <div class="card">
           <div class="card-title" style="margin-bottom:16px;">Цветовая схема</div>
           <div class="theme-picker" id="themePicker">
-            <button class="theme-option" data-theme="dark"  onclick="setTheme('dark')"><div class="theme-preview dark-preview"></div><span>Тёмная</span></button>
-            <button class="theme-option" data-theme="light" onclick="setTheme('light')"><div class="theme-preview light-preview"></div><span>Светлая</span></button>
-            <button class="theme-option" data-theme="auto"  onclick="setTheme('auto')"><div class="theme-preview auto-preview"></div><span>Системная</span></button>
+            <button class="theme-option" data-theme="dark"  data-action="setTheme" data-args="dark"><div class="theme-preview dark-preview"></div><span>Тёмная</span></button>
+            <button class="theme-option" data-theme="light" data-action="setTheme" data-args="light"><div class="theme-preview light-preview"></div><span>Светлая</span></button>
+            <button class="theme-option" data-theme="auto"  data-action="setTheme" data-args="auto"><div class="theme-preview auto-preview"></div><span>Системная</span></button>
           </div>
         </div>
       </div>
@@ -445,7 +445,7 @@
         <div class="danger-zone">
           <div class="danger-title">⚠️ Удаление аккаунта</div>
           <div class="danger-desc">Это действие необратимо. Все ваши лоты, ставки и история будут удалены навсегда. Восстановление невозможно.</div>
-          <button class="btn btn-danger" onclick="showToast('В разработке', 'Удаление аккаунта появится позже', 'warn')">Удалить аккаунт</button>
+          <button class="btn btn-danger" data-action="showToast" data-args="В разработке|Удаление аккаунта появится позже|warn">Удалить аккаунт</button>
         </div>
       </div>
     </div>
@@ -461,30 +461,30 @@
       <img id="cropImg" src="" alt="avatar">
     </div>
     <div class="crop-actions">
-      <button class="btn btn-ghost" onclick="closeCropModal()">Отмена</button>
-      <button class="btn btn-primary" id="cropConfirmBtn" onclick="confirmCrop()">Применить</button>
+      <button class="btn btn-ghost" data-action="closeCropModal">Отмена</button>
+      <button class="btn btn-primary" id="cropConfirmBtn" data-action="confirmCrop">Применить</button>
     </div>
   </div>
 </div>
 
 <!-- Deposit Modal -->
-<div class="modal-overlay" id="depositModal" onclick="handleModalClick(event)">
+<div class="modal-overlay" id="depositModal" data-action="handleModalClick">
   <div class="modal-box">
     <div class="modal-title">Пополнение баланса</div>
     <div class="modal-sub">Выберите сумму или введите вручную</div>
     <div class="deposit-presets">
-      <button class="deposit-preset" onclick="selectPreset(100)">$100</button>
-      <button class="deposit-preset" onclick="selectPreset(500)">$500</button>
-      <button class="deposit-preset" onclick="selectPreset(1000)">$1 000</button>
-      <button class="deposit-preset" onclick="selectPreset(5000)">$5 000</button>
+      <button class="deposit-preset" data-action="selectPreset" data-args="100">$100</button>
+      <button class="deposit-preset" data-action="selectPreset" data-args="500">$500</button>
+      <button class="deposit-preset" data-action="selectPreset" data-args="1000">$1 000</button>
+      <button class="deposit-preset" data-action="selectPreset" data-args="5000">$5 000</button>
     </div>
     <div class="deposit-input-wrap">
       <span class="deposit-currency">$</span>
-      <input class="deposit-input" id="depositAmount" type="number" min="1" max="10000" placeholder="Сумма" oninput="onDepositInput()">
+      <input class="deposit-input" id="depositAmount" type="number" min="1" max="10000" placeholder="Сумма" data-input="onDepositInput">
     </div>
     <div class="deposit-actions">
-      <button class="btn btn-ghost" onclick="closeDeposit()">Отмена</button>
-      <button class="btn btn-primary" id="depositBtn" onclick="doDeposit()">Пополнить</button>
+      <button class="btn btn-ghost" data-action="closeDeposit">Отмена</button>
+      <button class="btn btn-primary" id="depositBtn" data-action="doDeposit">Пополнить</button>
     </div>
     <div class="deposit-result" id="depositResult"></div>
   </div>
@@ -520,17 +520,17 @@
       </div>
       <div class="footer-col">
         <div class="footer-col-title">Помощь</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Как делать ставки">Как делать ставки</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Безопасность">Безопасность</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="FAQ">FAQ</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Поддержка">Поддержка</a>
       </div>
       <div class="footer-col">
         <div class="footer-col-title">О сервисе</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="О нас">О нас</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Контакты">Контакты</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Условия">Условия</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Политика">Политика</a>
       </div>
     </div>
   </div>

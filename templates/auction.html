@@ -42,15 +42,15 @@
           <div class="nav-balance" id="userBalance"></div>
         </div>
       </a>
-      <button class="btn btn-primary btn-sm" id="authBtn" onclick="goAuth()">Войти</button>
+      <button class="btn btn-primary btn-sm" id="authBtn" data-action="goAuth">Войти</button>
 
-      <button class="nav-hamburger" type="button" onclick="document.getElementById('mobileNav').classList.add('open')">☰</button>
+      <button class="nav-hamburger" type="button" data-action="openMobileNav">☰</button>
     </div>
   </div>
 </header>
 
 <!-- Mobile nav -->
-<div class="mobile-nav" id="mobileNav" onclick="if(event.target===this)this.classList.remove('open')">
+<div class="mobile-nav" id="mobileNav" data-action="dismissMobileNavOnBackdrop">
   <div class="mobile-nav-inner">
     <div class="mobile-nav-title">Лотус</div>
     <a class="mobile-nav-link" href="index.html">🏠 Аукционы</a>
@@ -78,7 +78,7 @@
     <div class="lot-meta-row">
       <div class="status-badge active" id="statusBadge">Активен</div>
       <div class="cat-badge" id="categoryBadge"></div>
-      <button id="editLotBtn" onclick="openEditModal()" style="display:none;" class="btn btn-secondary btn-sm">Редактировать</button>
+      <button id="editLotBtn" data-action="openEditModal" style="display:none;" class="btn btn-secondary btn-sm">Редактировать</button>
     </div>
     <h1 class="lot-title" id="title">Загрузка…</h1>
     <div class="lot-byline" id="lotByline"></div>
@@ -92,8 +92,8 @@
       <div class="lot-image-wrap" id="imageWrap">
         <span class="lot-image-placeholder" id="imgPlaceholder">🎨</span>
         <div class="lot-slides" id="lotSlides"></div>
-        <button class="lot-nav lot-nav-prev" id="lotPrev" style="display:none;" onclick="lotSlide(-1)">‹</button>
-        <button class="lot-nav lot-nav-next" id="lotNext" style="display:none;" onclick="lotSlide(1)">›</button>
+        <button class="lot-nav lot-nav-prev" id="lotPrev" style="display:none;" data-action="lotSlide" data-args="-1">‹</button>
+        <button class="lot-nav lot-nav-next" id="lotNext" style="display:none;" data-action="lotSlide" data-args="1">›</button>
         <div class="lot-dots" id="lotDots"></div>
         <div class="lot-counter" id="lotCounter" style="display:none;"></div>
       </div>
@@ -124,7 +124,7 @@
         <div id="binBlock" style="display:none;" class="bin-block">
           <div class="bin-label">Купить сразу</div>
           <div class="bin-price" id="binPriceDisplay">—</div>
-          <button class="btn btn-primary" id="binBtn" onclick="buyNow()" style="width:100%;height:42px;font-size:14px;">Купить</button>
+          <button class="btn btn-primary" id="binBtn" data-action="buyNow" style="width:100%;height:42px;font-size:14px;">Купить</button>
           <div id="binDivider" class="bin-divider">
             <div class="bin-divider-line"></div>
             <span class="bin-divider-text">или сделайте ставку</span>
@@ -135,17 +135,17 @@
         <!-- Bid form -->
         <div class="bid-form" id="bidForm">
           <div class="bid-quick" id="bidQuick" style="display:none;">
-            <button type="button" class="bid-quick-btn" data-bump="1"   onclick="bumpBid(1)">+1</button>
-            <button type="button" class="bid-quick-btn" data-bump="5"   onclick="bumpBid(5)">+5</button>
-            <button type="button" class="bid-quick-btn" data-bump="10"  onclick="bumpBid(10)">+10</button>
-            <button type="button" class="bid-quick-btn" data-bump="50"  onclick="bumpBid(50)">+50</button>
-            <button type="button" class="bid-quick-btn" data-bump="100" onclick="bumpBid(100)">+100</button>
+            <button type="button" class="bid-quick-btn" data-bump="1"   data-action="bumpBid" data-args="1">+1</button>
+            <button type="button" class="bid-quick-btn" data-bump="5"   data-action="bumpBid" data-args="5">+5</button>
+            <button type="button" class="bid-quick-btn" data-bump="10"  data-action="bumpBid" data-args="10">+10</button>
+            <button type="button" class="bid-quick-btn" data-bump="50"  data-action="bumpBid" data-args="50">+50</button>
+            <button type="button" class="bid-quick-btn" data-bump="100" data-action="bumpBid" data-args="100">+100</button>
           </div>
           <div class="bid-input-wrap">
             <span class="bid-currency">$</span>
             <input class="bid-input" id="bidAmount" type="number" min="0" step="0.01" placeholder="Введите сумму">
           </div>
-          <button class="btn btn-primary bid-submit" id="bidBtn" onclick="placeBid()">Поставить ставку</button>
+          <button class="btn btn-primary bid-submit" id="bidBtn" data-action="placeBid">Поставить ставку</button>
           <div class="bid-hint" id="bidHint">Войдите, чтобы делать ставки</div>
         </div>
       </div>
@@ -186,7 +186,7 @@
             <div class="seller-stat-lbl">Отзывов</div>
           </div>
         </div>
-        <button class="sub-btn" id="subBtn" onclick="toggleSubscription()" style="display:none;">
+        <button class="sub-btn" id="subBtn" data-action="toggleSubscription" style="display:none;">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
           <span id="subBtnText">Подписаться</span>
         </button>
@@ -208,9 +208,9 @@
   <div class="lot-tabs">
     <div class="tabs-nav" role="tablist">
       <button class="lot-tab-btn active" type="button" role="tab" data-tab="desc"
-              onclick="switchLotTab('desc')">Описание</button>
+              data-action="switchLotTab" data-args="desc">Описание</button>
       <button class="lot-tab-btn" type="button" role="tab" data-tab="reviews"
-              onclick="switchLotTab('reviews')">
+              data-action="switchLotTab" data-args="reviews">
         Отзывы <span class="tab-count" id="reviewsTabCount">0</span>
       </button>
     </div>
@@ -238,28 +238,28 @@
 
         <!-- Star-filter пилюли -->
         <div class="rev-filter" id="revFilter" style="display:none;">
-          <button class="rev-pill rev-pill-toggle" type="button" id="revPillThisLot" onclick="toggleThisLotOnly()">
+          <button class="rev-pill rev-pill-toggle" type="button" id="revPillThisLot" data-action="toggleThisLotOnly">
             <span class="rev-pill-check"
                   ><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg></span>
             Об этом лоте <span class="rev-pill-count" id="revPillThisLotCount">0</span>
           </button>
           <span class="rev-filter-sep"></span>
-          <button class="rev-pill active" data-rating="all" type="button" onclick="filterReviewsByRating('all',this)">
+          <button class="rev-pill active" data-rating="all" type="button" data-action="filterReviewsByRating" data-args="s:all">
             Все <span class="rev-pill-count" id="revPillAll">0</span>
           </button>
-          <button class="rev-pill" data-rating="5" type="button" onclick="filterReviewsByRating(5,this)">
+          <button class="rev-pill" data-rating="5" type="button" data-action="filterReviewsByRating" data-args="5">
             5<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill5">0</span>
           </button>
-          <button class="rev-pill" data-rating="4" type="button" onclick="filterReviewsByRating(4,this)">
+          <button class="rev-pill" data-rating="4" type="button" data-action="filterReviewsByRating" data-args="4">
             4<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill4">0</span>
           </button>
-          <button class="rev-pill" data-rating="3" type="button" onclick="filterReviewsByRating(3,this)">
+          <button class="rev-pill" data-rating="3" type="button" data-action="filterReviewsByRating" data-args="3">
             3<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill3">0</span>
           </button>
-          <button class="rev-pill" data-rating="2" type="button" onclick="filterReviewsByRating(2,this)">
+          <button class="rev-pill" data-rating="2" type="button" data-action="filterReviewsByRating" data-args="2">
             2<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill2">0</span>
           </button>
-          <button class="rev-pill" data-rating="1" type="button" onclick="filterReviewsByRating(1,this)">
+          <button class="rev-pill" data-rating="1" type="button" data-action="filterReviewsByRating" data-args="1">
             1<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill1">0</span>
           </button>
         </div>
@@ -276,10 +276,10 @@
           </div>
           <textarea class="review-ta" id="reviewText" maxlength="1000"
                     placeholder="Расскажите о своём опыте работы с продавцом…"
-                    oninput="updateReviewCounter()"></textarea>
+                    data-input="updateReviewCounter"></textarea>
           <div class="review-form-footer">
             <span class="review-char-count" id="reviewCharCount">0 / 1000</span>
-            <button class="btn btn-primary btn-sm" onclick="submitReview()">Опубликовать отзыв</button>
+            <button class="btn btn-primary btn-sm" data-action="submitReview">Опубликовать отзыв</button>
           </div>
         </div>
       </div>
@@ -302,7 +302,7 @@
         <div class="edit-modal-title">✏️ Редактировать лот</div>
         <div class="edit-modal-sub">Изменения доступны пока нет ставок</div>
       </div>
-      <button class="modal-close" type="button" onclick="closeEditModal()">✕</button>
+      <button class="modal-close" type="button" data-action="closeEditModal">✕</button>
     </div>
 
     <div class="error-box" id="editError"></div>
@@ -340,9 +340,9 @@
       <div class="form-group" id="editExtendBlock" style="margin:0;">
         <label class="form-label">Продлить аукцион</label>
         <div class="edit-extend-row">
-          <button type="button" class="btn btn-secondary" onclick="setExtend(30)">+30 мин</button>
-          <button type="button" class="btn btn-secondary" onclick="setExtend(60)">+1 час</button>
-          <button type="button" class="btn btn-secondary" onclick="setExtend(1440)">+1 день</button>
+          <button type="button" class="btn btn-secondary" data-action="setExtend" data-args="30">+30 мин</button>
+          <button type="button" class="btn btn-secondary" data-action="setExtend" data-args="60">+1 час</button>
+          <button type="button" class="btn btn-secondary" data-action="setExtend" data-args="1440">+1 день</button>
           <input type="number" id="editExtend" min="1" max="10080" placeholder="мин вручную">
         </div>
       </div>
@@ -360,8 +360,8 @@
     </div>
 
     <div class="edit-modal-footer">
-      <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Отмена</button>
-      <button type="button" class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()" style="min-width:130px;">Сохранить</button>
+      <button type="button" class="btn btn-secondary" data-action="closeEditModal">Отмена</button>
+      <button type="button" class="btn btn-primary" id="editSaveBtn" data-action="saveEdit" style="min-width:130px;">Сохранить</button>
     </div>
   </div>
 </div>
@@ -396,17 +396,17 @@
       </div>
       <div class="footer-col">
         <div class="footer-col-title">Помощь</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Как делать ставки">Как делать ставки</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Безопасность">Безопасность</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="FAQ">FAQ</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Поддержка">Поддержка</a>
       </div>
       <div class="footer-col">
         <div class="footer-col-title">О сервисе</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="О нас">О нас</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Контакты">Контакты</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Условия">Условия</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Политика">Политика</a>
       </div>
     </div>
   </div>

@@ -178,11 +178,11 @@ async function render(data) {
       </div>
       ${rstats.total > 0 ? `
         <div class="rev-filter" id="userRevFilter">
-          <button class="rev-pill active" data-rating="all" type="button" onclick="filterReviewsByRating('all',this)">
+          <button class="rev-pill active" data-rating="all" type="button" data-action="filterReviewsByRating" data-args="s:all">
             Все <span class="rev-pill-count">${rstats.total}</span>
           </button>
           ${[5,4,3,2,1].map(n => `
-            <button class="rev-pill" data-rating="${n}" type="button" ${(dist[n]||0) === 0 ? 'disabled' : ''} onclick="filterReviewsByRating(${n},this)">
+            <button class="rev-pill" data-rating="${n}" type="button" ${(dist[n]||0) === 0 ? 'disabled' : ''} data-action="filterReviewsByRating" data-args="${n}">
               ${n}<span class="rev-pill-star">★</span> <span class="rev-pill-count">${dist[n]||0}</span>
             </button>
           `).join('')}
@@ -247,10 +247,15 @@ function renderCompletedRow(a) {
     </a>`;
 }
 
-function filterReviewsByRating(rating, btn) {
+function filterReviewsByRating(rating) {
   currentFilter = rating;
   document.querySelectorAll('.rev-pill').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
+  // ``this`` is the clicked pill (set by the common.js dispatcher's
+  // ``fn.call(el, ...)``). The old call signature passed the element
+  // as the second argument.
+  const pill = (this instanceof Element) ? this :
+    document.querySelector(`.rev-pill[data-rating="${rating}"]`);
+  if (pill) pill.classList.add('active');
   renderReviews();
 }
 
@@ -304,7 +309,7 @@ function renderReviews() {
 }
 
 function renderSubBtn(sub) {
-  return `<button class="sub-btn${sub ? ' subscribed' : ''}" onclick="toggleSub()" id="subBtn">
+  return `<button class="sub-btn${sub ? ' subscribed' : ''}" data-action="toggleSub" id="subBtn">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
       <circle cx="9" cy="7" r="4"/>

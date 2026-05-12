@@ -247,7 +247,7 @@ async function loadNotifPanel() {
         : diff < 86400 ? `${Math.floor(diff/3600)} ч назад`
         : `${Math.floor(diff/86400)} дн назад`;
       return `
-        <div class="notif-card${n.is_read ? '' : ' unread'}" onclick="markNotifRead(${n.id}, this)">
+        <div class="notif-card${n.is_read ? '' : ' unread'}" data-action="markNotifRead" data-args="${n.id}">
           <div class="notif-card-icon" style="background:${ic.bg};">${ic.icon}</div>
           <div class="notif-card-body">
             <div class="notif-card-text"><strong>${esc(n.title)}</strong><br>${esc(n.message || '')}</div>
@@ -261,8 +261,10 @@ async function loadNotifPanel() {
   } catch { el.innerHTML = '<div class="notif-panel-empty">Ошибка загрузки</div>'; }
 }
 
-async function markNotifRead(id, el) {
-  el?.classList.remove('unread');
+async function markNotifRead(id) {
+  // ``this`` is the .notif-card the dispatcher bound; the old call
+  // signature was ``markNotifRead(id, el)``.
+  if (this && this.classList) this.classList.remove('unread');
   try { await fetch(`${API}/api/notifications/${id}/read`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch {}
 }
 async function markAllReadPanel() {
@@ -564,12 +566,15 @@ function renderSubs() {
         </div>
         <div class="sub-seller-actions">
           <a href="user.html?username=${encodeURIComponent(s.username)}" class="btn btn-secondary">Профиль ↗</a>
-          <button class="sub-unsub-btn" onclick="unsubscribeFrom(${s.seller_id}, this)">Отписаться</button>
+          <button class="sub-unsub-btn" data-action="unsubscribeFrom" data-args="${s.seller_id}">Отписаться</button>
         </div>
       </div>`;
   }).join('');
 }
-async function unsubscribeFrom(sellerId, btn) {
+async function unsubscribeFrom(sellerId) {
+  // The element-as-second-arg shape of the old inline call isn't
+  // needed — re-rendering subscriptions rebuilds the affected row
+  // anyway, so we don't need to mutate the button.
   try {
     const r = await fetch(`${API}/api/sellers/${sellerId}/subscribe`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
     if (r.ok) { subsCache = subsCache.filter(s => s.seller_id !== sellerId); renderSubs(); }
@@ -598,7 +603,12 @@ function renderTimeline(data) {
 /* ---- Avatar crop & upload ---- */
 let cropper = null;
 
-function uploadAvatar(input) {
+function uploadAvatar() {
+  // ``this`` is the file <input> the change event fired on (set by the
+  // common.js dispatcher's ``fn.call(el, ...)``). Previously the inline
+  // ``onchange="uploadAvatar(this)"`` threaded the element through as
+  // an argument.
+  const input = this;
   const file = input.files[0];
   if (!file) return;
   input.value = ''; // сбрасываем чтобы можно было выбрать тот же файл снова

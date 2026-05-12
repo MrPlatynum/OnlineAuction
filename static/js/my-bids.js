@@ -131,16 +131,16 @@ function renderTabs() {
 
   return `
     <div class="tabs">
-      <button class="tab-btn ${currentTab==='active'?'active':''}" onclick="switchTab('active')">
+      <button class="tab-btn ${currentTab==='active'?'active':''}" data-action="switchTab" data-args="active">
         Активные <span class="tab-count">${activeCount}</span>
       </button>
-      <button class="tab-btn ${currentTab==='won'?'active':''}" onclick="switchTab('won')">
+      <button class="tab-btn ${currentTab==='won'?'active':''}" data-action="switchTab" data-args="won">
         Выиграно <span class="tab-count">${wonCount}</span>
       </button>
-      <button class="tab-btn ${currentTab==='lost'?'active':''}" onclick="switchTab('lost')">
+      <button class="tab-btn ${currentTab==='lost'?'active':''}" data-action="switchTab" data-args="lost">
         Проиграно <span class="tab-count">${lostCount}</span>
       </button>
-      <button class="tab-btn ${currentTab==='created'?'active':''}" onclick="switchTab('created')">
+      <button class="tab-btn ${currentTab==='created'?'active':''}" data-action="switchTab" data-args="created">
         Мои лоты <span class="tab-count">${createdCount}</span>
       </button>
     </div>
@@ -265,7 +265,7 @@ async function init() {
         <div class="empty-icon">❌</div>
         <div class="empty-title">Ошибка загрузки</div>
         <div class="empty-sub">Не удалось загрузить данные. Проверьте подключение.</div>
-        <button class="btn btn-primary" onclick="init()">Повторить</button>
+        <button class="btn btn-primary" data-action="init">Повторить</button>
       </div>
     `;
   }

@@ -10,14 +10,47 @@
 // Mobile nav
 function openMobileNav() { document.getElementById('mobileNav').classList.add('open'); }
 function closeMobileNavFull() { document.getElementById('mobileNav').classList.remove('open'); }
+
+// Wrapper for mobile-nav links that pick a section and dismiss the
+// drawer in one tap. Used by data-action; the old inline call was
+// ``onclick="showSection(event,'auctions');closeMobileNavFull()"``.
+function showSectionFromMobile(section) {
+  showSection.call(this, section);
+  closeMobileNavFull();
+}
+
+// Hero "Смотреть лоты" CTA — used to inline-check for the smooth-scroll
+// helper and fall back to ``scrollIntoView``. The dispatcher already
+// preventDefaults ``a[href^="#"]`` for us.
+function scrollToAuctionsOrFallback() {
+  if (typeof scrollToAuctionsTop === 'function') {
+    scrollToAuctionsTop();
+  } else {
+    document.getElementById('auctionsContainer')?.scrollIntoView({ behavior: 'smooth' });
+  }
+}
+
+// Hero "Выставить свой лот" CTA — gated on the current user. The old
+// inline ``onclick="(window.currentUser?showCreateModal():showAuth())"``
+// reflected the same conditional.
+function startCreateFlow() {
+  if (window.currentUser) {
+    showCreateModal();
+  } else {
+    showAuth();
+  }
+}
 function closeMobileNav(e) {
   if (e.target === document.getElementById('mobileNav')) closeMobileNavFull();
 }
 
 // Status filter buttons
-function setStatus(el, status) {
+function setStatus(status) {
   document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
+  // ``this`` is the clicked status pill (set by the common.js
+  // dispatcher's ``fn.call(el, ...)``); the old inline call passed
+  // the element through as the first argument.
+  if (this && this.classList) this.classList.add('active');
   if (typeof currentFilters !== 'undefined') {
     currentFilters.status = status;
     currentFilters.page = 1;
@@ -57,6 +90,16 @@ function removeFromSearchHistory(query) {
   renderSearchHistory();
 }
 
+// Wrapper used from the search-history item's delete (×) button. The
+// old inline ``onclick="event.stopPropagation();removeFromSearchHistory(...)"``
+// had to stop the click from bubbling to the parent .sh-item, which
+// has its own click handler. The dispatcher appends the event last
+// so the wrapper can grab it.
+window.removeFromSearchHistoryItem = function(query, e) {
+  if (e) e.stopPropagation();
+  removeFromSearchHistory(query);
+};
+
 window.clearSearchHistory = function() {
   try { localStorage.removeItem(SEARCH_HISTORY_KEY); } catch {}
   hideSearchHistory();
@@ -72,10 +115,10 @@ function renderSearchHistory() {
   }
   list.innerHTML = history.map(q => {
     const safe = esc(q);
-    return `<div class="sh-item" data-query="${safe}" onclick="applyHistorySearch(this.dataset.query)">
+    return `<div class="sh-item" data-query="${safe}" data-action="applyHistorySearch" data-args="${safe}">
       <span class="sh-item-icon">🕐</span>
       <span class="sh-item-text">${safe}</span>
-      <button class="sh-item-del" onclick="event.stopPropagation();removeFromSearchHistory(this.parentElement.dataset.query)">×</button>
+      <button class="sh-item-del" data-action="removeFromSearchHistoryItem" data-args="${safe}">×</button>
     </div>`;
   }).join('');
 }
@@ -170,7 +213,7 @@ async function loadCategories() {
         btn.className = 'fs-cat-item';
         btn.dataset.slug = cat.slug;
         btn.textContent = cat.name;
-        btn.onclick = () => selectCategory(btn, cat.slug, null, cat.name, null);
+        btn.onclick = () => selectCategory.call(btn, cat.slug, null, cat.name, null);
         listEl.appendChild(btn);
 
         if (cat.children && cat.children.length) {
@@ -184,7 +227,7 @@ async function loadCategories() {
             sb.dataset.slug = ch.slug;
             sb.dataset.parent = cat.slug;
             sb.textContent = ch.name;
-            sb.onclick = () => selectCategory(sb, ch.slug, cat.slug, ch.name, cat.name);
+            sb.onclick = () => selectCategory.call(sb, ch.slug, cat.slug, ch.name, cat.name);
             subs.appendChild(sb);
           });
           listEl.appendChild(subs);
@@ -251,9 +294,14 @@ window.applyFilters = function() {
   if (typeof loadAuctions === 'function') loadAuctions();
 }
 
-window.selectCategory = function(el, slug, parentSlug, name, parentName) {
+window.selectCategory = function(slug, parentSlug, name, parentName) {
   document.querySelectorAll('.fs-cat-item,.fs-sub-item').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
+  // ``this`` is the clicked category pill (set by the common.js
+  // dispatcher); the old inline ``onclick="selectCategory(this, ...)"``
+  // passed the element through as the first argument. Programmatic
+  // callers from inside index.js bind ``this`` via ``.call(el, ...)``
+  // so the same single signature works in both modes.
+  if (this && this.classList) this.classList.add('active');
   document.querySelectorAll('.fs-cat-subs').forEach(s => s.style.display = 'none');
   if (parentSlug) {
     const subs = document.getElementById(`subs-${parentSlug}`);
@@ -288,7 +336,7 @@ window.renderFilterTags = function() {
     let label;
     if (parentSlug && parentName) {
       // Подкатегория — "Одежда → Мужская", клик на "Одежда" переключает на родителя
-      label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${esc(parentName)}">${esc(parentName)}</span> <span style="opacity:.5;">›</span> ${esc(name)}`;
+      label = `📂 <span class="crumb-link" data-action="clickCrumbParent" title="Выбрать категорию ${esc(parentName)}">${esc(parentName)}</span> <span style="opacity:.5;">›</span> ${esc(name)}`;
     } else {
       label = `📂 ${esc(name)}`;
     }
@@ -303,12 +351,12 @@ window.renderFilterTags = function() {
   const chips = tags.map(t => `
     <div class="filter-tag" data-key="${t.key}">
       <span class="filter-tag-label">${t.raw ? t.label : t.label}</span>
-      <button class="filter-tag-remove" onclick="removeFilterTag('${t.key}')" aria-label="Удалить фильтр">
+      <button class="filter-tag-remove" data-action="removeFilterTag" data-args="${t.key}" aria-label="Удалить фильтр">
         <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
       </button>
     </div>`).join('');
   const clearAll = tags.length >= 2
-    ? `<button class="filter-tag-clear" type="button" onclick="resetFilters()">
+    ? `<button class="filter-tag-clear" type="button" data-action="resetFilters">
          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
          Очистить все
        </button>`
@@ -325,7 +373,7 @@ window.clickCrumbParent = function() {
   // Найти кнопку родительской категории и кликнуть её
   const btn = document.querySelector(`.fs-cat-item[data-slug="${parentSlug}"]`);
   if (btn) {
-    selectCategory(btn, parentSlug, null, parentName, null);
+    selectCategory.call(btn, parentSlug, null, parentName, null);
   }
 }
 
@@ -431,9 +479,14 @@ function syncCreateBtns() {
 }
 
 // Card image carousel
-function cardSlide(e, btn, dir) {
-  e.preventDefault(); e.stopPropagation();
-  const card = btn.closest('.auction-card');
+function cardSlide(dir, e) {
+  // Old signature ``cardSlide(e, btn, dir)`` is reorganised: the
+  // dispatcher binds ``this`` to the clicked nav button and appends
+  // the event after the data-args. Calling ``e.stopPropagation()``
+  // is essential — the click would otherwise bubble to the card-wide
+  // navigation listener.
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  const card = this && this.closest ? this.closest('.auction-card') : null;
   if (!card) return;
   const slides = card.querySelectorAll('.card-slide');
   const dots   = card.querySelectorAll('.card-dot');
@@ -578,7 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
             preview.innerHTML = lotSelectedFiles.map((f, i) => `
                 <div class="multi-img-thumb ${i === 0 ? 'is-cover' : ''}" data-idx="${i}">
                     <img src="${URL.createObjectURL(f)}" alt="фото ${i+1}">
-                    <button class="thumb-del" type="button" onclick="removeThumb(${i})">✕</button>
+                    <button class="thumb-del" type="button" data-action="removeThumb" data-args="${i}">✕</button>
                 </div>
             `).join('');
             if (addBtn) addBtn.style.display = lotSelectedFiles.length >= 5 ? 'none' : 'inline-flex';
@@ -981,7 +1034,7 @@ function buildPageList(current, total) {
                         <div class="empty-title">Ничего не найдено</div>
                         <p>Попробуйте изменить фильтры или сбросить их.</p>
                         <div class="empty-actions">
-                            <button class="btn btn-primary" type="button" onclick="resetFilters()">Сбросить фильтры</button>
+                            <button class="btn btn-primary" type="button" data-action="resetFilters">Сбросить фильтры</button>
                         </div>
                     </div>
                 ` : `
@@ -1060,10 +1113,10 @@ function buildPageList(current, total) {
                                 ${imagesHtml}
                                 ${badgeClass === 'badge-ending' ? `<div class="auction-badge badge-ending">⏰ Скоро конец</div>` : ''}
                                 ${binBadge}
-                                ${canDelete ? `<button class="card-delete-btn" title="Удалить лот" onclick="deleteAuction(event, ${auction.id})">✕</button>` : ''}
+                                ${canDelete ? `<button class="card-delete-btn" title="Удалить лот" data-action="deleteAuction" data-args="${auction.id}">✕</button>` : ''}
                                 ${hasMultiple ? `
-                                <button class="card-nav card-nav-prev" onclick="cardSlide(event,this,-1)">‹</button>
-                                <button class="card-nav card-nav-next" onclick="cardSlide(event,this,1)">›</button>
+                                <button class="card-nav card-nav-prev" data-action="cardSlide" data-args="-1">‹</button>
+                                <button class="card-nav card-nav-next" data-action="cardSlide" data-args="1">›</button>
                                 <div class="card-dots">${allImgUrls.map((_,i)=>`<span class="card-dot${i===0?' active':''}" data-dot="${i}"></span>`).join('')}</div>` : ''}
                             </div>
                         </a>
@@ -1077,7 +1130,7 @@ function buildPageList(current, total) {
                             ${!isEnded
                                 ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
                                 : `<div class="auction-start">Завершён · от $${auction.starting_price.toFixed(2)}</div>`}
-                            ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${safeCreator}</a></span></div>` : ''}
+                            ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" data-action="stopHere">@${safeCreator}</a></span></div>` : ''}
                         </div>
                     </div>
                 `;
@@ -1203,9 +1256,10 @@ function buildPageList(current, total) {
             priceEl.classList.add('price-flash');
         }
 
-        async function deleteAuction(e, auctionId) {
-            e.preventDefault();
-            e.stopPropagation();
+        async function deleteAuction(auctionId, e) {
+            // Dispatcher appends the event after data-args; the old
+            // inline call was ``deleteAuction(event, auctionId)``.
+            if (e) { e.preventDefault(); e.stopPropagation(); }
             const card = document.querySelector(`[data-auction-id="${auctionId}"]`);
             const title = card?.dataset.title || 'этот лот';
             if (!confirm(`Удалить «${title}»?\n\nЭто действие нельзя отменить.`)) return;
@@ -1369,10 +1423,15 @@ function buildPageList(current, total) {
             location.reload();
         }
 
-        function showSection(e, section) {
+        function showSection(section) {
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            e.target.closest('.nav-item').classList.add('active');
-            
+            // ``this`` is the clicked nav button (set by the common.js
+            // dispatcher); the old inline ``onclick="showSection(event,
+            // 'auctions')"`` used ``e.target.closest('.nav-item')`` to
+            // find the parent container.
+            const navItem = (this && this.closest) ? this.closest('.nav-item') : null;
+            if (navItem) navItem.classList.add('active');
+
             if (section === 'auctions') {
                 currentFilters.page = 1;
                 loadAuctions();

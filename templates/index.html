@@ -27,7 +27,7 @@
     <div class="nav-divider"></div>
 
     <nav class="nav-links">
-      <button class="nav-link active" onclick="showSection(event,'auctions')">Аукционы</button>
+      <button class="nav-link active" data-action="showSection" data-args="auctions">Аукционы</button>
     </nav>
 
     <!-- Центральный поиск -->
@@ -40,7 +40,7 @@
       <div class="search-history" id="searchHistory" style="display:none;">
         <div class="sh-header">
           <span class="sh-title">История поиска</span>
-          <button class="sh-clear-all" onclick="clearSearchHistory()">Очистить</button>
+          <button class="sh-clear-all" data-action="clearSearchHistory">Очистить</button>
         </div>
         <div id="shList"></div>
       </div>
@@ -60,9 +60,9 @@
         </div>
       </a>
 
-      <button class="btn btn-primary btn-sm" id="guestProfile" onclick="showAuth()">Войти</button>
+      <button class="btn btn-primary btn-sm" id="guestProfile" data-action="showAuth">Войти</button>
 
-      <button class="nav-hamburger" onclick="openMobileNav()">☰</button>
+      <button class="nav-hamburger" data-action="openMobileNav">☰</button>
     </div>
   </div>
 </header>
@@ -82,12 +82,12 @@
 </div>
 
 <!-- Mobile nav -->
-<div class="mobile-nav" id="mobileNav" onclick="closeMobileNav(event)">
+<div class="mobile-nav" id="mobileNav" data-action="closeMobileNav">
   <div class="mobile-nav-inner">
     <div class="mobile-nav-title">Лотус</div>
-    <button class="mobile-nav-link active" onclick="showSection(event,'auctions');closeMobileNavFull()">🏠 Аукционы</button>
-    <button class="mobile-nav-link" href="my-bids.html" onclick="closeMobileNavFull()">🎯 Мои ставки</button>
-    <button class="mobile-nav-link" onclick="window.location.href='profile.html'">👤 Профиль</button>
+    <button class="mobile-nav-link active" data-action="showSectionFromMobile" data-args="auctions">🏠 Аукционы</button>
+    <button class="mobile-nav-link" data-action="navTo" data-args="my-bids.html">🎯 Мои ставки</button>
+    <button class="mobile-nav-link" data-action="navTo" data-args="profile.html">👤 Профиль</button>
   </div>
 </div>
 
@@ -118,11 +118,11 @@
     </p>
 
     <div class="hero-cta">
-      <a class="btn btn-primary btn-lg" href="#auctionsContainer" onclick="event.preventDefault(); if(typeof scrollToAuctionsTop==='function') scrollToAuctionsTop(); else document.getElementById('auctionsContainer')?.scrollIntoView({behavior:'smooth'});">
+      <a class="btn btn-primary btn-lg" href="#auctionsContainer" data-action="scrollToAuctionsOrFallback">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         Смотреть лоты
       </a>
-      <button class="btn btn-secondary btn-lg" type="button" onclick="(window.currentUser?showCreateModal():showAuth())">
+      <button class="btn btn-secondary btn-lg" type="button" data-action="startCreateFlow">
         Выставить свой лот
       </button>
     </div>
@@ -195,9 +195,9 @@
     <div class="fs-section">
       <div class="fs-label">Статус</div>
       <div class="fs-status-tabs">
-        <button class="fs-stab active" data-status="active"    onclick="setStatus(this,'active')">Активные</button>
-        <button class="fs-stab"        data-status="completed" onclick="setStatus(this,'completed')">Завершённые</button>
-        <button class="fs-stab"        data-status="all"       onclick="setStatus(this,'all')">Все</button>
+        <button class="fs-stab active" data-status="active"    data-action="setStatus" data-args="active">Активные</button>
+        <button class="fs-stab"        data-status="completed" data-action="setStatus" data-args="completed">Завершённые</button>
+        <button class="fs-stab"        data-status="all"       data-action="setStatus" data-args="all">Все</button>
       </div>
     </div>
 
@@ -205,7 +205,7 @@
     <div class="fs-section">
       <div class="fs-label">Категория</div>
       <div class="fs-cat-list" id="fsCatList">
-        <button class="fs-cat-item active" data-slug="" onclick="selectCategory(this,'',null,'','')">
+        <button class="fs-cat-item active" data-slug="" data-action="selectCategory" data-args="|null||">
           Все категории
         </button>
       </div>
@@ -299,8 +299,8 @@
 
     <!-- Кнопки -->
     <div class="fs-actions">
-      <button class="btn btn-primary" style="width:100%;" onclick="applyFilters()">Применить</button>
-      <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="resetFilters()">Сбросить фильтры</button>
+      <button class="btn btn-primary" style="width:100%;" data-action="applyFilters">Применить</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:4px;" data-action="resetFilters">Сбросить фильтры</button>
     </div>
 
   </aside>
@@ -329,11 +329,11 @@
     <div id="auctionsContainer" class="auctions-grid"></div>
 
     <div class="pagination" id="pagination" style="display:none;">
-      <button class="pagination-btn pagination-arrow" id="prevBtn" onclick="changePage(-1)" aria-label="Предыдущая страница">
+      <button class="pagination-btn pagination-arrow" id="prevBtn" data-action="changePage" data-args="-1" aria-label="Предыдущая страница">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="pagination-pages" id="paginationPages"></div>
-      <button class="pagination-btn pagination-arrow" id="nextBtn" onclick="changePage(1)" aria-label="Следующая страница">
+      <button class="pagination-btn pagination-arrow" id="nextBtn" data-action="changePage" data-args="1" aria-label="Следующая страница">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
       </button>
       <div class="pagination-jump">
@@ -377,18 +377,18 @@
 
       <div class="footer-col">
         <div class="footer-col-title">Помощь</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Как делать ставки">Как делать ставки</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Безопасность">Безопасность</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="FAQ">FAQ</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Поддержка">Поддержка</a>
       </div>
 
       <div class="footer-col">
         <div class="footer-col-title">О сервисе</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="О нас">О нас</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Контакты">Контакты</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Условия">Условия</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Политика">Политика</a>
       </div>
     </div>
   </div>
@@ -405,7 +405,7 @@
 </footer>
 
 <!-- FAB (mobile) -->
-<button class="fab" id="fabCreate" type="button" onclick="showCreateModal()">+ Создать</button>
+<button class="fab" id="fabCreate" type="button" data-action="showCreateModal">+ Создать</button>
 
 <!-- ================================================================
      AUTH MODAL
@@ -413,11 +413,11 @@
 <div class="modal" id="authModal">
   <div class="modal-box">
     <h2 class="modal-title">Добро пожаловать</h2>
-    <button class="modal-close" onclick="closeAuth()">✕</button>
+    <button class="modal-close" data-action="closeAuth">✕</button>
 
     <div class="tabs">
-      <button class="tab active" onclick="switchAuthTab('login')">Вход</button>
-      <button class="tab" onclick="switchAuthTab('register')">Регистрация</button>
+      <button class="tab active" data-action="switchAuthTab" data-args="login">Вход</button>
+      <button class="tab" data-action="switchAuthTab" data-args="register">Регистрация</button>
     </div>
 
     <div class="error-box" id="authError"></div>
@@ -453,7 +453,7 @@
       <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px;">Зарегистрироваться</button>
     </form>
 
-    <button class="btn btn-ghost btn-full" onclick="closeAuth()" style="margin-top:8px;">Отмена</button>
+    <button class="btn btn-ghost btn-full" data-action="closeAuth" style="margin-top:8px;">Отмена</button>
   </div>
 </div>
 
@@ -464,7 +464,7 @@
   <div class="modal-box">
     <div class="modal-title">
       <span>Новый лот</span>
-      <button class="modal-close" type="button" onclick="closeCreateModal()" style="position:static;margin-left:auto;">✕</button>
+      <button class="modal-close" type="button" data-action="closeCreateModal" style="position:static;margin-left:auto;">✕</button>
     </div>
 
     <div class="error-box" id="createError"></div>
@@ -509,10 +509,10 @@
           <div class="form-group">
             <label class="form-label">Тип аукциона</label>
             <div class="auction-type-tabs">
-              <button type="button" class="type-tab active" data-type="bid" onclick="setAuctionType('bid')">
+              <button type="button" class="type-tab active" data-type="bid" data-action="setAuctionType" data-args="bid">
                 🔨 Торги (BID)
               </button>
-              <button type="button" class="type-tab" data-type="bin" onclick="setAuctionType('bin')">
+              <button type="button" class="type-tab" data-type="bin" data-action="setAuctionType" data-args="bin">
                 ⚡ Купить сразу (BIN)
               </button>
             </div>
@@ -556,7 +556,7 @@
       </div>
 
       <div class="create-footer">
-        <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Отмена</button>
+        <button type="button" class="btn btn-secondary" data-action="closeCreateModal">Отмена</button>
         <button type="submit" class="btn btn-primary">Создать лот</button>
       </div>
     </form>
@@ -570,259 +570,6 @@
      ================================================================ -->
   <script src="/static/js/common.js"></script>
   <script src="/static/js/index.js"></script>
-
-  <!-- Hero stat: live count of active auctions -->
-  <script>
-    (function() {
-      const el = document.getElementById('statActive');
-      if (!el) return;
-
-      const animate = (to) => {
-        const dur = 900, t0 = performance.now();
-        const fmt = (n) => n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(n);
-        const tick = (t) => {
-          const k = Math.min(1, (t - t0) / dur);
-          const eased = 1 - Math.pow(1 - k, 3);
-          el.textContent = fmt(Math.round(to * eased));
-          if (k < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      };
-
-      fetch('/api/auctions?status=active&page=1&page_size=1')
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d && typeof d.total === 'number') animate(d.total); })
-        .catch(() => {});
-    })();
-  </script>
-
-  <!-- Featured strip: ending soon -->
-  <script>
-    (function() {
-      const section  = document.getElementById('featuredStrip');
-      const scroll   = document.getElementById('featuredScroll');
-      const prevBtn  = document.getElementById('featuredPrev');
-      const nextBtn  = document.getElementById('featuredNext');
-      if (!section || !scroll) return;
-
-      const fmt = (sec) => {
-        if (sec <= 0) return 'завершён';
-        const d = Math.floor(sec / 86400);
-        const h = Math.floor((sec % 86400) / 3600);
-        const m = Math.floor((sec % 3600) / 60);
-        const s = sec % 60;
-        if (d > 0) return `${d}д ${h}ч`;
-        if (h > 0) return `${h}ч ${String(m).padStart(2,'0')}м`;
-        if (m > 0) return `${m}:${String(s).padStart(2,'0')}`;
-        return `0:${String(s).padStart(2,'0')}`;
-      };
-
-      const urgencyClass = (sec) => {
-        if (sec <= 0) return 'ended';
-        if (sec < 3600) return 'critical';
-        if (sec < 21600) return 'urgent';
-        return 'normal';
-      };
-
-      const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
-        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-      }[c]));
-
-      const fmtPrice = (p) => {
-        const n = Number(p);
-        if (!isFinite(n)) return p;
-        return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-      };
-
-      const updateArrows = () => {
-        const max = scroll.scrollWidth - scroll.clientWidth;
-        prevBtn.disabled = scroll.scrollLeft <= 2;
-        nextBtn.disabled = scroll.scrollLeft >= max - 2;
-      };
-
-      const tick = () => {
-        const now = Date.now();
-        scroll.querySelectorAll('.featured-card').forEach(card => {
-          const end = parseInt(card.dataset.end, 10);
-          if (!end) return;
-          const sec = Math.floor((end - now) / 1000);
-          const t = card.querySelector('.featured-timer-text');
-          if (t) t.textContent = fmt(sec);
-          const b = card.querySelector('.featured-timer');
-          if (b) {
-            b.classList.remove('ended','critical','urgent','normal');
-            b.classList.add(urgencyClass(sec));
-          }
-        });
-      };
-
-      const render = (items) => {
-        if (!items || !items.length) { section.hidden = true; return; }
-        section.hidden = false;
-
-        // Используем time_remaining от сервера (он считает в UTC корректно).
-        // end_time в API — naive-UTC без 'Z', поэтому браузер парсит его как
-        // локальное время и таймер «уезжает» на UTC-offset.
-        const baseTs = Date.now();
-        scroll.innerHTML = items.map(a => {
-          const remaining = Number.isFinite(a.time_remaining) ? a.time_remaining : 0;
-          const end = baseTs + remaining * 1000;
-          const sec = Math.max(0, remaining);
-          const cls = urgencyClass(sec);
-
-          const cover = (a.image_urls && a.image_urls[0]) || a.image_url;
-          const coverUrl = cover
-            ? (String(cover).startsWith('http') ? cover : (window.location.origin + cover))
-            : null;
-
-          const imgInner = coverUrl
-            ? `<img src="${escapeHtml(coverUrl)}" alt="" loading="lazy">`
-            : `<div class="featured-ph">${a.category && a.category.icon ? a.category.icon : '🏷️'}</div>`;
-
-          const typeBadge = a.auction_type === 'bin'
-            ? `<span class="featured-type bin">⚡ BIN</span>`
-            : `<span class="featured-type bid">🔨 BID</span>`;
-
-          return `
-            <a class="featured-card" href="auction.html?id=${a.id}" data-end="${end}">
-              <div class="featured-img">
-                ${imgInner}
-                <div class="featured-timer ${cls}">
-                  <span class="featured-pulse"></span>
-                  <span class="featured-timer-text">${fmt(sec)}</span>
-                </div>
-                ${typeBadge}
-              </div>
-              <div class="featured-body">
-                <div class="featured-card-title">${escapeHtml(a.title)}</div>
-                <div class="featured-card-meta">
-                  <span class="featured-card-price">${fmtPrice(a.current_price)}</span>
-                  <span class="featured-card-bids">${a.bids_count || 0} ст.</span>
-                </div>
-              </div>
-            </a>
-          `;
-        }).join('');
-
-        requestAnimationFrame(updateArrows);
-      };
-
-      // Scroll arrows
-      prevBtn.addEventListener('click', () => {
-        scroll.scrollBy({ left: -scroll.clientWidth * 0.8, behavior: 'smooth' });
-      });
-      nextBtn.addEventListener('click', () => {
-        scroll.scrollBy({ left:  scroll.clientWidth * 0.8, behavior: 'smooth' });
-      });
-      scroll.addEventListener('scroll', updateArrows, { passive: true });
-      window.addEventListener('resize', updateArrows);
-
-      // Fetch + render
-      fetch('/api/auctions?status=active&sort_by=time&page=1&page_size=12')
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d && d.items) render(d.items); })
-        .catch(() => { section.hidden = true; });
-
-      // Live countdown
-      setInterval(tick, 1000);
-    })();
-  </script>
-
-  <!-- Custom dropdown (sidebar sort) -->
-  <script>
-    (function() {
-      document.querySelectorAll('.fs-dropdown').forEach(dd => {
-        const trigger = dd.querySelector('.fs-dd-trigger');
-        const menu    = dd.querySelector('.fs-dd-menu');
-        const current = dd.querySelector('.fs-dd-current');
-        const native  = dd.querySelector('.fs-dd-native');
-        const opts    = dd.querySelectorAll('.fs-dd-opt');
-
-        const close = () => {
-          dd.classList.remove('open');
-          trigger.setAttribute('aria-expanded', 'false');
-        };
-        const open = () => {
-          document.querySelectorAll('.fs-dropdown.open').forEach(o => o.classList.remove('open'));
-          dd.classList.add('open');
-          trigger.setAttribute('aria-expanded', 'true');
-        };
-        const select = (value) => {
-          opts.forEach(o => {
-            const sel = o.dataset.value === value;
-            o.classList.toggle('is-selected', sel);
-            o.setAttribute('aria-selected', sel ? 'true' : 'false');
-            if (sel) current.textContent = o.querySelector('.fs-dd-opt-label').textContent;
-          });
-          if (native && native.value !== value) {
-            native.value = value;
-            native.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        };
-
-        trigger.addEventListener('click', (e) => {
-          e.stopPropagation();
-          dd.classList.contains('open') ? close() : open();
-        });
-
-        opts.forEach(o => {
-          o.addEventListener('click', () => { select(o.dataset.value); close(); });
-        });
-
-        document.addEventListener('click', (e) => {
-          if (!dd.contains(e.target)) close();
-        });
-
-        document.addEventListener('keydown', (e) => {
-          if (!dd.classList.contains('open')) return;
-          if (e.key === 'Escape') { close(); trigger.focus(); }
-          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            const list = Array.from(opts);
-            const idx = list.findIndex(o => o.classList.contains('is-selected'));
-            const nextIdx = e.key === 'ArrowDown'
-              ? (idx + 1) % list.length
-              : (idx - 1 + list.length) % list.length;
-            select(list[nextIdx].dataset.value);
-          }
-          if (e.key === 'Enter') close();
-        });
-
-        // Initial sync
-        if (native) select(native.value);
-      });
-    })();
-  </script>
-
-  <!-- Custom number steppers (sidebar price filter) -->
-  <script>
-    (function() {
-      document.querySelectorAll('.fs-num-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const input = btn.closest('.fs-num').querySelector('input[type=number]');
-          if (!input) return;
-          if (btn.dataset.step === 'up') input.stepUp(); else input.stepDown();
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-      });
-    })();
-  </script>
-
-  <!-- Reveal-on-scroll for hero + footer + cards -->
-  <script>
-    (function() {
-      if (!('IntersectionObserver' in window)) return;
-      const io = new IntersectionObserver((entries) => {
-        entries.forEach(e => {
-          if (e.isIntersecting) {
-            e.target.classList.add('reveal-in');
-            io.unobserve(e.target);
-          }
-        });
-      }, { threshold: 0.08 });
-      document.querySelectorAll('.reveal').forEach(el => io.observe(el));
-    })();
-  </script>
+  <script src="/static/js/index-init.js"></script>
 </body>
 </html>

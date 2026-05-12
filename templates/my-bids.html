@@ -44,9 +44,9 @@
         </div>
       </a>
 
-      <button class="btn btn-primary btn-sm" id="guestBtn" onclick="window.location.href='index.html'" style="display:none;">Войти</button>
+      <button class="btn btn-primary btn-sm" id="guestBtn" data-action="navTo" data-args="index.html" style="display:none;">Войти</button>
 
-      <button class="nav-hamburger" type="button" onclick="document.getElementById('mobileNav').classList.add('open')">☰</button>
+      <button class="nav-hamburger" type="button" data-action="openMobileNav">☰</button>
     </div>
   </div>
 </header>
@@ -61,7 +61,7 @@
 </div>
 
 <!-- Mobile nav -->
-<div class="mobile-nav" id="mobileNav" onclick="if(event.target===this)this.classList.remove('open')">
+<div class="mobile-nav" id="mobileNav" data-action="dismissMobileNavOnBackdrop">
   <div class="mobile-nav-inner">
     <div class="mobile-nav-title">Лотус</div>
     <a class="mobile-nav-link" href="index.html">🏠 Аукционы</a>
@@ -104,17 +104,17 @@
       </div>
       <div class="footer-col">
         <div class="footer-col-title">Помощь</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Как делать ставки">Как делать ставки</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Безопасность">Безопасность</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="FAQ">FAQ</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Поддержка">Поддержка</a>
       </div>
       <div class="footer-col">
         <div class="footer-col-title">О сервисе</div>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
-        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="О нас">О нас</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Контакты">Контакты</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Условия">Условия</a>
+        <a class="footer-link" href="#" data-action="comingSoon" data-args="Политика">Политика</a>
       </div>
     </div>
   </div>

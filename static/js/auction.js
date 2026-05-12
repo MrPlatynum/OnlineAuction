@@ -181,10 +181,10 @@
       // Thumbnails
       const thumbsEl=$('lotThumbs');
       if (thumbsEl&&urls.length>1) {
-        thumbsEl.innerHTML=urls.map((u,i)=>`<div class="lot-thumb${i===0?' active':''}" onclick="lotGoTo(${i});updateThumbs(${i})"><img src="${esc(u)}" alt="${i+1}"></div>`).join('');
+        thumbsEl.innerHTML=urls.map((u,i)=>`<div class="lot-thumb${i===0?' active':''}" data-action="lotGoTo" data-args="${i}"><img src="${esc(u)}" alt="${i+1}"></div>`).join('');
       }
       if (urls.length>1) {
-        dotsEl.innerHTML=urls.map((_,i)=>`<span class="lot-dot${i===0?' active':''}" onclick="lotGoTo(${i})"></span>`).join('');
+        dotsEl.innerHTML=urls.map((_,i)=>`<span class="lot-dot${i===0?' active':''}" data-action="lotGoTo" data-args="${i}"></span>`).join('');
         if (prevBtn) prevBtn.style.display='flex';
         if (nextBtn) nextBtn.style.display='flex';
         if (counter) { counter.style.display='block'; counter.textContent=`1 / ${urls.length}`; }
@@ -571,7 +571,7 @@
           <div class="review-avatar">${avatarHtml}</div>
           <span class="review-author">${esc(rev.reviewer_username)}</span>
           <span class="review-date">${date}</span>
-          ${rev._can_delete ? `<button class="review-del" onclick="deleteReview(${rev.id})">✕</button>` : ''}
+          ${rev._can_delete ? `<button class="review-del" data-action="deleteReview" data-args="${rev.id}">✕</button>` : ''}
         </div>
         <div class="review-stars">${stars}</div>
         ${lotChip}
@@ -580,11 +580,16 @@
     }).join('');
   }
 
-  function filterReviewsByRating(rating, btn) {
+  function filterReviewsByRating(rating) {
     lotReviewFilter = rating;
     // Снимаем active только со звёздных пилюль (data-rating), не трогая toggle «Об этом лоте»
     document.querySelectorAll('.rev-pill[data-rating]').forEach(p => p.classList.remove('active'));
-    if (btn) btn.classList.add('active');
+    // ``this`` is the clicked pill (set by the common.js dispatcher's
+    // ``fn.call(el, ...)``). When called from outside the dispatcher
+    // we fall back to looking up the pill by matching rating.
+    const pill = (this instanceof Element) ? this :
+      document.querySelector(`.rev-pill[data-rating="${rating}"]`);
+    if (pill) pill.classList.add('active');
     renderReviewsList();
   }
 
@@ -674,7 +679,7 @@
     $('editModal').style.display='flex';
   }
   function closeEditModal(){$('editModal').style.display='none';}
-  function renderEditImgPreview(){const el=$('editImgPreview');if(!el)return;const allCount=editImageUrls.length+editNewFiles.length;el.innerHTML=[...editImageUrls.map((url,i)=>{const src=String(url).startsWith('http')?url:API+url;return`<div class="multi-img-thumb${i===0?' is-cover':''}"><img src="${esc(src)}"><button class="thumb-del" type="button" onclick="removeEditImg('url',${i})">✕</button></div>`;}),...editNewFiles.map((f,i)=>`<div class="multi-img-thumb${(editImageUrls.length+i)===0?' is-cover':''}"><img src="${URL.createObjectURL(f)}"><button class="thumb-del" type="button" onclick="removeEditImg('file',${i})">✕</button></div>`)].join('');const addBtn=document.querySelector('label[for="editImageFile"]');if(addBtn)addBtn.style.display=allCount>=5?'none':'inline-flex';}
+  function renderEditImgPreview(){const el=$('editImgPreview');if(!el)return;const allCount=editImageUrls.length+editNewFiles.length;el.innerHTML=[...editImageUrls.map((url,i)=>{const src=String(url).startsWith('http')?url:API+url;return`<div class="multi-img-thumb${i===0?' is-cover':''}"><img src="${esc(src)}"><button class="thumb-del" type="button" data-action="removeEditImg" data-args="url|${i}">✕</button></div>`;}),...editNewFiles.map((f,i)=>`<div class="multi-img-thumb${(editImageUrls.length+i)===0?' is-cover':''}"><img src="${URL.createObjectURL(f)}"><button class="thumb-del" type="button" data-action="removeEditImg" data-args="file|${i}">✕</button></div>`)].join('');const addBtn=document.querySelector('label[for="editImageFile"]');if(addBtn)addBtn.style.display=allCount>=5?'none':'inline-flex';}
   function removeEditImg(type,idx){if(type==='url')editImageUrls.splice(idx,1);else editNewFiles.splice(idx,1);renderEditImgPreview();}
   function setExtend(mins){$('editExtend').value=mins;}
   async function saveEdit(){const btn=$('editSaveBtn');btn.disabled=true;btn.textContent='Сохраняем…';$('editError').style.display='none';try{const uploadedUrls=[];for(const f of editNewFiles){const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/api/upload-image`,{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});if(r.ok){const d=await r.json();uploadedUrls.push(d.image_url);}}const allUrls=[...editImageUrls,...uploadedUrls];const subSel=$('editCategory'),parentSel=$('editCategoryParent');const catVal=(subSel&&subSel.value&&subSel.style.display!=='none')?subSel.value:(parentSel?parentSel.value:'');const payload={title:$('editTitle').value.trim(),description:$('editDescription').value.trim(),category_id:catVal?+catVal:null,starting_price:$('editPrice').value?+$('editPrice').value:null,bin_price:$('editBinPrice').value?+$('editBinPrice').value:null,image_urls:allUrls};const ext=+$('editExtend').value;if(ext>0)payload.extend_minutes=ext;const r=await fetch(`${API}/api/auctions/${auctionId}`,{method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)});if(r.ok){closeEditModal();showToast('✅ Сохранено','Лот успешно обновлён','ok');setTimeout(()=>location.reload(),1200);}else{const err=await r.json();$('editError').textContent=err.detail||'Ошибка сохранения';$('editError').style.display='block';}}catch{$('editError').textContent='Ошибка соединения';$('editError').style.display='block';}finally{btn.disabled=false;btn.textContent='Сохранить';}}

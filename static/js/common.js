@@ -294,4 +294,113 @@
   } else {
     initNotifBell();
   }
+
+  // ================================================================
+  // CSP-compliant inline-handler dispatcher
+  // ----------------------------------------------------------------
+  // The site used to wire ~190 inline ``onclick="foo(...)"``
+  // attributes, which can't coexist with ``script-src 'self'``. We
+  // replace them with ``data-action="foo" data-args="a|1|true"`` plus
+  // delegated listeners on ``document`` so behaviour is identical
+  // without inline JS.
+  //
+  // Lookup rule: a function is "registered" by being assigned to
+  // ``window.<name>`` (every per-page JS file already does that for
+  // any handler it expects to be callable). The dispatcher calls
+  // ``window.<name>.call(element, ...parsedArgs, eventObj)`` — so
+  // existing functions that read ``this`` continue to work, and any
+  // function that needs the event object can take it as the last
+  // argument.
+  // ================================================================
+  function _parseDispatchArg(raw) {
+    if (raw === undefined) return undefined;
+    if (raw === '') return '';
+    if (raw === 'true') return true;
+    if (raw === 'false') return false;
+    if (raw === 'null') return null;
+    if (raw === 'undefined') return undefined;
+    // Treat strings that look like numbers as numbers — ``data-args``
+    // can't carry type info beyond what string parsing infers. If a
+    // handler really wants a string like ``"42"`` it can prefix with
+    // ``s:`` (e.g. ``data-args="s:42"``); that prefix is stripped.
+    if (raw.startsWith('s:')) return raw.slice(2);
+    if (raw.trim() !== '' && !isNaN(Number(raw))) return Number(raw);
+    return raw;
+  }
+
+  function _parseDispatchArgs(spec) {
+    if (!spec) return [];
+    return spec.split('|').map(_parseDispatchArg);
+  }
+
+  function _dispatch(event, attrName, autoPreventDefault) {
+    const el = event.target && event.target.closest
+      ? event.target.closest('[' + attrName + ']')
+      : null;
+    if (!el) return;
+    const action = el.getAttribute(attrName);
+    const fn = window[action];
+    if (typeof fn !== 'function') return;
+    // Anchors that exist only as click handlers (``href="#"`` or any
+    // in-page ``#fragment``) used to ``event.preventDefault()`` inline;
+    // preserve that behaviour automatically rather than threading it
+    // through data-attrs.
+    if (autoPreventDefault && el.tagName === 'A') {
+      const href = el.getAttribute('href') || '';
+      if (href === '' || href.startsWith('#')) event.preventDefault();
+    }
+    const args = _parseDispatchArgs(el.getAttribute('data-args'));
+    try {
+      fn.call(el, ...args, event);
+    } catch (err) {
+      // Don't let one buggy handler kill the delegated listener for
+      // every subsequent click.
+      console.error('[dispatcher] handler', action, 'threw', err);
+    }
+  }
+
+  // ================================================================
+  // Shared helpers exposed for use from data-action attributes
+  // ================================================================
+  window.navTo = function(url) {
+    if (typeof url === 'string') window.location.href = url;
+  };
+
+  // Trigger a click on the element with the given id. Used by hidden
+  // file-input proxies (avatar uploader buttons that visually delegate
+  // to a styled label/button) which used to read
+  // ``onclick="$('avatarInput').click()"`` inline.
+  window.clickById = function(id) {
+    const el = document.getElementById(id);
+    if (el) el.click();
+  };
+
+  // Stop a click from bubbling further. Used on nested links inside
+  // a clickable card — the inner link does its own navigation and
+  // we don't want the parent's click handler to also fire. The old
+  // inline ``onclick="event.stopPropagation()"`` did this.
+  window.stopHere = function(_e) {
+    if (_e && _e.stopPropagation) _e.stopPropagation();
+  };
+
+  // Hamburger and backdrop click for the mobile-nav drawer. The
+  // drawer is identified by id="mobileNav" — every page that has the
+  // hamburger has the drawer too, so a single shared pair works.
+  window.openMobileNav = function() {
+    const drawer = document.getElementById('mobileNav');
+    if (drawer) drawer.classList.add('open');
+  };
+  window.dismissMobileNavOnBackdrop = function(_event) {
+    // Bound via data-action on the drawer element itself; ``this`` is
+    // the drawer, ``event.target`` is what was actually clicked.
+    // Only close when the user clicked the backdrop, not a child link.
+    if (_event && _event.target === this) {
+      this.classList.remove('open');
+    }
+  };
+
+  document.addEventListener('click', (e) => _dispatch(e, 'data-action', true));
+  document.addEventListener('change', (e) => _dispatch(e, 'data-change', false));
+  document.addEventListener('input', (e) => _dispatch(e, 'data-input', false));
+  document.addEventListener('submit', (e) => _dispatch(e, 'data-submit', true));
 })();
