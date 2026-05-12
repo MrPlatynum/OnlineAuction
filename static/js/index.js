@@ -571,6 +571,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (p.get('category')) {
                 currentFilters.category = p.get('category');
             }
+            // Если в URL есть фильтры — пользователь пришёл из ссылки
+            // «Все лоты» / «Все завершённые». После первой загрузки лотов
+            // плавно прокручиваем к началу списка.
+            window._scrollToLotsOnLoad =
+                !!(p.get('created_by') || p.get('status') || p.get('search') || p.get('category'));
         })();
 
         // ===== Multi-image upload =====
@@ -855,6 +860,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (container) {
                     container.classList.remove('fade-out');
                     container.classList.add('fade-in');
+                }
+                // Одноразовый скролл к ленте лотов, если пришли по ссылке
+                // с фильтром (например, «Все лоты» из user.html).
+                if (window._scrollToLotsOnLoad) {
+                    window._scrollToLotsOnLoad = false;
+                    setTimeout(scrollToAuctionsTop, 50);
                 }
             } catch (e) {
                 if (container) { container.classList.remove('fade-out'); container.classList.add('fade-in'); }
