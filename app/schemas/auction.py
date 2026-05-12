@@ -21,8 +21,8 @@ def _check_image_url(value: str) -> str:
 
 
 class AuctionCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    description: str = Field(min_length=1, max_length=10000)
+    title: str = Field(min_length=1, max_length=300)
+    description: str = Field(min_length=1, max_length=20000)
     starting_price: float = Field(gt=0)
     duration_minutes: int = Field(gt=0, le=10080)
     image_url: Optional[str] = Field(default=None, max_length=2000)
@@ -45,8 +45,8 @@ class AuctionCreate(BaseModel):
 
 
 class AuctionUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    description: Optional[str] = Field(default=None, max_length=10000)
+    title: Optional[str] = Field(default=None, min_length=1, max_length=300)
+    description: Optional[str] = Field(default=None, max_length=20000)
     category_id: Optional[int] = None
     starting_price: Optional[float] = Field(default=None, gt=0)
     bin_price: Optional[float] = Field(default=None, gt=0)
