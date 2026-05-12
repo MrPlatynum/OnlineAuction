@@ -27,8 +27,8 @@ from app.routers import (
     websocket,
 )
 from app.services.auction_scheduler import schedule_active_auctions, shutdown_scheduler
+from app.services.email_outbox import start_outbox_worker, stop_outbox_worker
 from app.services.migrations import seed_categories
-from app.services.notifications import flush_pending_emails
 from app.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -116,12 +116,13 @@ async def lifespan(fastapi_app: FastAPI):
     # runs on every startup.
     await seed_categories()
     await schedule_active_auctions()
+    start_outbox_worker()
     logger.info("Application startup complete (notifications enabled)")
     try:
         yield
     finally:
         await shutdown_scheduler()
-        await flush_pending_emails()
+        await stop_outbox_worker()
         logger.info("Application shutdown complete")
 
 

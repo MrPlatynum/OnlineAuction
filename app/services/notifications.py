@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,43 +9,18 @@ from app.services.email import (
     build_password_changed_email_html,
     build_password_reset_email_html,
     build_verification_email_html,
-    send_email_notification,
 )
+from app.services.email_outbox import enqueue_email
 from app.utils.security import create_email_verify_token, create_password_reset_token
-
-# Strong references to in-flight email tasks so they don't get GC'd
-# mid-execution. Python only keeps weak refs to bare ``asyncio.create_task``
-# results.
-_pending_email_tasks: set[asyncio.Task] = set()
 
 
 def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
-    """Schedule an email send on the running event loop without
-    awaiting it, so the caller (e.g. an HTTP handler) can return
-    immediately."""
-    task = asyncio.create_task(send_email_notification(to_email, subject, html))
-    _pending_email_tasks.add(task)
-    task.add_done_callback(_pending_email_tasks.discard)
-
-
-async def flush_pending_emails(timeout: float = 5.0) -> None:
-    """Drain in-flight SMTP roundtrips on shutdown. Called from the
-    FastAPI lifespan ``finally`` so a SIGTERM doesn't drop emails that
-    were already on the wire."""
-    if not _pending_email_tasks:
-        return
-    pending = list(_pending_email_tasks)
-    try:
-        await asyncio.wait_for(
-            asyncio.gather(*pending, return_exceptions=True),
-            timeout=timeout,
-        )
-    except TimeoutError:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Pending email tasks did not finish within %.1fs (%d still in flight)",
-            timeout, len(_pending_email_tasks),
-        )
+    """Backwards-compatible shim. Older callers all routed through
+    here; now this just enqueues onto the durable outbox so the
+    background worker handles delivery (with retry / dead-letter).
+    Kept as a single seam so tests that monkeypatch this name still
+    see every email the app schedules."""
+    enqueue_email(to_email, subject, html)
 
 
 def send_verification_email(user: User) -> None:
