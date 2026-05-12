@@ -960,6 +960,11 @@ async function load() {
   }
   $('name').textContent   = user.username;
   $('email').textContent  = user.email;
+  const pubLink = $('sbPublicProfileLink');
+  if (pubLink && user.username) {
+    pubLink.href = `user.html?username=${encodeURIComponent(user.username)}`;
+    pubLink.style.display = '';
+  }
   $('bal').textContent    = Number(user.balance || 0).toFixed(2);
   if ($('balBadge'))       $('balBadge').textContent = '$' + Number(user.balance || 0).toFixed(2);
   document.title = `${user.username} — Лотус`;

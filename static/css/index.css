@@ -16,7 +16,7 @@
 
   --text-1: #fafafa;
   --text-2: #a1a1aa;
-  --text-3: #52525b;
+  --text-3: #8b8b94;
 
   --green: #22c55e;
   --red:   #ef4444;
@@ -38,7 +38,7 @@
   --border-hi: rgba(0,0,0,0.15);
   --text-1: #09090b;
   --text-2: #52525b;
-  --text-3: #a1a1aa;
+  --text-3: #71717a;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -316,7 +316,7 @@ body {
 }
 .page-subtitle {
   font-size: 13px;
-  color: var(--text-3);
+  color: var(--text-2);
   margin-top: 4px;
 }
 
@@ -621,7 +621,7 @@ body {
 }
 .auction-bids  { font-size: 11px; color: var(--text-3); }
 .auction-creator { font-size: 11px; display: flex; align-items: center; gap: 5px; }
-.auction-creator a { color: var(--text-3); transition: color .15s; }
+.auction-creator a { color: var(--text-2); transition: color .15s; }
 .auction-creator a:hover { color: var(--accent); }
 .mini-avatar {
   width: 16px; height: 16px; border-radius: 50%;
@@ -1186,23 +1186,11 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 @keyframes badge-pop { from { transform: scale(0); } to { transform: scale(1); } }
 
-/* Dropdown */
-.notif-dropdown {
-  position: absolute;
-  top: calc(var(--nav-h) - 4px);
-  right: 20px;
-  width: 360px;
-  background: var(--bg-2);
-  border: 1px solid var(--border-hi);
-  border-radius: var(--r-lg, 12px);
-  box-shadow: 0 24px 64px rgba(0,0,0,.7);
-  z-index: 200;
-  display: none;
-  overflow: hidden;
-  animation: drop-in .18s ease;
-}
-.notif-dropdown.open { display: block; }
-@keyframes drop-in { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+/* Dropdown — позиционирование задано в common.css (position: fixed
+   с привязкой к viewport, чтобы выпадашка следовала за скроллом).
+   Здесь ничего не переопределяем — раньше тут стоял position: absolute,
+   из-за чего при прокрутке вниз dropdown уезжал к верху документа за
+   границу экрана. */
 
 .notif-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -2214,7 +2202,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 .featured-sub {
   font-size: 13px;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 .featured-controls { display: flex; gap: 6px; }

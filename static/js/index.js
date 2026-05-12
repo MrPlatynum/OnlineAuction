@@ -516,6 +516,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const WS_URL  = window.WS_BASE;
         let token = localStorage.getItem('token');
         let currentUser = null;
+        // Зеркалим currentUser на window, чтобы inline-обработчики в
+        // шаблоне (например, кнопка «Выставить свой лот») могли
+        // отличить гостя от авторизованного. Используется как
+        // window.currentUser? showCreateModal() : showAuth().
+        window.currentUser = null;
         let websockets = {};
         let timers = {};
         let reconnectAttempts = {};
@@ -760,6 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // если токена нет — гость
             if (!token) {
                 currentUser = null;
+                window.currentUser = null;
                 return null;
             }
 
@@ -780,6 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 localStorage.removeItem('token');
                 token = null;
                 currentUser = null;
+                window.currentUser = null;
                 return null;
             }
 
@@ -789,6 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentUser = await response.json();
+            window.currentUser = currentUser;
 
             // безопасно обновляем UI, если элементы существуют
             const userNameEl = document.getElementById('userName');
@@ -1536,7 +1544,7 @@ location.reload();
                 } else {
                     const error = await response.json();
                     if (errorDiv) {
-                        errorDiv.textContent = error.detail || 'Ошибка создания аукциона';
+                        errorDiv.textContent = window.formatError(error, 'Ошибка создания аукциона');
                         errorDiv.style.display = 'block';
                     }
                 }
