@@ -892,6 +892,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 .text-muted { color: var(--text-3); }
 .text-red   { color: var(--red); }
 
+
 .mobile-nav-title {
   font-size: 15px; font-weight: 700;
   padding: 4px 12px 12px;
