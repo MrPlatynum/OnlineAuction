@@ -56,7 +56,7 @@ async def mark_notification_read(
     ).scalar_one_or_none()
 
     if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise HTTPException(status_code=404, detail="Уведомление не найдено")
 
     notification.is_read = True
     await db.commit()
@@ -96,7 +96,7 @@ async def delete_notification(
     ).scalar_one_or_none()
 
     if not notification:
-        raise HTTPException(status_code=404, detail="Notification not found")
+        raise HTTPException(status_code=404, detail="Уведомление не найдено")
 
     await db.delete(notification)
     await db.commit()

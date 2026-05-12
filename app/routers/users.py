@@ -34,7 +34,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
         await db.execute(select(User).where(User.username == username))
     ).scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     # Cap recent auctions in the response: a power-seller with thousands
     # of lots would otherwise serialise the whole list on every profile

@@ -56,7 +56,7 @@
         <div class="nav-avatar" id="userAvatarSmall">?</div>
         <div>
           <div class="nav-user-name" id="userName">—</div>
-          <div class="nav-balance">$<span id="userBalanceSmall">0</span></div>
+          <div class="nav-balance"><span id="userBalanceSmall">0</span> ₽</div>
         </div>
       </a>
 
@@ -231,7 +231,7 @@
 
     <!-- Цена -->
     <div class="fs-section">
-      <div class="fs-label">Цена ($)</div>
+      <div class="fs-label">Цена (₽)</div>
       <div class="fs-price-row">
         <div class="fs-num">
           <input type="number" class="fs-price-input" id="minPrice" placeholder="от" min="0">
@@ -395,10 +395,6 @@
   <div class="footer-bottom">
     <div class="footer-bottom-inner">
       <span class="footer-copy">© 2026 Лотус. Все права защищены.</span>
-      <span class="footer-status">
-        <span class="footer-status-dot"></span>
-        Все системы работают штатно
-      </span>
     </div>
   </div>
 </footer>
@@ -521,7 +517,7 @@
           <!-- BID поля -->
           <div id="bidFields">
             <div class="form-group">
-              <label class="form-label">Стартовая цена ($)</label>
+              <label class="form-label">Стартовая цена (₽)</label>
               <input type="number" class="form-input" id="auctionPrice" min="1" step="0.01" placeholder="например, 100">
               <div class="img-hint">Минимальная ставка, с которой начнутся торги</div>
             </div>
@@ -538,7 +534,7 @@
           <!-- BIN поля -->
           <div id="binFields" style="display:none;">
             <div class="form-group">
-              <label class="form-label">Цена «Купить сразу» ($)</label>
+              <label class="form-label">Цена «Купить сразу» (₽)</label>
               <input type="number" class="form-input" id="auctionBinPrice" min="1" step="0.01" placeholder="например, 500">
               <div class="img-hint">Первый покупатель забирает лот по этой цене</div>
             </div>
@@ -630,7 +626,7 @@
       const fmtPrice = (p) => {
         const n = Number(p);
         if (!isFinite(n)) return p;
-        return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
       };
 
       const updateArrows = () => {

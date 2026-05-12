@@ -40,7 +40,7 @@
         <div class="nav-avatar" id="navAvatarPill">?</div>
         <div>
           <div class="nav-user-name" id="navUserNamePill">—</div>
-          <div class="nav-balance">$<span id="navBalancePill">0</span></div>
+          <div class="nav-balance"><span id="navBalancePill">0</span> ₽</div>
         </div>
       </div>
     </div>
@@ -142,7 +142,7 @@
       <div class="balance-hero">
         <div class="balance-hero-left">
           <div class="balance-hero-label">Текущий баланс</div>
-          <div class="balance-hero-amount">$<span id="balancePanelVal">0.00</span></div>
+          <div class="balance-hero-amount"><span id="balancePanelVal">0.00</span> ₽</div>
           <div class="balance-hero-sub">Доступно для вывода</div>
         </div>
         <div class="balance-hero-actions">
@@ -159,13 +159,13 @@
           <div class="balance-form-title">💳 Пополнение</div>
           <div class="balance-form-desc">Средства поступят мгновенно</div>
           <div class="amount-presets" id="depositPresets">
-            <button class="amount-preset" onclick="setAmount('deposit',100)">$100</button>
-            <button class="amount-preset" onclick="setAmount('deposit',500)">$500</button>
-            <button class="amount-preset" onclick="setAmount('deposit',1000)">$1 000</button>
-            <button class="amount-preset" onclick="setAmount('deposit',5000)">$5 000</button>
+            <button class="amount-preset" onclick="setAmount('deposit',100)">100 ₽</button>
+            <button class="amount-preset" onclick="setAmount('deposit',500)">500 ₽</button>
+            <button class="amount-preset" onclick="setAmount('deposit',1000)">1 000 ₽</button>
+            <button class="amount-preset" onclick="setAmount('deposit',5000)">5 000 ₽</button>
           </div>
           <div class="amount-input-wrap">
-            <span class="amount-currency">$</span>
+            <span class="amount-currency">₽</span>
             <input class="amount-input" id="depositInput" type="number" min="1" max="100000"
               placeholder="Введите сумму" oninput="clearPresets('deposit')">
           </div>
@@ -178,13 +178,13 @@
           <div class="balance-form-title">🏦 Вывод средств</div>
           <div class="balance-form-desc">Обработка до 3 рабочих дней</div>
           <div class="amount-presets" id="withdrawPresets">
-            <button class="amount-preset" onclick="setAmount('withdraw',100)">$100</button>
-            <button class="amount-preset" onclick="setAmount('withdraw',500)">$500</button>
-            <button class="amount-preset" onclick="setAmount('withdraw',1000)">$1 000</button>
+            <button class="amount-preset" onclick="setAmount('withdraw',100)">100 ₽</button>
+            <button class="amount-preset" onclick="setAmount('withdraw',500)">500 ₽</button>
+            <button class="amount-preset" onclick="setAmount('withdraw',1000)">1 000 ₽</button>
             <button class="amount-preset" onclick="setAmount('withdraw','all')">Всё</button>
           </div>
           <div class="amount-input-wrap">
-            <span class="amount-currency">$</span>
+            <span class="amount-currency">₽</span>
             <input class="amount-input" id="withdrawInput" type="number" min="1" max="100000"
               placeholder="Введите сумму" oninput="clearPresets('withdraw')">
           </div>
@@ -476,13 +476,13 @@
     <div class="modal-title">Пополнение баланса</div>
     <div class="modal-sub">Выберите сумму или введите вручную</div>
     <div class="deposit-presets">
-      <button class="deposit-preset" onclick="selectPreset(100)">$100</button>
-      <button class="deposit-preset" onclick="selectPreset(500)">$500</button>
-      <button class="deposit-preset" onclick="selectPreset(1000)">$1 000</button>
-      <button class="deposit-preset" onclick="selectPreset(5000)">$5 000</button>
+      <button class="deposit-preset" onclick="selectPreset(100)">100 ₽</button>
+      <button class="deposit-preset" onclick="selectPreset(500)">500 ₽</button>
+      <button class="deposit-preset" onclick="selectPreset(1000)">1 000 ₽</button>
+      <button class="deposit-preset" onclick="selectPreset(5000)">5 000 ₽</button>
     </div>
     <div class="deposit-input-wrap">
-      <span class="deposit-currency">$</span>
+      <span class="deposit-currency">₽</span>
       <input class="deposit-input" id="depositAmount" type="number" min="1" max="10000" placeholder="Сумма" oninput="onDepositInput()">
     </div>
     <div class="deposit-actions">
@@ -541,10 +541,6 @@
   <div class="footer-bottom">
     <div class="footer-bottom-inner">
       <span class="footer-copy">© 2026 Лотус. Все права защищены.</span>
-      <span class="footer-status">
-        <span class="footer-status-dot"></span>
-        Все системы работают штатно
-      </span>
     </div>
   </div>
 </footer>

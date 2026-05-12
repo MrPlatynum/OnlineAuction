@@ -294,8 +294,8 @@ window.renderFilterTags = function() {
     }
     tags.push({ label, key: 'category', raw: true });
   }
-  if (currentFilters.minPrice)   tags.push({ label: `от $${currentFilters.minPrice}`, key: 'minPrice' });
-  if (currentFilters.maxPrice)   tags.push({ label: `до $${currentFilters.maxPrice}`, key: 'maxPrice' });
+  if (currentFilters.minPrice)   tags.push({ label: `от ${currentFilters.minPrice} ₽`, key: 'minPrice' });
+  if (currentFilters.maxPrice)   tags.push({ label: `до ${currentFilters.maxPrice} ₽`, key: 'maxPrice' });
   if (currentFilters.createdBy)  tags.push({ label: `@${esc(currentFilters.createdBy)}`, key: 'createdBy' });
   if (currentFilters.auctionType) tags.push({
     label: currentFilters.auctionType === 'bin' ? '⚡ BIN' : '🔨 BID', key: 'auctionType'
@@ -1023,6 +1023,26 @@ function buildPageList(current, total) {
         // ушедшие из viewport. Один экземпляр на страницу, заново
         // привязываемся к новым [data-auction-id] после каждой перерисовки.
         let auctionWsObserver = null;
+        const lastPriceRefresh = {};
+        function refreshAuctionPrice(auctionId) {
+            // Если карточка только что попала в viewport, пока она была
+            // скрыта, цена могла измениться (новая ставка / buy-now).
+            // WS подпишется только на будущие сообщения, текущее состояние
+            // нужно подтянуть отдельным REST-запросом. Throttle 5 с,
+            // чтобы быстрый скролл не спамил сервер на один и тот же лот.
+            const now = Date.now();
+            if (lastPriceRefresh[auctionId] && now - lastPriceRefresh[auctionId] < 5000) return;
+            lastPriceRefresh[auctionId] = now;
+            fetch(`${API_URL}/api/auctions/${auctionId}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (d && typeof d.current_price === 'number') {
+                        updatePrice(auctionId, d.current_price);
+                    }
+                })
+                .catch(() => {});
+        }
+
         function attachAuctionWsObserver() {
             if (!auctionWsObserver) {
                 auctionWsObserver = new IntersectionObserver((entries) => {
@@ -1030,6 +1050,7 @@ function buildPageList(current, total) {
                         const id = +entry.target.dataset.auctionId;
                         if (!id) return;
                         if (entry.isIntersecting) {
+                            refreshAuctionPrice(id);
                             if (token && !websockets[id]) connectWebSocket(id);
                         } else {
                             const ws = websockets[id];
@@ -1167,8 +1188,8 @@ function buildPageList(current, total) {
                 return `
                     <div class="auction-card" data-auction-id="${auction.id}"
                        data-title="${safeTitle}"
-                       data-price="${isBinType ? '⚡ ' : ''}$${auction.current_price.toFixed(2)}"
-                       data-start="от $${auction.starting_price.toFixed(2)}"
+                       data-price="${isBinType ? '⚡ ' : ''}${auction.current_price.toFixed(2)} ₽"
+                       data-start="от ${auction.starting_price.toFixed(2)} ₽"
                        data-bids="${bidsCount !== '' ? '💬 ' + bidsCount : ''}"
                        data-creator="${creatorName ? '@' + safeCreator : ''}"
                        data-category="${catLabel}"
@@ -1193,10 +1214,10 @@ function buildPageList(current, total) {
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
                                 <div class="auction-title">${safeTitle}</div>
                             </a>
-                            <div class="auction-price">$${auction.current_price.toFixed(2)}</div>
+                            <div class="auction-price">${auction.current_price.toFixed(2)} ₽</div>
                             ${!isEnded
                                 ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
-                                : `<div class="auction-start">Завершён · от $${auction.starting_price.toFixed(2)}</div>`}
+                                : `<div class="auction-start">Завершён · от ${auction.starting_price.toFixed(2)} ₽</div>`}
                             ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${safeCreator}</a></span></div>` : ''}
                         </div>
                     </div>
@@ -1339,7 +1360,13 @@ function buildPageList(current, total) {
             if (!card) return;
             const priceEl = card.querySelector('.auction-price');
             if (!priceEl) return;
-            priceEl.textContent = '$' + Number(newPrice).toFixed(2);
+            const next = Number(newPrice).toFixed(2) + ' ₽';
+            // Если цена не изменилась — ничего не трогаем, анимация-флэш
+            // только для реальных обновлений. Иначе при refresh-on-view
+            // (REST-запросе при первом появлении карточки в viewport)
+            // карточка моргала бы зря.
+            if (priceEl.textContent === next) return;
+            priceEl.textContent = next;
             priceEl.classList.remove('price-flash');
             void priceEl.offsetWidth;
             priceEl.classList.add('price-flash');
