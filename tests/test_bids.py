@@ -100,7 +100,7 @@ async def test_bid_above_user_balance_rejected(client, registered_user, second_u
         headers=second_user["headers"],
     )
     assert response.status_code == 400
-    assert "balance" in response.json()["detail"].lower()
+    assert "средств" in response.json()["detail"].lower()
 
 
 async def test_bid_outbid_replaces_leader(client, registered_user, second_user, third_user):
@@ -146,7 +146,7 @@ async def test_cannot_overcommit_balance_across_active_auctions(
         headers=second_user["headers"],
     )
     assert r2.status_code == 400
-    assert "available" in r2.json()["detail"].lower()
+    assert "зарезервировано" in r2.json()["detail"].lower()
 
 
 async def test_user_can_raise_their_own_bid_within_balance(
