@@ -13,7 +13,7 @@ router = APIRouter()
 def _page(name: str) -> FileResponse:
     path = os.path.join(TEMPLATES_DIR, name)
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise HTTPException(status_code=404, detail="Страница не найдена")
     return FileResponse(path)
 
 

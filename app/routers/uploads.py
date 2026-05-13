@@ -40,7 +40,7 @@ async def _read_under_limit(file: UploadFile, max_bytes: int) -> bytes:
     while chunk := await file.read(1024 * 1024):
         buf.extend(chunk)
         if len(buf) > max_bytes:
-            raise HTTPException(status_code=413, detail="Image too large")
+            raise HTTPException(status_code=413, detail="Изображение слишком большое")
     return bytes(buf)
 
 
@@ -48,7 +48,7 @@ async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
     """Validate the upload's bytes against the allowed image formats
     and return the sanitised payload + the file extension to use."""
     if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=400, detail="Unsupported image type")
+        raise HTTPException(status_code=400, detail="Неподдерживаемый тип изображения")
 
     raw = await _read_under_limit(file, MAX_UPLOAD_SIZE)
     sanitised, content_type, ext = await asyncio.to_thread(
@@ -57,7 +57,7 @@ async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
     if content_type != file.content_type:
         # Magic bytes don't match the Content-Type the client claimed —
         # almost always means a payload disguised as an image.
-        raise HTTPException(status_code=400, detail="Image content type mismatch")
+        raise HTTPException(status_code=400, detail="Тип содержимого изображения не совпадает")
     return sanitised, ext
 
 

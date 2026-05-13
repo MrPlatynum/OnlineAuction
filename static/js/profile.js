@@ -787,8 +787,8 @@ function updateBalanceDisplay(val) {
   const v = Number(val).toFixed(2);
   if ($('bal'))             $('bal').textContent = v;
   if ($('balancePanelVal')) $('balancePanelVal').textContent = v;
-  if ($('infoBalance'))     $('infoBalance').textContent = '$' + v;
-  if ($('balBadge'))        $('balBadge').textContent = '$' + v;
+  if ($('infoBalance'))     $('infoBalance').textContent = v + ' ₽';
+  if ($('balBadge'))        $('balBadge').textContent = v + ' ₽';
   if ($('navBalancePill'))  $('navBalancePill').textContent = v;
 }
 
@@ -831,8 +831,8 @@ async function loadBalance(reset = true) {
             <div class="tx-date">${date}</div>
           </div>
           <div class="tx-right">
-            <div class="tx-amount ${cls}">${sign}$${Number(t.amount).toFixed(2)}</div>
-            <div class="tx-balance">Остаток: $${Number(t.balance_after).toFixed(2)}</div>
+            <div class="tx-amount ${cls}">${sign}${Number(t.amount).toFixed(2)} ₽</div>
+            <div class="tx-balance">Остаток: ${Number(t.balance_after).toFixed(2)} ₽</div>
           </div>
         </div>`;
     }).join('');
@@ -893,7 +893,7 @@ async function doDepositPanel() {
     updateBalanceDisplay(d.balance);
     $('depositInput').value = '';
     clearPresets('deposit');
-    result.textContent = `✓ Баланс пополнен на $${amount.toFixed(2)}`;
+    result.textContent = `✓ Баланс пополнен на ${amount.toFixed(2)} ₽`;
     result.className = 'balance-form-result ok';
     setTimeout(() => { result.className = 'balance-form-result'; }, 3000);
     // Обновляем историю
@@ -923,7 +923,7 @@ async function doWithdraw() {
     updateBalanceDisplay(d.balance);
     $('withdrawInput').value = '';
     clearPresets('withdraw');
-    result.textContent = `✓ Заявка на вывод $${amount.toFixed(2)} принята`;
+    result.textContent = `✓ Заявка на вывод ${amount.toFixed(2)} ₽ принята`;
     result.className = 'balance-form-result ok';
     setTimeout(() => { result.className = 'balance-form-result'; }, 3000);
     txPage = 1; await loadBalance(true);
@@ -966,7 +966,7 @@ async function load() {
     pubLink.style.display = '';
   }
   $('bal').textContent    = Number(user.balance || 0).toFixed(2);
-  if ($('balBadge'))       $('balBadge').textContent = '$' + Number(user.balance || 0).toFixed(2);
+  if ($('balBadge'))       $('balBadge').textContent = Number(user.balance || 0).toFixed(2) + ' ₽';
   document.title = `${user.username} — Лотус`;
 
   // Nav-пилюля
@@ -990,7 +990,7 @@ async function load() {
   if ($('emailVerifiedBadge'))   $('emailVerifiedBadge').style.display   = user.email_verified ? 'inline-flex' : 'none';
   if ($('emailUnverifiedBadge')) $('emailUnverifiedBadge').style.display = user.email_verified ? 'none' : 'inline-flex';
   if ($('resendVerifyBtn'))      $('resendVerifyBtn').style.display      = user.email_verified ? 'none' : 'inline-flex';
-  if ($('infoBalance'))   $('infoBalance').textContent   = '$' + Number(user.balance || 0).toFixed(2);
+  if ($('infoBalance'))   $('infoBalance').textContent   = Number(user.balance || 0).toFixed(2) + ' ₽';
   if ($('infoCreatedAt')) $('infoCreatedAt').textContent = user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('ru-RU') : '—';
   loadNotifSettings(user);
   initTheme();
@@ -1099,7 +1099,7 @@ async function doDeposit() {
     void balEl.offsetWidth;
     balEl.classList.add('balance-pop');
 
-    result.textContent = `✓ Баланс пополнен на $${amount.toFixed(2)}. Новый: $${newBalance}`;
+    result.textContent = `✓ Баланс пополнен на ${amount.toFixed(2)} ₽. Новый: ${newBalance} ₽`;
     result.className = 'deposit-result ok'; result.style.display = 'block';
     $('depositAmount').value = '';
     document.querySelectorAll('.deposit-preset').forEach(b => b.classList.remove('selected'));

@@ -82,10 +82,10 @@ async def place_bid(
         )
     ).scalar_one_or_none()
     if not auction:
-        raise HTTPException(status_code=404, detail="Auction not found")
+        raise HTTPException(status_code=404, detail="Аукцион не найден")
 
     if not auction.is_active:
-        raise HTTPException(status_code=400, detail="Auction is not active")
+        raise HTTPException(status_code=400, detail="Аукцион неактивен")
 
     if auction.auction_type == "bin":
         # BIN lots are fixed-price listings, not auctions: buyers go through
@@ -105,10 +105,10 @@ async def place_bid(
         # that finalises a lot (winner_id + balance transfer + notifications);
         # writing is_active=False from a request handler short-circuits the
         # scheduler's later tick and strands the lot with no payout.
-        raise HTTPException(status_code=400, detail="Auction has ended")
+        raise HTTPException(status_code=400, detail="Аукцион завершён")
 
     if bid_amount <= auction.current_price:
-        raise HTTPException(status_code=400, detail="Bid must be higher than current price")
+        raise HTTPException(status_code=400, detail="Ставка должна быть больше текущей цены")
 
     # Lock the bidder's user row before reading balance / committed-elsewhere.
     # Without this, two concurrent bids by the same user on *different* auctions
@@ -121,13 +121,13 @@ async def place_bid(
     )
     available = current_user.balance - committed_elsewhere
     if available < bid_amount:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Insufficient available balance. You have ${available:.2f} available "
-                f"(${committed_elsewhere:.2f} already committed to other active auctions)."
-            ),
-        )
+        msg = f"Недостаточно средств на балансе. Доступно {available:.2f} ₽"
+        if committed_elsewhere > 0:
+            msg += (
+                f" ({committed_elsewhere:.2f} ₽ уже зарезервировано в других "
+                f"активных аукционах)"
+            )
+        raise HTTPException(status_code=400, detail=msg + ".")
 
     previous_leader_bid = (
         await db.execute(

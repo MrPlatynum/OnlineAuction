@@ -150,9 +150,9 @@ async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(ge
         # Burn the same CPU a real verify would so we don't leak
         # "username exists" via response timing.
         consume_password_verify_time(user.password)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
     if not verify_password(user.password, db_user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     if needs_rehash(db_user.hashed_password):
         db_user.hashed_password = hash_password(user.password)

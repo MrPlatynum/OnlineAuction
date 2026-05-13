@@ -22,7 +22,7 @@
 
   window.fmtMoney = function(n) {
     const num = Number(n);
-    return Number.isFinite(num) ? '$' + num.toFixed(2) : '—';
+    return Number.isFinite(num) ? num.toFixed(2) + ' ₽' : '—';
   };
 
   window.fmtDate = function(iso, opts) {

@@ -124,4 +124,5 @@ async def test_decompression_bomb_rejected(client, registered_user, monkeypatch)
         "/api/upload-avatar", files=files, headers=registered_user["headers"]
     )
     assert r.status_code == 400, r.text
-    assert "large" in r.json()["detail"].lower() or "decode" in r.json()["detail"].lower()
+    detail = r.json()["detail"].lower()
+    assert "большое" in detail or "decode" in detail or "разобрать" in detail

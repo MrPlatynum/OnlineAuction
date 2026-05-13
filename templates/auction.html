@@ -142,7 +142,7 @@
             <button type="button" class="bid-quick-btn" data-bump="100" onclick="bumpBid(100)">+100</button>
           </div>
           <div class="bid-input-wrap">
-            <span class="bid-currency">$</span>
+            <span class="bid-currency">₽</span>
             <input class="bid-input" id="bidAmount" type="number" min="0" step="0.01" placeholder="Введите сумму">
           </div>
           <button class="btn btn-primary bid-submit" id="bidBtn" onclick="placeBid()">Поставить ставку</button>
@@ -328,11 +328,11 @@
 
       <div class="edit-field-row" id="editPriceBlock">
         <div class="form-group" id="editStartPriceWrap" style="margin:0;">
-          <label class="form-label">Стартовая цена ($)</label>
+          <label class="form-label">Стартовая цена (₽)</label>
           <input type="number" class="form-input" id="editPrice" min="1" step="0.01">
         </div>
         <div class="form-group" id="editBinPriceBlock" style="margin:0;">
-          <label class="form-label">Цена BIN ($)</label>
+          <label class="form-label">Цена BIN (₽)</label>
           <input type="number" class="form-input" id="editBinPrice" min="1" step="0.01">
         </div>
       </div>
@@ -414,13 +414,40 @@
   <div class="footer-bottom">
     <div class="footer-bottom-inner">
       <span class="footer-copy">© 2026 Лотус. Все права защищены.</span>
-      <span class="footer-status">
-        <span class="footer-status-dot"></span>
-        Все системы работают штатно
-      </span>
     </div>
   </div>
 </footer>
+
+  <!-- Lightbox: открывается по клику на фото в галерее лота.
+       Поддерживает зум (колесом / кнопками), панорамирование при зуме,
+       навигацию стрелками / клавишами, закрытие на Esc / клике по фону. -->
+  <div class="lot-lightbox" id="lotLightbox" hidden>
+    <button class="lb-btn lb-close" type="button" onclick="closeLightbox()" aria-label="Закрыть">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <button class="lb-btn lb-nav lb-prev" type="button" onclick="lbSlide(-1)" aria-label="Предыдущее">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <button class="lb-btn lb-nav lb-next" type="button" onclick="lbSlide(1)" aria-label="Следующее">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="lb-stage" id="lbStage">
+      <img class="lb-img" id="lbImg" alt="" draggable="false">
+    </div>
+    <div class="lb-controls">
+      <button class="lb-btn" type="button" onclick="lbZoom(-0.25)" aria-label="Уменьшить">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <span class="lb-zoom-label" id="lbZoomLabel">100%</span>
+      <button class="lb-btn" type="button" onclick="lbZoom(0.25)" aria-label="Увеличить">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="lb-btn" type="button" onclick="lbZoomReset()" aria-label="Сбросить">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+      </button>
+    </div>
+    <div class="lb-counter" id="lbCounter"></div>
+  </div>
 
   <script src="/static/js/common.js"></script>
   <script src="/static/js/auction.js"></script>

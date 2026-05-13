@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models import Auction, Bid, User
 from app.schemas import NotificationSettings
 from app.utils.security import get_current_user
+from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -34,7 +35,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
         await db.execute(select(User).where(User.username == username))
     ).scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     # Cap recent auctions in the response: a power-seller with thousands
     # of lots would otherwise serialise the whole list on every profile
@@ -81,6 +82,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
     else:
         lost_count = 0
 
+    now = utcnow()
     auction_list = [
         {
             "id": a.id,
@@ -91,6 +93,8 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
             "is_completed": a.is_completed,
             "end_time": a.end_time.isoformat(),
             "winner_id": a.winner_id,
+            "image_url": a.image_url,
+            "time_remaining": max(0, int((a.end_time - now).total_seconds())) if a.is_active else 0,
         }
         for a in auctions
     ]
