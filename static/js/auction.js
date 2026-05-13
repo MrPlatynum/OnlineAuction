@@ -690,11 +690,142 @@
   function lotGoTo(idx){const slides=document.querySelectorAll('.lot-slide'),dots=document.querySelectorAll('.lot-dot'),counter=$('lotCounter');if(!slides.length)return;slides[lotCurrentSlide]?.classList.remove('active');dots[lotCurrentSlide]?.classList.remove('active');lotCurrentSlide=(idx+slides.length)%slides.length;slides[lotCurrentSlide]?.classList.add('active');dots[lotCurrentSlide]?.classList.add('active');if(counter)counter.textContent=`${lotCurrentSlide+1} / ${slides.length}`;updateThumbs(lotCurrentSlide);}
   function lotSlide(dir){lotGoTo(lotCurrentSlide+dir);}
 
+  // ===== Lightbox: открытие фото лота на полный экран с zoom/pan =====
+  const lb = {
+    idx: 0, urls: [],
+    zoom: 1, panX: 0, panY: 0,
+    dragging: false, dragStartX: 0, dragStartY: 0,
+  };
+  const ZOOM_MIN = 1, ZOOM_MAX = 4, ZOOM_STEP_WHEEL = 0.2;
+
+  function openLightbox(idx) {
+    const slides = document.querySelectorAll('.lot-slide');
+    if (!slides.length) return;
+    lb.urls = Array.from(slides).map(s => s.src);
+    lb.idx = Math.max(0, Math.min(idx | 0, lb.urls.length - 1));
+    lbResetZoom();
+    lbRenderCurrent();
+    $('lotLightbox').hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+  function closeLightbox() {
+    $('lotLightbox').hidden = true;
+    document.body.style.overflow = '';
+  }
+  function lbBgClick() { /* deprecated: close теперь только × и Esc */ }
+  function lbSlide(dir) {
+    if (!lb.urls.length) return;
+    lb.idx = (lb.idx + dir + lb.urls.length) % lb.urls.length;
+    lbResetZoom();
+    lbRenderCurrent();
+  }
+  function lbRenderCurrent() {
+    const img = $('lbImg');
+    if (!img) return;
+    img.src = lb.urls[lb.idx] || '';
+    const counter = $('lbCounter');
+    if (counter) {
+      counter.textContent = lb.urls.length > 1 ? `${lb.idx + 1} / ${lb.urls.length}` : '';
+      counter.style.display = lb.urls.length > 1 ? '' : 'none';
+    }
+    const showNav = lb.urls.length > 1 ? '' : 'none';
+    const prev = document.querySelector('.lb-prev'), next = document.querySelector('.lb-next');
+    if (prev) prev.style.display = showNav;
+    if (next) next.style.display = showNav;
+  }
+  function lbApplyTransform() {
+    const img = $('lbImg');
+    if (!img) return;
+    img.style.transform = `translate(${lb.panX}px, ${lb.panY}px) scale(${lb.zoom})`;
+    img.classList.toggle('zoomed', lb.zoom > 1);
+    const label = $('lbZoomLabel');
+    if (label) label.textContent = `${Math.round(lb.zoom * 100)}%`;
+  }
+  function lbZoom(delta) {
+    const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, lb.zoom + delta));
+    if (Math.abs(next - lb.zoom) < 0.001) return;
+    lb.zoom = next;
+    if (lb.zoom === ZOOM_MIN) { lb.panX = 0; lb.panY = 0; }
+    lbApplyTransform();
+  }
+  function lbResetZoom() {
+    lb.zoom = 1; lb.panX = 0; lb.panY = 0;
+    lbApplyTransform();
+  }
+
+  // Клик по слайду открывает lightbox с текущим видимым фото.
+  // Все слайды лежат друг на друге (position:absolute), и target
+  // указал бы на верхний по DOM, а не на визуально активный —
+  // поэтому берём индекс не из e.target, а из lotCurrentSlide.
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.lot-image-wrap')) return;
+    if (e.target.closest('.lot-nav, .lot-dots, .lot-counter')) return;
+    if (!e.target.closest('.lot-slide')) return;
+    openLightbox(lotCurrentSlide);
+  });
+  // Клик по сцене вне картинки и контролов — навигация: левая
+  // половина = prev, правая = next. Чтобы случайный промах по
+  // визуальной стрелке не казался «глухим» нажатием.
+  document.addEventListener('click', (e) => {
+    if ($('lotLightbox')?.hidden) return;
+    if (!lb.urls || lb.urls.length < 2) return;
+    if (lb.zoom > 1) return; // в режиме зума клик может быть частью drag
+    const stage = e.target.closest('#lbStage');
+    if (!stage) return;
+    // Игнорируем сам img — нужно чтобы wheel/drag работали без сюрпризов
+    if (e.target.closest('.lb-img')) return;
+    // Игнорируем клик по кнопкам и контролам
+    if (e.target.closest('.lb-btn, .lb-controls, .lb-counter, .lb-nav')) return;
+    const rect = stage.getBoundingClientRect();
+    const xRel = e.clientX - rect.left;
+    if (xRel < rect.width / 2) lbSlide(-1);
+    else lbSlide(1);
+  });
+  // Клавиатура: Esc, стрелки, +/-, 0 (reset)
+  document.addEventListener('keydown', (e) => {
+    if ($('lotLightbox')?.hidden) return;
+    if (e.key === 'Escape') closeLightbox();
+    else if (e.key === 'ArrowLeft') lbSlide(-1);
+    else if (e.key === 'ArrowRight') lbSlide(1);
+    else if (e.key === '+' || e.key === '=') lbZoom(0.25);
+    else if (e.key === '-' || e.key === '_') lbZoom(-0.25);
+    else if (e.key === '0') lbResetZoom();
+  });
+  // Колесо мыши = zoom
+  document.addEventListener('wheel', (e) => {
+    if ($('lotLightbox')?.hidden) return;
+    if (!e.target.closest('#lotLightbox')) return;
+    e.preventDefault();
+    lbZoom(e.deltaY < 0 ? ZOOM_STEP_WHEEL : -ZOOM_STEP_WHEEL);
+  }, { passive: false });
+  // Перетаскивание при zoom > 1
+  document.addEventListener('mousedown', (e) => {
+    if ($('lotLightbox')?.hidden || lb.zoom === 1) return;
+    if (!e.target.closest('.lb-img')) return;
+    lb.dragging = true;
+    lb.dragStartX = e.clientX - lb.panX;
+    lb.dragStartY = e.clientY - lb.panY;
+    $('lbImg').classList.add('dragging');
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!lb.dragging) return;
+    lb.panX = e.clientX - lb.dragStartX;
+    lb.panY = e.clientY - lb.dragStartY;
+    lbApplyTransform();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!lb.dragging) return;
+    lb.dragging = false;
+    $('lbImg').classList.remove('dragging');
+  });
+
   // Expose handlers for inline onclick="..." in auction.html
   Object.assign(window, {
-    buyNow, bumpBid, closeEditModal, filterReviewsByRating, goAuth,
-    lotGoTo, lotSlide, openEditModal, placeBid, removeEditImg, saveEdit,
-    setExtend, submitReview, switchLotTab, toggleSubscription,
+    buyNow, bumpBid, closeEditModal, closeLightbox, filterReviewsByRating,
+    goAuth, lbBgClick, lbSlide, lbZoom, lbZoomReset: lbResetZoom,
+    lotGoTo, lotSlide, openEditModal, openLightbox, placeBid, removeEditImg,
+    saveEdit, setExtend, submitReview, switchLotTab, toggleSubscription,
     toggleThisLotOnly, updateReviewCounter,
   });
 
