@@ -24,15 +24,59 @@ from app.schemas import (
     PaginatedAuctionsResponse,
 )
 from app.services.auction_scheduler import cancel_auction, schedule_auction
-from app.services.auctions import fetch_auction_bidders
+from app.services.auctions import fetch_auction_bidders, settle_bin_purchase
 from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
-from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auctions"])
+
+
+def _time_remaining(auction: Auction) -> int:
+    """Seconds left until ``end_time`` — single source of truth used by
+    every dict-builder in this module. Returns 0 for completed lots or
+    when ``end_time`` is somehow None (defensive: the column is NOT NULL
+    but a freshly-built ORM instance can briefly be unset)."""
+    if not auction.end_time or not auction.is_active:
+        return 0
+    return max(0, int((auction.end_time - utcnow()).total_seconds()))
+
+
+def _participation_row(auction: Auction, my_amount) -> dict:
+    """Row shape for the /my/participation active/won/lost buckets.
+    ``my_amount`` is the caller's latest bid on this auction (may be
+    None for the never-bid-but-won-via-buy-now corner case, which
+    doesn't currently happen but the column tolerates it)."""
+    return {
+        "auction_id": auction.id,
+        "title": auction.title,
+        "image_url": auction.image_url,
+        "current_price": float(auction.current_price),
+        "my_bid": float(my_amount) if my_amount is not None else 0,
+        "is_winning": auction.current_price == my_amount,
+        "end_time": auction.end_time.isoformat(),
+        "time_remaining": _time_remaining(auction),
+        "is_active": auction.is_active,
+        "auction_type": auction.auction_type or "bid",
+    }
+
+
+def _created_lot_row(auction: Auction, bids_count: int) -> dict:
+    """Row shape for the /my/participation created_auctions bucket."""
+    return {
+        "auction_id": auction.id,
+        "title": auction.title,
+        "current_price": float(auction.current_price),
+        "starting_price": float(auction.starting_price),
+        "is_active": auction.is_active,
+        "winner_id": auction.winner_id,
+        "bids_count": bids_count,
+        "image_url": auction.image_url,
+        "end_time": auction.end_time.isoformat() if auction.end_time else None,
+        "time_remaining": _time_remaining(auction),
+    }
 
 
 def _auction_to_dict(auction: Auction, bids_count: int) -> dict:
@@ -130,38 +174,22 @@ async def create_auction(
             auction_title=db_auction.title,
         )
 
-    cat = None
-    if db_auction.category_id:
-        cat = (
-            await db.execute(
-                select(Category).where(Category.id == db_auction.category_id)
+    # Re-fetch with relationships eager-loaded so the response goes through
+    # the same shape as the listing — kept these dicts drifting apart before
+    # (missing fields, divergent time_remaining math). bids_count is 0 by
+    # construction: a freshly-created auction has no bids yet.
+    loaded = (
+        await db.execute(
+            select(Auction)
+            .where(Auction.id == db_auction.id)
+            .options(
+                selectinload(Auction.creator),
+                selectinload(Auction.category),
+                selectinload(Auction.images),
             )
-        ).scalar_one_or_none()
-
-    auction_dict = {
-        "id": db_auction.id,
-        "title": db_auction.title,
-        "description": db_auction.description,
-        "starting_price": db_auction.starting_price,
-        "current_price": db_auction.current_price,
-        "image_url": db_auction.image_url,
-        "image_urls": all_urls,
-        "start_time": db_auction.start_time,
-        "end_time": db_auction.end_time,
-        "is_active": db_auction.is_active,
-        "is_completed": db_auction.is_completed,
-        "winner_id": db_auction.winner_id,
-        "created_by": db_auction.created_by,
-        "creator_username": current_user.username,
-        "creator_avatar_url": current_user.avatar_url,
-        "time_remaining": max(0, int((db_auction.end_time - utcnow()).total_seconds())),
-        "category_id": db_auction.category_id,
-        "category_name": cat.name if cat else None,
-        "category_icon": cat.icon if cat else None,
-        "auction_type": auction.auction_type or "bid",
-        "bin_price": auction.bin_price,
-    }
-    return AuctionResponse(**auction_dict)
+        )
+    ).scalar_one()
+    return AuctionResponse(**_auction_to_dict(loaded, bids_count=0))
 
 
 @router.post("/auctions/{auction_id}/buy-now")
@@ -205,23 +233,7 @@ async def buy_now(
             f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, у вас {current_user.balance:.2f} ₽",
         )
 
-    current_user.balance -= auction.bin_price
-    add_transaction(
-        db, current_user, "bin_purchase", auction.bin_price,
-        f"Покупка «{auction.title}» по цене BIN", auction_id=auction.id,
-    )
-    auction.current_price = auction.bin_price
-    auction.is_active = False
-    auction.is_completed = True
-    auction.winner_id = current_user.id
-    auction.end_time = utcnow()
-
-    if creator:
-        creator.balance += auction.bin_price
-        add_transaction(
-            db, creator, "auction_sale", auction.bin_price,
-            f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
-        )
+    settle_bin_purchase(db, auction, current_user, creator)
     await db.commit()
 
     cancel_auction(auction_id)
@@ -536,30 +548,17 @@ async def get_my_participation(
         )
     ).all()
 
-    active_bids = []
-    won_auctions = []
-    lost_auctions = []
-
+    active_bids: list[dict] = []
+    won_auctions: list[dict] = []
+    lost_auctions: list[dict] = []
     for auction, my_amount in participating_rows:
-        auction_data = {
-            "auction_id": auction.id,
-            "title": auction.title,
-            "image_url": auction.image_url,
-            "current_price": float(auction.current_price),
-            "my_bid": float(my_amount) if my_amount is not None else 0,
-            "is_winning": auction.current_price == my_amount,
-            "end_time": auction.end_time.isoformat(),
-            "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
-            "is_active": auction.is_active,
-            "auction_type": auction.auction_type or "bid",
-        }
-
+        row = _participation_row(auction, my_amount)
         if auction.is_active:
-            active_bids.append(auction_data)
+            active_bids.append(row)
         elif auction.winner_id == current_user.id:
-            won_auctions.append(auction_data)
+            won_auctions.append(row)
         else:
-            lost_auctions.append(auction_data)
+            lost_auctions.append(row)
 
     my_auctions = (
         await db.execute(
@@ -570,33 +569,18 @@ async def get_my_participation(
     ).scalars().all()
 
     # One aggregate for bid counts across all of my auctions.
-    my_auction_ids = [a.id for a in my_auctions]
     bid_counts: dict[int, int] = {}
-    if my_auction_ids:
+    if my_auctions:
         bid_counts = dict(
             (await db.execute(
                 select(Bid.auction_id, func.count(Bid.id))
-                .where(Bid.auction_id.in_(my_auction_ids))
+                .where(Bid.auction_id.in_([a.id for a in my_auctions]))
                 .group_by(Bid.auction_id)
             )).all()
         )
 
     created_auctions = [
-        {
-            "auction_id": auction.id,
-            "title": auction.title,
-            "current_price": float(auction.current_price),
-            "starting_price": float(auction.starting_price),
-            "is_active": auction.is_active,
-            "winner_id": auction.winner_id,
-            "bids_count": bid_counts.get(auction.id, 0),
-            "image_url": auction.image_url,
-            "end_time": auction.end_time.isoformat() if auction.end_time else None,
-            "time_remaining": max(
-                0, int((auction.end_time - utcnow()).total_seconds())
-            ) if auction.end_time and auction.is_active else 0,
-        }
-        for auction in my_auctions
+        _created_lot_row(a, bid_counts.get(a.id, 0)) for a in my_auctions
     ]
 
     active_bids.sort(key=lambda x: x["time_remaining"])

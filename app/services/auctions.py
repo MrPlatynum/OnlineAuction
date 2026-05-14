@@ -13,6 +13,39 @@ from app.utils.time import utcnow
 logger = logging.getLogger(__name__)
 
 
+def settle_bin_purchase(
+    db: AsyncSession,
+    auction: Auction,
+    buyer: User,
+    seller: User | None,
+) -> None:
+    """Apply the money side of a BIN purchase: debit the buyer, credit
+    the seller (if present), flip the lot to settled state, log both
+    transactions. Caller still owns the commit so it can sequence it
+    with row locks and notifications.
+
+    ``seller is None`` is the "creator account was deleted while their
+    listing was up" edge case — buyer still gets the goods, the lot
+    just doesn't credit anyone."""
+    price = auction.bin_price
+    buyer.balance -= price
+    add_transaction(
+        db, buyer, "bin_purchase", price,
+        f"Покупка «{auction.title}» по цене BIN", auction_id=auction.id,
+    )
+    auction.current_price = price
+    auction.is_active = False
+    auction.is_completed = True
+    auction.winner_id = buyer.id
+    auction.end_time = utcnow()
+    if seller:
+        seller.balance += price
+        add_transaction(
+            db, seller, "auction_sale", price,
+            f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
+        )
+
+
 async def fetch_auction_bidders(
     db: AsyncSession,
     auction_id: int,
