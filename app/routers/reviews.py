@@ -92,12 +92,12 @@ async def create_review(
     db: AsyncSession = Depends(get_db),
 ):
     if data.seller_id == current_user.id:
-        raise HTTPException(400, "Нельзя оставить отзыв о себе")
+        raise HTTPException(status_code=400, detail="Нельзя оставить отзыв о себе")
     seller = (
         await db.execute(select(User).where(User.id == data.seller_id))
     ).scalar_one_or_none()
     if not seller:
-        raise HTTPException(404, "Продавец не найден")
+        raise HTTPException(status_code=404, detail="Продавец не найден")
 
     # Reviewer must have actually transacted with this seller — won the
     # referenced completed auction (the only way Auction.winner_id is set
@@ -109,13 +109,14 @@ async def create_review(
                 Auction.id == data.auction_id,
                 Auction.created_by == data.seller_id,
                 Auction.winner_id == current_user.id,
-                Auction.is_completed == True,
+                Auction.is_completed.is_(True),
             ).limit(1)
         )
     ).scalar_one_or_none()
     if not qualifying:
         raise HTTPException(
-            403, "Можно оставить отзыв только продавцу, у которого вы что-то выиграли"
+            status_code=403,
+            detail="Можно оставить отзыв только продавцу, у которого вы что-то выиграли",
         )
 
     exists = (
@@ -127,7 +128,7 @@ async def create_review(
         )
     ).scalar_one_or_none()
     if exists:
-        raise HTTPException(400, "Вы уже оставили отзыв на этот аукцион")
+        raise HTTPException(status_code=400, detail="Вы уже оставили отзыв на этот аукцион")
     review = Review(
         seller_id=data.seller_id,
         reviewer_id=current_user.id,
@@ -150,9 +151,9 @@ async def delete_review(
         await db.execute(select(Review).where(Review.id == review_id))
     ).scalar_one_or_none()
     if not review:
-        raise HTTPException(404, "Отзыв не найден")
+        raise HTTPException(status_code=404, detail="Отзыв не найден")
     if review.reviewer_id != current_user.id:
-        raise HTTPException(403, "Нельзя удалить чужой отзыв")
+        raise HTTPException(status_code=403, detail="Нельзя удалить чужой отзыв")
     await db.delete(review)
     await db.commit()
     return {"message": "Отзыв удалён"}

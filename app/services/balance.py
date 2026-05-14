@@ -63,7 +63,7 @@ async def get_committed_balance(db: AsyncSession, user_id: int) -> Decimal:
         select(func.coalesce(func.sum(Auction.current_price), 0))
         .join(latest_bidder, latest_bidder.c.auction_id == Auction.id)
         .where(
-            Auction.is_active == True,
+            Auction.is_active.is_(True),
             latest_bidder.c.leader_id == user_id,
         )
     )

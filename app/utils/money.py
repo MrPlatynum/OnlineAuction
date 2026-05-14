@@ -5,10 +5,9 @@ Mixing the two raises ``TypeError`` on +/-/*//, so always convert at
 the boundary."""
 
 from decimal import Decimal
-from typing import Optional
 
 
-def to_decimal(value) -> Optional[Decimal]:
+def to_decimal(value) -> Decimal | None:
     """Convert via ``str`` so we don't inherit float's binary
     rounding error (``Decimal(0.1)`` ≠ ``Decimal('0.1')``)."""
     if value is None:
@@ -18,7 +17,7 @@ def to_decimal(value) -> Optional[Decimal]:
     return Decimal(str(value))
 
 
-def money_to_float(value) -> Optional[float]:
+def money_to_float(value) -> float | None:
     """Cast Decimal → float for JSON responses where the historical
     API contract returns a number, not a string."""
     if value is None:

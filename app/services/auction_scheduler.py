@@ -149,7 +149,7 @@ async def schedule_active_auctions() -> None:
     async with _db_module.SessionLocal() as db:
         active = (
             await db.execute(
-                select(Auction).where(Auction.is_active == True)
+                select(Auction).where(Auction.is_active.is_(True))
             )
         ).scalars().all()
         for auction in active:

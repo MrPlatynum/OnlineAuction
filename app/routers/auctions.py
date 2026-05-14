@@ -1,5 +1,4 @@
 from datetime import timedelta
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete as sql_delete
@@ -208,29 +207,29 @@ async def buy_now(
         )
     ).scalar_one_or_none()
     if not auction:
-        raise HTTPException(404, "Аукцион не найден")
+        raise HTTPException(status_code=404, detail="Аукцион не найден")
     if not auction.is_active:
-        raise HTTPException(400, "Аукцион завершён")
+        raise HTTPException(status_code=400, detail="Аукцион завершён")
     if utcnow() > auction.end_time:
         # Don't flip is_active / is_completed here. complete_auction is the
         # single path that finalises a lot (winner_id + balance transfer +
         # notifications); writing terminal flags from a request handler
         # short-circuits the scheduler's later tick and strands the lot
         # with no payout for any bidders already on it.
-        raise HTTPException(400, "Аукцион завершён")
+        raise HTTPException(status_code=400, detail="Аукцион завершён")
     if auction.auction_type != "bin":
-        raise HTTPException(400, "Этот аукцион не поддерживает покупку сразу")
+        raise HTTPException(status_code=400, detail="Этот аукцион не поддерживает покупку сразу")
     if not auction.bin_price:
-        raise HTTPException(400, "Цена BIN не установлена")
+        raise HTTPException(status_code=400, detail="Цена BIN не установлена")
     if auction.created_by == current_user.id:
-        raise HTTPException(400, "Нельзя купить собственный лот")
+        raise HTTPException(status_code=400, detail="Нельзя купить собственный лот")
 
     locked_users = await lock_users_by_id(db, current_user.id, auction.created_by)
     creator = locked_users.get(auction.created_by)
     if current_user.balance < auction.bin_price:
         raise HTTPException(
-            400,
-            f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, у вас {current_user.balance:.2f} ₽",
+            status_code=400,
+            detail=f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, у вас {current_user.balance:.2f} ₽",
         )
 
     settle_bin_purchase(db, auction, current_user, creator)
@@ -268,21 +267,21 @@ async def get_auctions(
     page: int = Query(1, ge=1),
     page_size: int = Query(12, ge=1, le=50),
     status: str = Query("active", pattern="^(active|completed|all)$"),
-    search: Optional[str] = Query(None),
-    min_price: Optional[float] = Query(None, ge=0),
-    max_price: Optional[float] = Query(None, ge=0),
+    search: str | None = Query(None),
+    min_price: float | None = Query(None, ge=0),
+    max_price: float | None = Query(None, ge=0),
     sort_by: str = Query("time", pattern="^(time|price_asc|price_desc)$"),
-    created_by: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
-    auction_type: Optional[str] = Query(None),
+    created_by: str | None = Query(None),
+    category: str | None = Query(None),
+    auction_type: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Auction)
 
     if status == "active":
-        query = query.where(Auction.is_active == True)
+        query = query.where(Auction.is_active.is_(True))
     elif status == "completed":
-        query = query.where(Auction.is_completed == True)
+        query = query.where(Auction.is_completed.is_(True))
 
     if search:
         search_pattern = f"%{search}%"
@@ -417,11 +416,11 @@ async def update_auction(
         )
     ).scalar_one_or_none()
     if not auction:
-        raise HTTPException(404, "Аукцион не найден")
+        raise HTTPException(status_code=404, detail="Аукцион не найден")
     if auction.created_by != current_user.id:
-        raise HTTPException(403, "Это не ваш лот")
+        raise HTTPException(status_code=403, detail="Это не ваш лот")
     if not auction.is_active:
-        raise HTTPException(400, "Лот уже завершён — редактирование недоступно")
+        raise HTTPException(status_code=400, detail="Лот уже завершён — редактирование недоступно")
 
     fields = data.model_fields_set
     has_bids = await db.scalar(
@@ -432,8 +431,8 @@ async def update_auction(
     # bait-and-switch.
     if has_bids and fields - {"extend_minutes"}:
         raise HTTPException(
-            400,
-            "На лоте уже есть ставки — можно только продлить срок (extend_minutes)",
+            status_code=400,
+            detail="На лоте уже есть ставки — можно только продлить срок (extend_minutes)",
         )
 
     if "title" in fields and data.title:

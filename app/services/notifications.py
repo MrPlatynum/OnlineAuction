@@ -1,4 +1,3 @@
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -73,8 +72,8 @@ async def create_notification(
     notification_type: NotificationType,
     title: str,
     message: str,
-    auction_id: Optional[int] = None,
-    auction_title: Optional[str] = None,
+    auction_id: int | None = None,
+    auction_title: str | None = None,
 ):
     """Создание уведомления в БД."""
     notification = Notification(
@@ -97,8 +96,8 @@ async def notify_user(
     notification_type: NotificationType,
     title: str,
     message: str,
-    auction_id: Optional[int] = None,
-    auction_title: Optional[str] = None,
+    auction_id: int | None = None,
+    auction_title: str | None = None,
     manager=None,
 ):
     """In-app + email уведомление пользователя."""

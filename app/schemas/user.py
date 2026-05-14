@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -25,8 +24,8 @@ class UserResponse(BaseModel):
     username: str
     email: str
     balance: float
-    created_at: Optional[datetime] = None
-    avatar_url: Optional[str] = None
+    created_at: datetime | None = None
+    avatar_url: str | None = None
     email_verified: bool = False
     email_notifications: bool = True
     notify_outbid: bool = True

@@ -28,11 +28,11 @@ from app.routers import (
 )
 from app.services.auction_scheduler import schedule_active_auctions, shutdown_scheduler
 from app.services.email_outbox import start_outbox_worker, stop_outbox_worker
-from app.services.migrations import seed_categories
 from app.services.scheduler_election import (
     release_scheduler_lock,
     try_become_scheduler_leader,
 )
+from app.services.seed_data import seed_categories
 from app.utils.rate_limit import limiter
 
 logger = logging.getLogger(__name__)

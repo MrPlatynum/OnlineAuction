@@ -66,7 +66,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
     won_count = await db.scalar(
         select(func.count())
         .select_from(Auction)
-        .where(Auction.winner_id == user.id, Auction.is_completed == True)
+        .where(Auction.winner_id == user.id, Auction.is_completed.is_(True))
     )
 
     if bid_auction_ids:
@@ -75,7 +75,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
             .select_from(Auction)
             .where(
                 Auction.id.in_(bid_auction_ids),
-                Auction.is_completed == True,
+                Auction.is_completed.is_(True),
                 Auction.winner_id != user.id,
             )
         )

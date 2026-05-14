@@ -42,7 +42,7 @@ import app.database as _db_module  # noqa: E402
 from app import app  # noqa: E402
 from app.database import Base  # noqa: E402
 from app.models import User  # noqa: E402
-from app.services.migrations import seed_categories  # noqa: E402
+from app.services.seed_data import seed_categories  # noqa: E402
 
 
 async def _force_verified(username: str) -> None:
