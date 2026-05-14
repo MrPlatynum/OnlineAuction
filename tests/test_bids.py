@@ -149,9 +149,11 @@ async def test_cannot_overcommit_balance_across_active_auctions(
     assert "зарезервировано" in r2.json()["detail"].lower()
 
 
-async def test_user_can_raise_their_own_bid_within_balance(
-    client, registered_user, second_user
+async def test_user_cannot_outbid_themselves(
+    client, registered_user, second_user, third_user
 ):
+    """Leading bidder can't raise their own bid — only another user
+    breaking the leader's streak unlocks a fresh bid from them."""
     a1 = await _create_auction(client, registered_user["headers"])
 
     r1 = await client.post(
@@ -166,7 +168,22 @@ async def test_user_can_raise_their_own_bid_within_balance(
         json={"auction_id": a1["id"], "amount": 800.0},
         headers=second_user["headers"],
     )
-    assert r2.status_code == 200, r2.text
+    assert r2.status_code == 400
+    assert "лидиру" in r2.json()["detail"].lower()
+
+    r3 = await client.post(
+        "/api/bids",
+        json={"auction_id": a1["id"], "amount": 600.0},
+        headers=third_user["headers"],
+    )
+    assert r3.status_code == 200
+
+    r4 = await client.post(
+        "/api/bids",
+        json={"auction_id": a1["id"], "amount": 900.0},
+        headers=second_user["headers"],
+    )
+    assert r4.status_code == 200, r4.text
 
 
 async def test_outbid_user_can_reuse_their_full_balance(

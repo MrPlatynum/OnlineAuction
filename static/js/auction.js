@@ -6,7 +6,13 @@
   let currentPriceValue = null;
   let remainingSec      = null;
   let isActive          = null;
+  let currentUserId     = null;
+  let leaderUserId      = null;
   let ws = null, wsPingTimer = null;
+
+  function isUserLeading() {
+    return currentUserId !== null && leaderUserId !== null && currentUserId === leaderUserId;
+  }
   const $ = id => document.getElementById(id);
 
   // showToast — общий из common.js (window.showToast)
@@ -100,8 +106,15 @@
       if(tl) tl.className='timer-val';
       if(tl2) tl2.className='lot-stat-value red';
     }
-    $('bidBtn').disabled = !token||!isActive;
-    $('bidAmount').disabled = !token||!isActive;
+    refreshBidControls();
+  }
+
+  function refreshBidControls() {
+    const leading = isUserLeading();
+    const disabled = !token || !isActive || leading;
+    $('bidBtn').disabled = disabled;
+    $('bidAmount').disabled = disabled;
+    document.querySelectorAll('.bid-quick-btn, .bid-num-btn').forEach(b => { b.disabled = disabled; });
     updateBidHint();
   }
 
@@ -109,6 +122,7 @@
     const hint=$('bidHint');
     if (!token) return void(hint.textContent='Войдите, чтобы делать ставки.');
     if (!isActive) return void(hint.textContent='Аукцион завершён — ставки закрыты.');
+    if (isUserLeading()) return void(hint.textContent='Вы уже лидируете в этом аукционе — дождитесь чужой ставки.');
     const min=currentPriceValue!==null?currentPriceValue+0.01:null;
     hint.textContent=min!==null?`Минимальная ставка: ${fmtMoney(min)}`:'Ставка должна превышать текущую цену.';
   }
@@ -277,6 +291,8 @@
   }
 
   function renderBids(items) {
+    leaderUserId = items.length ? (items[0].user_id ?? null) : null;
+    refreshBidControls();
     const list=$('bidsList');
     if (!items.length) { list.innerHTML='<div class="bids-empty">Ставок пока нет — будьте первым!</div>'; return; }
     const medals = ['🥇','🥈','🥉'];
@@ -326,6 +342,7 @@
     const raw=$('bidAmount').value, amount=Number(raw);
     if (!token) return showToast('Нужен вход','Войдите для участия в торгах.','warn');
     if (!isActive) return showToast('Закрыто','Аукцион уже завершён.','warn');
+    if (isUserLeading()) return showToast('Вы уже лидируете','Дождитесь чужой ставки, прежде чем повышать.','warn');
     if (!raw||!Number.isFinite(amount)||amount<=0) return showToast('Некорректная ставка','Введите сумму больше нуля.','warn');
     const btn=$('bidBtn'),prev=btn.textContent;
     btn.disabled=true; btn.textContent='Отправка…';
@@ -334,7 +351,7 @@
       if (!r.ok) { let msg='Ставка не принята.'; try{msg=(await r.json()).detail||msg;}catch{} showToast('Ошибка',msg,'bad'); }
       else { $('bidAmount').value=''; showToast('Принято','Ваша ставка зарегистрирована!','ok'); await loadBids(); }
     } catch { showToast('Ошибка','Нет связи с сервером.','bad'); }
-    finally { btn.textContent=prev; btn.disabled=!token||!isActive; }
+    finally { btn.textContent=prev; refreshBidControls(); }
   }
 
   function connectWS() {
@@ -373,8 +390,24 @@
   });
   $('bidAmount').addEventListener('keydown',e=>{ if(e.key==='Enter') placeBid(); });
 
+  // Кастомный stepper рядом с полем ставки — шаг 1 ₽
+  document.querySelectorAll('.bid-num-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inp = $('bidAmount');
+      if (!inp || inp.disabled) return;
+      const cur = parseFloat(inp.value);
+      const base = Number.isFinite(cur) ? cur : (currentPriceValue ?? 0);
+      const delta = btn.dataset.step === 'up' ? 1 : -1;
+      const next = Math.max(0, Math.round((base + delta) * 100) / 100);
+      inp.value = next.toFixed(2);
+      inp.focus();
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+
   async function init() {
     const me=await loadMe();
+    currentUserId = me?.id ?? null;
     setAuthUI(me);
     const a=await loadAuction();
     if (!a) return;
@@ -673,7 +706,7 @@
     $('editPriceBlock').style.flexDirection = isBinOnly ? 'column' : 'row';
     $('editExtendBlock').style.display=a.is_active?'block':'none';
     const parentSel=$('editCategoryParent'),subSel=$('editCategory');
-    if(parentSel){try{const r=await fetch(`${API}/api/categories`);const cats=await r.json();parentSel.innerHTML='<option value="">— Выберите категорию —</option>';cats.forEach(cat=>{const opt=document.createElement('option');opt.value=cat.id;opt.textContent=`${cat.icon} ${cat.name}`;opt.dataset.hasChildren=cat.children&&cat.children.length?'1':'';parentSel.appendChild(opt);});const updateSub=(catId,selectSubId)=>{const cat=cats.find(c=>c.id===+catId);if(subSel){subSel.innerHTML='<option value="">— Вся категория —</option>';subSel.style.display='none';}if(cat&&cat.children&&cat.children.length){cat.children.forEach(ch=>{const o=document.createElement('option');o.value=ch.id;o.textContent=`${ch.icon} ${ch.name}`;subSel.appendChild(o);});if(subSel){subSel.style.display='block';subSel.value=selectSubId||'';}}};parentSel.onchange=()=>updateSub(parentSel.value,null);if(a.category_id){const parentCat=cats.find(c=>c.id===a.category_id);if(parentCat){parentSel.value=a.category_id;updateSub(a.category_id,null);}else{const parent=cats.find(c=>c.children&&c.children.some(ch=>ch.id===a.category_id));if(parent){parentSel.value=parent.id;updateSub(parent.id,a.category_id);}}}}catch{}}
+    if(parentSel){try{const r=await fetch(`${API}/api/categories`);const cats=await r.json();parentSel.innerHTML='<option value="">— Выберите категорию —</option>';cats.forEach(cat=>{const opt=document.createElement('option');opt.value=cat.id;opt.textContent=cat.name;opt.dataset.hasChildren=cat.children&&cat.children.length?'1':'';parentSel.appendChild(opt);});const updateSub=(catId,selectSubId)=>{const cat=cats.find(c=>c.id===+catId);if(subSel){subSel.innerHTML='<option value="">— Вся категория —</option>';subSel.style.display='none';}if(cat&&cat.children&&cat.children.length){cat.children.forEach(ch=>{const o=document.createElement('option');o.value=ch.id;o.textContent=ch.name;subSel.appendChild(o);});if(subSel){subSel.style.display='block';subSel.value=selectSubId||'';}}};parentSel.onchange=()=>updateSub(parentSel.value,null);if(a.category_id){const parentCat=cats.find(c=>c.id===a.category_id);if(parentCat){parentSel.value=a.category_id;updateSub(a.category_id,null);}else{const parent=cats.find(c=>c.children&&c.children.some(ch=>ch.id===a.category_id));if(parent){parentSel.value=parent.id;updateSub(parent.id,a.category_id);}}}}catch{}}
     editImageUrls=(a.image_urls&&a.image_urls.length)?[...a.image_urls]:(a.image_url?[a.image_url]:[]);editNewFiles=[];renderEditImgPreview();
     const fileInput=$('editImageFile');if(fileInput&&!fileInput._wired){fileInput._wired=true;fileInput.addEventListener('change',e=>{Array.from(e.target.files||[]).forEach(f=>{if((editImageUrls.length+editNewFiles.length)<5)editNewFiles.push(f);});fileInput.value='';renderEditImgPreview();});}
     $('editModal').style.display='flex';

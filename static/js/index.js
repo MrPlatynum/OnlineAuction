@@ -201,7 +201,7 @@ async function loadCategories() {
         const opt = document.createElement('option');
         opt.value = cat.id;
         opt.dataset.slug = cat.slug;
-        opt.textContent = `${cat.icon} ${cat.name}`;
+        opt.textContent = cat.name;
         parentSel.appendChild(opt);
       });
       parentSel.addEventListener('change', () => {
@@ -211,7 +211,7 @@ async function loadCategories() {
         if (cat && cat.children && cat.children.length) {
           cat.children.forEach(ch => {
             const o = document.createElement('option');
-            o.value = ch.id; o.textContent = `${ch.icon} ${ch.name}`;
+            o.value = ch.id; o.textContent = ch.name;
             subSel.appendChild(o);
           });
           subSel.style.display = 'block';
@@ -575,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // «Все лоты» / «Все завершённые». После первой загрузки лотов
             // плавно прокручиваем к началу списка.
             window._scrollToLotsOnLoad =
-                !!(p.get('created_by') || p.get('status') || p.get('search') || p.get('category'));
+                !!(p.get('created_by') || p.get('status') || p.get('search') || p.get('category') || p.get('scroll'));
         })();
 
         // ===== Multi-image upload =====
