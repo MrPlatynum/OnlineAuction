@@ -553,13 +553,6 @@ document.addEventListener('click', e => {
   if (typeof loadAuctions === 'function') loadAuctions();
 });
 
-// Patch init to sync buttons after user loaded
-const _origInit = window.init;
-window.init = async function() {
-  if (typeof _origInit === 'function') await _origInit();
-  syncCreateBtns();
-};
-
 /* Advanced filter panel open class handler */
 document.addEventListener('DOMContentLoaded', () => {
   const adv = document.getElementById('advancedFilters');

@@ -126,8 +126,8 @@ async def lifespan(fastapi_app: FastAPI):
     # the per-auction asyncio.Tasks; followers serve HTTP/WS traffic
     # only. The outbox worker uses ``SELECT FOR UPDATE SKIP LOCKED``
     # and is intentionally safe to run in every worker.
-    is_leader = await try_become_scheduler_leader()
-    if is_leader:
+    became_leader = await try_become_scheduler_leader()
+    if became_leader:
         await schedule_active_auctions()
     # Heartbeat keeps the leader connection alive against idle-disconnect
     # on managed Postgres AND lets followers retry-to-promote if the
@@ -136,7 +136,7 @@ async def lifespan(fastapi_app: FastAPI):
     start_outbox_worker()
     logger.info(
         "Application startup complete (scheduler %s)",
-        "leader" if is_leader else "follower",
+        "leader" if became_leader else "follower",
     )
     try:
         yield

@@ -773,7 +773,6 @@
     $('lotLightbox').hidden = true;
     document.body.style.overflow = '';
   }
-  function lbBgClick() { /* deprecated: close теперь только × и Esc */ }
   function lbSlide(dir) {
     if (!lb.urls.length) return;
     lb.idx = (lb.idx + dir + lb.urls.length) % lb.urls.length;
@@ -884,7 +883,7 @@
   // Expose handlers for inline onclick="..." in auction.html
   Object.assign(window, {
     buyNow, bumpBid, closeEditModal, closeLightbox, filterReviewsByRating,
-    goAuth, lbBgClick, lbSlide, lbZoom, lbZoomReset: lbResetZoom,
+    goAuth, lbSlide, lbZoom, lbZoomReset: lbResetZoom,
     lotGoTo, lotSlide, openEditModal, openLightbox, placeBid, removeEditImg,
     saveEdit, setExtend, submitReview, switchLotTab, toggleSubscription,
     toggleThisLotOnly, updateReviewCounter,

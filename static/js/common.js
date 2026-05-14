@@ -99,6 +99,13 @@
       return detail.map(_humanizePydanticItem).join('; ') || (fallback || 'Ошибка валидации');
     }
     if (typeof detail === 'string') return detail;
+    // Изредка попадается detail-объект (например ручные HTTPException с
+    // dict вместо строки) или просто err.message без detail. Не молчим.
+    if (detail && typeof detail === 'object') {
+      if (typeof detail.msg === 'string') return detail.msg;
+      try { return JSON.stringify(detail); } catch { /* fallthrough */ }
+    }
+    if (err && typeof err.message === 'string' && err.message) return err.message;
     return fallback || 'Ошибка';
   };
 

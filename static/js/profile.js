@@ -677,7 +677,7 @@ async function confirmCrop() {
 
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
-      showToast(err.detail || 'Ошибка загрузки', 'error');
+      showToast('Ошибка', err.detail || 'Не удалось загрузить аватар', 'bad');
       // Откатываем превью
       removeAvatarImg();
     } else {
@@ -687,10 +687,10 @@ async function confirmCrop() {
       const img = $('avatar').querySelector('img');
       if (img) img.src = src;
       syncSettingsAvatar(src);
-      showToast('Аватар обновлён ✓', 'ok');
+      showToast('Готово', 'Аватар обновлён', 'ok');
     }
   } catch {
-    showToast('Ошибка соединения', 'error');
+    showToast('Ошибка', 'Нет связи с сервером', 'bad');
     removeAvatarImg();
   } finally {
     const avatarEl = $('avatar');
@@ -732,9 +732,9 @@ async function deleteAvatar() {
       }
       const delBtn = $('deleteAvatarBtn');
       if (delBtn) delBtn.style.display = 'none';
-      showToast('Аватар удалён', 'ok');
+      showToast('Готово', 'Аватар удалён', 'ok');
     }
-  } catch { showToast('Ошибка соединения', 'error'); }
+  } catch { showToast('Ошибка', 'Нет связи с сервером', 'bad'); }
 }
 
 function syncSettingsAvatar(src) {
@@ -746,28 +746,6 @@ function syncSettingsAvatar(src) {
   settingsAv.appendChild(img);
   const delBtn = $('deleteAvatarBtn');
   if (delBtn) delBtn.style.display = '';
-}
-
-function showToast(msg, type = 'ok') {
-  let toast = document.getElementById('toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'toast';
-    toast.style.cssText = `
-      position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-      padding:10px 20px; border-radius:10px; font-size:13px; font-weight:600;
-      z-index:9999; transition:opacity .3s; pointer-events:none;
-      box-shadow:0 8px 24px rgba(0,0,0,.4);
-    `;
-    document.body.appendChild(toast);
-  }
-  toast.textContent = msg;
-  toast.style.background = type === 'ok' ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)';
-  toast.style.color = type === 'ok' ? 'var(--green)' : 'var(--red)';
-  toast.style.border = type === 'ok' ? '1px solid rgba(34,197,94,.3)' : '1px solid rgba(239,68,68,.3)';
-  toast.style.opacity = '1';
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => toast.style.opacity = '0', 2500);
 }
 
 /* ================================================================
