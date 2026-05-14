@@ -122,6 +122,35 @@ async def test_unverified_user_can_still_view_listings(client, unverified_user):
     assert r_view.status_code == 200
 
 
+async def test_unverified_user_cannot_upload_image(client, unverified_user):
+    """Lot-image uploads are CPU + disk heavy (Pillow re-encode, EXIF
+    strip). Unverified users can't create lots, so the upload step
+    that feeds the create flow should also be gated."""
+    files = {"file": ("x.png", b"\x89PNG\r\n\x1a\n" + b"\x00" * 16, "image/png")}
+    r = await client.post(
+        "/api/upload-image",
+        files=files,
+        headers=unverified_user["headers"],
+    )
+    assert r.status_code == 403
+
+
+async def test_unverified_user_cannot_post_review(client, unverified_user, registered_user):
+    """Reviews change a seller's public reputation — gate them so a
+    throwaway account can't drive-by trash someone."""
+    r = await client.post(
+        "/api/reviews",
+        json={
+            "seller_id": registered_user["user"]["id"],
+            "auction_id": 1,
+            "rating": 1,
+            "comment": "spam",
+        },
+        headers=unverified_user["headers"],
+    )
+    assert r.status_code == 403
+
+
 async def test_verify_email_with_valid_token(client, unverified_user):
     user_id = unverified_user["user"]["id"]
     email = unverified_user["email"]
