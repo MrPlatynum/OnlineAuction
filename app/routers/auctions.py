@@ -24,6 +24,7 @@ from app.schemas import (
     PaginatedAuctionsResponse,
 )
 from app.services.auction_scheduler import cancel_auction, schedule_auction
+from app.services.auctions import fetch_auction_bidders
 from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
 from app.services.transactions import add_transaction
@@ -236,26 +237,16 @@ async def buy_now(
     # Notify everyone who placed a real bid before the BIN-purchase that
     # the auction ended without them. complete_auction does this on the
     # timer path; /buy-now used to silently leave them in the dark.
-    losing_bidder_ids = [
-        uid for (uid,) in (
-            await db.execute(
-                select(Bid.user_id)
-                .where(Bid.auction_id == auction_id, Bid.user_id != current_user.id)
-                .distinct()
-            )
-        ).all()
-    ]
-    if losing_bidder_ids:
-        losers = (
-            await db.execute(select(User).where(User.id.in_(losing_bidder_ids)))
-        ).scalars().all()
-        for loser in losers:
-            await notify_user(
-                db, loser, NotificationType.AUCTION_LOST,
-                "Аукцион завершён",
-                f"Лот «{auction.title}» куплен по цене BIN другим участником.",
-                auction.id, auction.title, manager,
-            )
+    losers = await fetch_auction_bidders(
+        db, auction_id, exclude_user_ids=(current_user.id,)
+    )
+    for loser in losers:
+        await notify_user(
+            db, loser, NotificationType.AUCTION_LOST,
+            "Аукцион завершён",
+            f"Лот «{auction.title}» куплен по цене BIN другим участником.",
+            auction.id, auction.title, manager,
+        )
 
     return {"message": "Покупка совершена", "price": float(auction.bin_price)}
 

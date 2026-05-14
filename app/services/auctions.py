@@ -13,38 +13,59 @@ from app.utils.time import utcnow
 logger = logging.getLogger(__name__)
 
 
+async def fetch_auction_bidders(
+    db: AsyncSession,
+    auction_id: int,
+    *,
+    exclude_user_ids: tuple[int, ...] = (),
+) -> list[User]:
+    """Return distinct bidders on ``auction_id`` minus ``exclude_user_ids``,
+    in a single SELECT. Shared between ``complete_auction`` (which then
+    splits the list into winner + losers) and ``/buy-now`` (which notifies
+    everyone but the buyer that the lot ended without them)."""
+    user_ids = {
+        uid for uid in (
+            await db.execute(
+                select(Bid.user_id)
+                .where(Bid.auction_id == auction_id)
+                .distinct()
+            )
+        ).scalars()
+    } - set(exclude_user_ids)
+    if not user_ids:
+        return []
+    return (
+        await db.execute(select(User).where(User.id.in_(user_ids)))
+    ).scalars().all()
+
+
 async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     """Уведомление участникам, что аукцион скоро завершится."""
-    bids = (
-        await db.execute(select(Bid).where(Bid.auction_id == auction.id))
-    ).scalars().all()
-    user_ids = set([bid.user_id for bid in bids])
+    last_bid = (
+        await db.execute(
+            select(Bid)
+            .where(Bid.auction_id == auction.id)
+            .order_by(Bid.timestamp.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
-    for user_id in user_ids:
-        user = (
-            await db.execute(select(User).where(User.id == user_id))
-        ).scalar_one_or_none()
-        if user:
-            last_bid = (
-                await db.execute(
-                    select(Bid)
-                    .where(Bid.auction_id == auction.id)
-                    .order_by(Bid.timestamp.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            is_winning = last_bid and last_bid.user_id == user_id
+    users = await fetch_auction_bidders(db, auction.id)
+    if not users:
+        return
+    leader_id = last_bid.user_id if last_bid else None
 
-            message = "Аукцион завершится через 5 минут! " + (
-                "Вы лидируете! 🎉" if is_winning else "Сделайте ставку, чтобы выиграть!"
-            )
-
-            await notify_user(
-                db, user, NotificationType.AUCTION_ENDING,
-                "⏰ Аукцион скоро завершится",
-                message,
-                auction.id, auction.title, manager,
-            )
+    for user in users:
+        is_winning = user.id == leader_id
+        message = "Аукцион завершится через 5 минут! " + (
+            "Вы лидируете! 🎉" if is_winning else "Сделайте ставку, чтобы выиграть!"
+        )
+        await notify_user(
+            db, user, NotificationType.AUCTION_ENDING,
+            "⏰ Аукцион скоро завершится",
+            message,
+            auction.id, auction.title, manager,
+        )
 
 
 async def complete_auction(auction_id: int, db: AsyncSession):
@@ -110,19 +131,9 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 f"Продажа лота «{auction.title}»", auction_id=auction.id,
             )
 
-        bids = (
-            await db.execute(select(Bid).where(Bid.auction_id == auction_id))
-        ).scalars().all()
-        user_ids = set([bid.user_id for bid in bids])
-
-        for user_id in user_ids:
-            user = (
-                await db.execute(select(User).where(User.id == user_id))
-            ).scalar_one_or_none()
-            if not user:
-                continue
-
-            if user_id == last_bid.user_id:
+        users = await fetch_auction_bidders(db, auction_id)
+        for user in users:
+            if user.id == last_bid.user_id:
                 pending_notifications.append((
                     user, NotificationType.AUCTION_WON,
                     "🎉 Поздравляем! Вы выиграли аукцион!",
