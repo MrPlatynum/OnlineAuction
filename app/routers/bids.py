@@ -110,6 +110,21 @@ async def place_bid(
     if bid_amount <= auction.current_price:
         raise HTTPException(status_code=400, detail="Ставка должна быть больше текущей цены")
 
+    previous_leader_bid = (
+        await db.execute(
+            select(Bid)
+            .where(Bid.auction_id == bid.auction_id)
+            .order_by(Bid.timestamp.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if previous_leader_bid and previous_leader_bid.user_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Вы уже лидируете в этом аукционе — дождитесь чужой ставки",
+        )
+
     # Lock the bidder's user row before reading balance / committed-elsewhere.
     # Without this, two concurrent bids by the same user on *different* auctions
     # both pass the available-balance check independently (each holds a different
@@ -128,15 +143,6 @@ async def place_bid(
                 f"активных аукционах)"
             )
         raise HTTPException(status_code=400, detail=msg + ".")
-
-    previous_leader_bid = (
-        await db.execute(
-            select(Bid)
-            .where(Bid.auction_id == bid.auction_id)
-            .order_by(Bid.timestamp.desc())
-            .limit(1)
-        )
-    ).scalar_one_or_none()
 
     db_bid = Bid(amount=bid_amount, user_id=current_user.id, auction_id=bid.auction_id)
     auction.current_price = bid_amount

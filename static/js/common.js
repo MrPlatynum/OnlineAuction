@@ -99,6 +99,13 @@
       return detail.map(_humanizePydanticItem).join('; ') || (fallback || 'Ошибка валидации');
     }
     if (typeof detail === 'string') return detail;
+    // Изредка попадается detail-объект (например ручные HTTPException с
+    // dict вместо строки) или просто err.message без detail. Не молчим.
+    if (detail && typeof detail === 'object') {
+      if (typeof detail.msg === 'string') return detail.msg;
+      try { return JSON.stringify(detail); } catch { /* fallthrough */ }
+    }
+    if (err && typeof err.message === 'string' && err.message) return err.message;
     return fallback || 'Ошибка';
   };
 
@@ -313,7 +320,15 @@
           }
         } catch {}
       };
-      wsNotif.onclose = () => {
+      wsNotif.onclose = (e) => {
+        // Серверные коды отказа — auth-failure (4001), forbidden (4003),
+        // policy violation (1008, в т.ч. tv-bump после change-password) и
+        // штатное закрытие (1000): любое из этого означает, что повторный
+        // коннект тем же токеном тоже отвергнут. Без guard'а клиент
+        // hammer'ит сервер раз в 1.5с навсегда.
+        if (e && (e.code === 1000 || e.code === 1008 || e.code === 4001 || e.code === 4003)) {
+          return;
+        }
         // Half-jitter on the exponential backoff: if the server drops
         // every connection at once (deploy, restart) clients reconnect
         // spread across [delay/2, delay] instead of all on the same tick.

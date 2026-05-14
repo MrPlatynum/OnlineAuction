@@ -144,6 +144,14 @@
           <div class="bid-input-wrap">
             <span class="bid-currency">₽</span>
             <input class="bid-input" id="bidAmount" type="number" min="0" step="0.01" placeholder="Введите сумму">
+            <div class="bid-num-stepper">
+              <button type="button" class="bid-num-btn" data-step="up" tabindex="-1" aria-label="Увеличить">
+                <svg width="10" height="6" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 4 1 7 4"/></svg>
+              </button>
+              <button type="button" class="bid-num-btn" data-step="down" tabindex="-1" aria-label="Уменьшить">
+                <svg width="10" height="6" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 4 4 7 1"/></svg>
+              </button>
+            </div>
           </div>
           <button class="btn btn-primary bid-submit" id="bidBtn" onclick="placeBid()">Поставить ставку</button>
           <div class="bid-hint" id="bidHint">Войдите, чтобы делать ставки</div>

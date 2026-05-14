@@ -81,6 +81,71 @@ async def test_release_frees_lock_for_next_caller():
     assert got is True
 
 
+async def test_heartbeat_ping_keeps_leader_alive():
+    """``_ping_leader_connection`` returns True for a healthy leader,
+    keeping the connection alive against managed-PG idle-disconnect."""
+    assert await scheduler_election.try_become_scheduler_leader() is True
+    assert await scheduler_election._ping_leader_connection() is True
+    # Still leader after the ping — connection not torn down.
+    assert scheduler_election.is_leader() is True
+
+
+async def test_heartbeat_steps_down_when_ping_fails():
+    """If the leader's connection breaks (e.g., managed PG dropped
+    it), the heartbeat ping raises; the worker steps down so the
+    next tick can try to claim the lock fresh. We simulate the
+    drop by closing the connection out from under the ping."""
+    assert await scheduler_election.try_become_scheduler_leader() is True
+    # Force-close the underlying connection without going through
+    # release_scheduler_lock so _leader_connection stays set —
+    # exactly what a server-side disconnect looks like.
+    await scheduler_election._leader_connection.close()
+
+    ok = await scheduler_election._ping_leader_connection()
+    assert ok is False
+    assert scheduler_election._leader_connection is None
+    assert scheduler_election.is_leader() is False
+
+
+async def test_heartbeat_tick_promotes_follower_and_runs_callback():
+    """A follower whose tick fires after the previous leader has
+    released the lock should promote itself and run ``on_promote``
+    exactly once for that transition."""
+    # Start as follower — another connection holds the lock.
+    async with _db_module.engine.connect() as rival:
+        await rival.execute(
+            text("SELECT pg_advisory_lock(:key)"),
+            {"key": scheduler_election.SCHEDULER_LOCK_KEY},
+        )
+        follower_attempt = await scheduler_election.try_become_scheduler_leader()
+        assert follower_attempt is False
+
+        promote_calls = []
+
+        async def on_promote():
+            promote_calls.append(1)
+
+        # While rival still holds the lock the tick stays as follower.
+        was_leader = await scheduler_election._heartbeat_tick(on_promote)
+        assert was_leader is False
+        assert promote_calls == []
+
+        # Drop the rival's lock so the next tick can claim it.
+        await rival.execute(
+            text("SELECT pg_advisory_unlock(:key)"),
+            {"key": scheduler_election.SCHEDULER_LOCK_KEY},
+        )
+
+    was_leader = await scheduler_election._heartbeat_tick(on_promote)
+    assert was_leader is True
+    assert promote_calls == [1]
+
+    # Re-tick: still leader, but no second on_promote call.
+    was_leader = await scheduler_election._heartbeat_tick(on_promote)
+    assert was_leader is True
+    assert promote_calls == [1]
+
+
 async def test_env_override_skips_election(monkeypatch):
     """Single-worker dev / pytest set ``AUCTION_SCHEDULER_ELECTION_ENABLED=false``;
     the function returns True without touching the DB so the

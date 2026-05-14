@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -22,6 +23,7 @@ from app.services.notifications import (
 from app.services.websocket_manager import manager
 from app.utils.rate_limit import limiter
 from app.utils.security import (
+    PASSWORD_RESET_REQUEST_FLOOR_SECONDS,
     PASSWORD_RESET_THROTTLE_SECONDS,
     consume_password_verify_time,
     create_user_access_token,
@@ -232,6 +234,13 @@ async def password_reset_request(
     """Public — accepts an email and *if it exists* mails a reset link.
     Always returns 200 with a generic message so the response shape
     can't be used to probe which addresses are registered."""
+    # Без выравнивания времени можно отличать три ветки по latency:
+    # unknown (только SELECT, ~5мс) / throttled (SELECT, ~5мс) /
+    # fresh existing (SELECT + UPDATE + COMMIT + REFRESH + enqueue,
+    # ~30-50мс). Поднимаем минимальную длительность отклика так, чтобы
+    # все три ветки укладывались в одинаковое окно — детектируемая
+    # разница над шумом сети уходит.
+    deadline = asyncio.get_event_loop().time() + PASSWORD_RESET_REQUEST_FLOOR_SECONDS
     user = (
         await db.execute(select(User).where(User.email == data.email))
     ).scalar_one_or_none()
@@ -248,6 +257,9 @@ async def password_reset_request(
             await db.commit()
             await db.refresh(user)
             send_password_reset_email(user)
+    remaining = deadline - asyncio.get_event_loop().time()
+    if remaining > 0:
+        await asyncio.sleep(remaining)
     return _GENERIC_REQUEST_RESPONSE
 
 
@@ -264,8 +276,14 @@ async def password_reset_confirm(
     fails: the first confirm bumped tv, the second's claim no longer
     matches."""
     user_id, claimed_tv = decode_password_reset_token(data.token)
+    # Row-lock the user so two concurrent confirms with the same token
+    # serialise. Without this, both reads see the original token_version,
+    # both pass the check, both bump tv to N+1, both commit — and the
+    # link is two-shot instead of one-shot.
     user = (
-        await db.execute(select(User).where(User.id == user_id))
+        await db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if user is None or claimed_tv != user.token_version:
         # Don't distinguish "user gone" from "token superseded" — both
