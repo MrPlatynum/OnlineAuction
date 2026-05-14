@@ -46,10 +46,24 @@ window.syncUrlFromFilters = function() {
   if (f.page && f.page > 1)                p.set('page',         f.page);
   const qs = p.toString();
   const newUrl = location.pathname + (qs ? '?' + qs : '') + location.hash;
-  if (newUrl !== location.pathname + location.search + location.hash) {
-    history.replaceState(history.state, '', newUrl);
-  }
+  if (newUrl === location.pathname + location.search + location.hash) return;
+  // pushState (а не replaceState), чтобы Back/Forward работали как
+  // ожидает пользователь — каждый коммит фильтра = отдельная запись
+  // истории. popstate-обработчик ниже перезагружает страницу: проще
+  // и надёжнее чем дублировать всю логику UI-sync из init-IIFE.
+  history.pushState({ filters: true }, '', newUrl);
 };
+
+// При навигации Back/Forward — перезагружаем страницу, чтобы инициализация
+// полностью отработала по новой URL. Альтернатива — вручную синхронизировать
+// все инпуты/чекбоксы/активные классы/breadcrumb — на ~80 строк кода больше
+// и легче расходится с init IIFE.
+window.addEventListener('popstate', () => {
+  // Защита от случая, когда наша же pushState внутри loadAuctions
+  // как-то прокатилась — реальный popstate всегда несёт state≠null от нас
+  // или null от первой записи. Перезагрузка идемпотентна в обоих случаях.
+  location.reload();
+});
 
 document.addEventListener('DOMContentLoaded', () => setTimeout(loadCategories, 150));
 
@@ -243,8 +257,21 @@ async function loadCategories() {
         currentFilters.categoryParentSlug = parentSlug;
         currentFilters.categoryParentName = parentName;
         currentFilters.categoryLabel = parentName ? `${parentName} → ${name}` : name;
-        if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
+      } else {
+        // Slug из URL не найден в каталоге (категория удалена / переименована).
+        // Сбрасываем фильтр, иначе сервер ответит пустым результатом, а чип
+        // будет залипать со slug'ом, не имеющим смысла для пользователя.
+        currentFilters.category = '';
+        currentFilters.categoryName = '';
+        currentFilters.categoryParentSlug = null;
+        currentFilters.categoryParentName = null;
+        currentFilters.categoryLabel = '';
+        if (typeof showToast === 'function') {
+          showToast('Категория не найдена', 'Фильтр по категории сброшен.', 'warn');
+        }
       }
+      if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
+      if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
     }
 
     // Двухшаговый пикер категорий в форме создания
@@ -339,7 +366,11 @@ window.renderFilterTags = function() {
   if (currentFilters.category) {
     const parentSlug = currentFilters.categoryParentSlug;
     const parentName = currentFilters.categoryParentName;
-    const name       = currentFilters.categoryName;
+    // Имена приходят из loadCategories асинхронно (~150мс задержка после
+    // DOMContentLoaded). До этого либо если slug отсутствует в каталоге,
+    // имя пустое — показываем сам slug как fallback, иначе чип будет
+    // выглядеть пустым «📂 ».
+    const name = currentFilters.categoryName || currentFilters.category;
     let label;
     if (parentSlug && parentName) {
       // Подкатегория — "Одежда → Мужская", клик на "Одежда" переключает на родителя
@@ -349,8 +380,8 @@ window.renderFilterTags = function() {
     }
     tags.push({ label, key: 'category', raw: true });
   }
-  if (currentFilters.minPrice)   tags.push({ label: `от ${currentFilters.minPrice} ₽`, key: 'minPrice' });
-  if (currentFilters.maxPrice)   tags.push({ label: `до ${currentFilters.maxPrice} ₽`, key: 'maxPrice' });
+  if (currentFilters.minPrice)   tags.push({ label: `от ${esc(String(currentFilters.minPrice))} ₽`, key: 'minPrice' });
+  if (currentFilters.maxPrice)   tags.push({ label: `до ${esc(String(currentFilters.maxPrice))} ₽`, key: 'maxPrice' });
   if (currentFilters.createdBy)  tags.push({ label: `@${esc(currentFilters.createdBy)}`, key: 'createdBy' });
   if (currentFilters.auctionType) tags.push({
     label: currentFilters.auctionType === 'bin' ? '⚡ BIN' : '🔨 BID', key: 'auctionType'
