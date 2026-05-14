@@ -273,3 +273,33 @@ async def test_concurrent_equal_bids_only_one_wins(
     refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
     assert refreshed["current_price"] == 150.0
     assert refreshed["bids_count"] == 1
+
+
+async def test_concurrent_same_user_bids_on_same_auction(
+    client, registered_user, second_user
+):
+    """Fire two simultaneous bids from the *same* user on the *same*
+    auction. The self-outbid guard reads the latest bid under the
+    auction row lock — the second call must see the first as leader
+    and 400 with 'вы уже лидируете', not double-up the user as both
+    bidder positions."""
+    auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
+
+    r1, r2 = await asyncio.gather(
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=second_user["headers"],
+        ),
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 175.0},
+            headers=second_user["headers"],
+        ),
+    )
+
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [200, 400], (r1.text, r2.text)
+
+    refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    assert refreshed["bids_count"] == 1

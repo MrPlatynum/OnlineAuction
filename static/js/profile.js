@@ -532,7 +532,7 @@ function renderSubs() {
       ? (s.avatar_url.startsWith('http') ? s.avatar_url : `${API}${s.avatar_url}`)
       : null;
     const avatarHtml = avatarSrc
-      ? `<img src="${avatarSrc}" alt="${esc(s.username)}">`
+      ? `<img src="${esc(avatarSrc)}" alt="${esc(s.username)}">`
       : (s.username||'?')[0].toUpperCase();
     const since = s.subscribed_at
       ? new Date(s.subscribed_at.endsWith('Z') ? s.subscribed_at : s.subscribed_at + 'Z')

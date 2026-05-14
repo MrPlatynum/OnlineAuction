@@ -9,6 +9,8 @@
   let currentUserId     = null;
   let leaderUserId      = null;
   let ws = null, wsPingTimer = null;
+  let wsReconnectAttempts = 0;
+  let wsClosedByPolicy = false;
 
   function isUserLeading() {
     return currentUserId !== null && leaderUserId !== null && currentUserId === leaderUserId;
@@ -356,9 +358,13 @@
 
   function connectWS() {
     if (!auctionId) return;
+    if (wsClosedByPolicy) return;
     if (wsPingTimer) { clearInterval(wsPingTimer); wsPingTimer=null; }
     ws=new WebSocket(`${WS_BASE}/ws/auction/${encodeURIComponent(auctionId)}`);
-    ws.onopen=()=>{ wsPingTimer=setInterval(()=>{try{ws.send('ping');}catch{}},25000); };
+    ws.onopen=()=>{
+      wsReconnectAttempts=0;
+      wsPingTimer=setInterval(()=>{try{ws.send('ping');}catch{}},25000);
+    };
     ws.onmessage=e=>{
       let data; try{data=JSON.parse(e.data);}catch{return;}
       if (data.type==='new_bid') {
@@ -367,8 +373,14 @@
           const p=fmtMoney(currentPriceValue);
           syncEl('currentPrice',p); syncEl('currentPrice2',p);
           flashPrice();
-          updateBidHint();
         }
+        // Пришёл чужой new_bid → старое значение leaderUserId уже неактуально.
+        // loadBids() пересчитает его, но это ~50мс по сети; до тех пор
+        // оптимистично сбрасываем, чтобы хинт «вы лидируете» не показывался
+        // дольше, чем надо. refreshBidControls вызовется в renderBids после
+        // ответа REST.
+        leaderUserId = null;
+        refreshBidControls();
         loadBids();
       }
       if (data.type==='time_update') {
@@ -381,7 +393,23 @@
         showToast('Аукцион завершён','Ставки закрыты.','warn'); loadBids();
       }
     };
-    ws.onclose=()=>{ if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;} setTimeout(connectWS,1500); };
+    ws.onclose=(e)=>{
+      if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}
+      // Policy / auth / internal codes — не реконнектимся, иначе будет
+      // hammer 1.5с в случае серверного отказа (например при превышении
+      // лимита соединений с одного IP).
+      if (e && (e.code === 1000 || e.code === 1008 || e.code === 1011)) {
+        wsClosedByPolicy = true;
+        return;
+      }
+      // Exponential backoff с half-jitter — половина случайно, половина по
+      // экспоненте, чтобы N клиентов после общего разрыва не штормили
+      // одним фронтом. Капаем на 30 с.
+      const attempt = ++wsReconnectAttempts;
+      const base = Math.min(30000, 500 * (2 ** Math.min(attempt, 6)));
+      const delay = base / 2 + Math.random() * (base / 2);
+      setTimeout(connectWS, delay);
+    };
   }
 
   $('copyLinkBtn').addEventListener('click', async ()=>{

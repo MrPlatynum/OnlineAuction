@@ -313,7 +313,15 @@
           }
         } catch {}
       };
-      wsNotif.onclose = () => {
+      wsNotif.onclose = (e) => {
+        // Серверные коды отказа — auth-failure (4001), forbidden (4003),
+        // policy violation (1008, в т.ч. tv-bump после change-password) и
+        // штатное закрытие (1000): любое из этого означает, что повторный
+        // коннект тем же токеном тоже отвергнут. Без guard'а клиент
+        // hammer'ит сервер раз в 1.5с навсегда.
+        if (e && (e.code === 1000 || e.code === 1008 || e.code === 4001 || e.code === 4003)) {
+          return;
+        }
         // Half-jitter on the exponential backoff: if the server drops
         // every connection at once (deploy, restart) clients reconnect
         // spread across [delay/2, delay] instead of all on the same tick.
