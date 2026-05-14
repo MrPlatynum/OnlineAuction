@@ -1,4 +1,3 @@
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,4 +13,4 @@ class ReviewCreate(BaseModel):
     # any auction from them.
     auction_id: int
     rating: int = Field(ge=1, le=5)
-    comment: Optional[str] = Field(default=None, max_length=REVIEW_COMMENT_MAX)
+    comment: str | None = Field(default=None, max_length=REVIEW_COMMENT_MAX)

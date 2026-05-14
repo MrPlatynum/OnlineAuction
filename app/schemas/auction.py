@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -25,11 +25,11 @@ class AuctionCreate(BaseModel):
     description: str = Field(min_length=1, max_length=20000)
     starting_price: float = Field(gt=0)
     duration_minutes: int = Field(gt=0, le=10080)
-    image_url: Optional[str] = Field(default=None, max_length=2000)
-    image_urls: Optional[list[str]] = Field(default=None, max_length=10)
-    category_id: Optional[int] = None
+    image_url: str | None = Field(default=None, max_length=2000)
+    image_urls: list[str] | None = Field(default=None, max_length=10)
+    category_id: int | None = None
     auction_type: Literal["bid", "bin"] = "bid"
-    bin_price: Optional[float] = Field(default=None, gt=0)
+    bin_price: float | None = Field(default=None, gt=0)
 
     @field_validator("image_url")
     @classmethod
@@ -45,14 +45,14 @@ class AuctionCreate(BaseModel):
 
 
 class AuctionUpdate(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1, max_length=300)
-    description: Optional[str] = Field(default=None, max_length=20000)
-    category_id: Optional[int] = None
-    starting_price: Optional[float] = Field(default=None, gt=0)
-    bin_price: Optional[float] = Field(default=None, gt=0)
-    auction_type: Optional[Literal["bid", "bin"]] = None
-    extend_minutes: Optional[int] = Field(default=None, ge=1, le=10080)
-    image_urls: Optional[list[str]] = Field(default=None, max_length=10)
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=20000)
+    category_id: int | None = None
+    starting_price: float | None = Field(default=None, gt=0)
+    bin_price: float | None = Field(default=None, gt=0)
+    auction_type: Literal["bid", "bin"] | None = None
+    extend_minutes: int | None = Field(default=None, ge=1, le=10080)
+    image_urls: list[str] | None = Field(default=None, max_length=10)
 
     @field_validator("image_urls")
     @classmethod
@@ -69,23 +69,23 @@ class AuctionResponse(BaseModel):
     description: str
     starting_price: float
     current_price: float
-    image_url: Optional[str]
-    image_urls: Optional[list[str]] = None
+    image_url: str | None
+    image_urls: list[str] | None = None
     start_time: datetime
     end_time: datetime
     is_active: bool
     is_completed: bool = False
-    winner_id: Optional[int]
-    created_by: Optional[int] = None
-    creator_username: Optional[str] = None
-    creator_avatar_url: Optional[str] = None
-    bids_count: Optional[int] = None
-    time_remaining: Optional[int] = None
-    category_id: Optional[int] = None
-    category_name: Optional[str] = None
-    category_icon: Optional[str] = None
-    auction_type: Optional[str] = "bid"
-    bin_price: Optional[float] = None
+    winner_id: int | None
+    created_by: int | None = None
+    creator_username: str | None = None
+    creator_avatar_url: str | None = None
+    bids_count: int | None = None
+    time_remaining: int | None = None
+    category_id: int | None = None
+    category_name: str | None = None
+    category_icon: str | None = None
+    auction_type: str | None = "bid"
+    bin_price: float | None = None
 
 
 class PaginatedAuctionsResponse(BaseModel):

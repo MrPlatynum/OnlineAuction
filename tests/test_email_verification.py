@@ -246,40 +246,20 @@ async def test_resend_for_already_verified_returns_400(client, registered_user):
     assert r.status_code == 400
 
 
-async def test_resend_succeeds_for_unverified(client, unverified_user, monkeypatch):
-    """Capture the fire-and-forget call instead of letting SMTP attempt
-    a real connection in tests."""
-    calls: list[tuple[str, str, str]] = []
-
-    from app.services import notifications as notif_mod
-
-    def _capture(to_email, subject, html):
-        calls.append((to_email, subject, html))
-
-    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _capture)
-
+async def test_resend_succeeds_for_unverified(client, unverified_user, capture_emails):
     r = await client.post(
         "/api/verify-email/resend",
         headers=unverified_user["headers"],
     )
     assert r.status_code == 200
-    assert len(calls) == 1
-    assert calls[0][0] == unverified_user["email"]
+    assert len(capture_emails) == 1
+    assert capture_emails[0][0] == unverified_user["email"]
 
 
-async def test_register_fires_verification_email(client, monkeypatch):
+async def test_register_fires_verification_email(client, capture_emails):
     """The post-register email goes through ``_fire_and_forget_email``
     just like every other notification; assert the call shape so a
     future refactor that drops it gets flagged."""
-    calls: list[tuple[str, str, str]] = []
-
-    from app.services import notifications as notif_mod
-
-    def _capture(to_email, subject, html):
-        calls.append((to_email, subject, html))
-
-    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _capture)
-
     r = await client.post(
         "/api/register",
         json={
@@ -289,10 +269,10 @@ async def test_register_fires_verification_email(client, monkeypatch):
         },
     )
     assert r.status_code == 200, r.text
-    assert len(calls) == 1
-    to_email, subject, html_body = calls[0]
+    assert len(capture_emails) == 1
+    to_email, subject, html_body = capture_emails[0]
     assert to_email == "freshie@example.com"
-    assert "email" in subject.lower() or "подтверд" in subject.lower()
+    assert "подтверд" in subject.lower()
     assert "verify-email.html?token=" in html_body
 
 

@@ -13,13 +13,28 @@ from datetime import timedelta
 
 import jwt
 import pytest
+from sqlalchemy import select
 
 from app.config import ALGORITHM, SECRET_KEY
+from app.database import SessionLocal
+from app.models import User
 from app.utils.security import (
     PASSWORD_RESET_PURPOSE,
     create_password_reset_token,
 )
 from app.utils.time import utcnow
+
+
+async def _reset_token_for(user_id: int) -> str:
+    """Build a fresh password-reset token for ``user_id`` by reading
+    its current ``token_version`` from the DB. Replaces a repeated
+    10-line ``SessionLocal + SELECT + create_password_reset_token``
+    block at 6+ test sites."""
+    async with SessionLocal() as db:
+        user = (
+            await db.execute(select(User).where(User.id == user_id))
+        ).scalar_one()
+        return create_password_reset_token(user)
 
 
 def _make_token(
@@ -38,90 +53,49 @@ def _make_token(
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def test_request_for_existing_email_sends_mail(client, registered_user, monkeypatch):
-    calls: list[tuple[str, str, str]] = []
-    from app.services import notifications as notif_mod
-
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: calls.append((to, subj, html)),
-    )
-
+async def test_request_for_existing_email_sends_mail(client, registered_user, capture_emails):
     r = await client.post(
         "/api/password-reset/request",
         json={"email": registered_user["user"]["email"]},
     )
     assert r.status_code == 200
-    assert len(calls) == 1
-    assert calls[0][0] == registered_user["user"]["email"]
-    assert "password-reset.html?token=" in calls[0][2]
+    assert len(capture_emails) == 1
+    assert capture_emails[0][0] == registered_user["user"]["email"]
+    assert "password-reset.html?token=" in capture_emails[0][2]
 
 
-async def test_request_for_unknown_email_returns_200_silently(client, monkeypatch):
+async def test_request_for_unknown_email_returns_200_silently(client, capture_emails):
     """Anti-enumeration: response shape must be identical to the
     happy path so an attacker can't probe which addresses are
     registered."""
-    calls: list[tuple[str, str, str]] = []
-    from app.services import notifications as notif_mod
-
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: calls.append((to, subj, html)),
-    )
-
     r = await client.post(
         "/api/password-reset/request",
         json={"email": "no-such-user@example.com"},
     )
     assert r.status_code == 200
-    assert calls == []
+    assert capture_emails == []
 
 
 async def test_request_per_email_throttle_skips_second_send(
-    client, registered_user, monkeypatch
+    client, registered_user, capture_emails
 ):
     """Two /request calls within 60s for the same email: the first
     sends a mail, the second silently returns 200 without sending.
     This is per-email, distinct from the per-IP slowapi limit."""
-    calls: list[tuple[str, str, str]] = []
-    from app.services import notifications as notif_mod
-
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: calls.append((to, subj, html)),
-    )
-
     email = registered_user["user"]["email"]
     r1 = await client.post("/api/password-reset/request", json={"email": email})
     r2 = await client.post("/api/password-reset/request", json={"email": email})
     assert r1.status_code == 200
     assert r2.status_code == 200
-    assert len(calls) == 1
+    assert len(capture_emails) == 1
 
 
 async def test_confirm_with_valid_token_resets_password(
-    client, registered_user, monkeypatch
+    client, registered_user
 ):
     """End-to-end: token from create_password_reset_token → confirm →
     /login with new password works, /login with old fails."""
-    monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_args, **_kw: None,
-    )
-
-    from sqlalchemy import select
-
-    from app.database import SessionLocal
-    from app.models import User
-
-    async with SessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == registered_user["user"]["id"])
-        )).scalar_one()
-        token = create_password_reset_token(user)
+    token = await _reset_token_for(registered_user["user"]["id"])
 
     r = await client.post(
         "/api/password-reset/confirm",
@@ -144,11 +118,7 @@ async def test_confirm_with_valid_token_resets_password(
     assert r_new.status_code == 200
 
 
-async def test_confirm_with_expired_token(client, registered_user, monkeypatch):
-    monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_a, **_kw: None,
-    )
+async def test_confirm_with_expired_token(client, registered_user):
     token = _make_token(
         registered_user["user"]["id"], 0, exp_delta=timedelta(seconds=-5)
     )
@@ -191,26 +161,12 @@ async def test_confirm_rejects_wrong_purpose(client, registered_user):
 
 
 async def test_confirm_replay_fails_after_first_success(
-    client, registered_user, monkeypatch
+    client, registered_user
 ):
     """The token's ``tv`` claim is checked against the user's row.
     The first /confirm bumps tv to (old+1); the second click on
     the same link still carries tv=(old) → mismatch → 400."""
-    monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_a, **_kw: None,
-    )
-
-    from sqlalchemy import select
-
-    from app.database import SessionLocal
-    from app.models import User
-
-    async with SessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == registered_user["user"]["id"])
-        )).scalar_one()
-        token = create_password_reset_token(user)
+    token = await _reset_token_for(registered_user["user"]["id"])
 
     r1 = await client.post(
         "/api/password-reset/confirm",
@@ -262,26 +218,12 @@ async def test_confirm_concurrent_same_token_only_one_wins(
 
 
 async def test_confirm_invalidates_existing_session_token(
-    client, registered_user, monkeypatch
+    client, registered_user
 ):
     """The auth token in registered_user['headers'] was issued with the
     pre-reset ``tv``; after /confirm bumps it, the old token must fail
     /me even though it hasn't expired yet."""
-    monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_a, **_kw: None,
-    )
-
-    from sqlalchemy import select
-
-    from app.database import SessionLocal
-    from app.models import User
-
-    async with SessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == registered_user["user"]["id"])
-        )).scalar_one()
-        token = create_password_reset_token(user)
+    token = await _reset_token_for(registered_user["user"]["id"])
 
     r = await client.post(
         "/api/password-reset/confirm",
@@ -294,16 +236,11 @@ async def test_confirm_invalidates_existing_session_token(
 
 
 async def test_confirm_closes_open_ws_notifications(
-    client, registered_user, monkeypatch
+    client, registered_user
 ):
     """Same WS hygiene as /change-password: any socket authenticated
     with the now-invalid tv must be closed so the post-reset session
     doesn't keep receiving pushes."""
-    monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_a, **_kw: None,
-    )
-
     from app.services.websocket_manager import manager
 
     class _StubWS:
@@ -317,16 +254,7 @@ async def test_confirm_closes_open_ws_notifications(
     user_id = registered_user["user"]["id"]
     manager.user_connections[user_id] = [stub_a, stub_b]
 
-    from sqlalchemy import select
-
-    from app.database import SessionLocal
-    from app.models import User
-
-    async with SessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == user_id)
-        )).scalar_one()
-        token = create_password_reset_token(user)
+    token = await _reset_token_for(user_id)
 
     r = await client.post(
         "/api/password-reset/confirm",
@@ -339,40 +267,22 @@ async def test_confirm_closes_open_ws_notifications(
 
 
 async def test_confirm_fires_password_changed_notice(
-    client, registered_user, monkeypatch
+    client, registered_user, capture_emails
 ):
     """After a successful reset, send a "your password was changed"
     notification email so the legitimate user notices the trail even
     if the reset itself was triggered by someone in their inbox."""
-    calls: list[tuple[str, str, str]] = []
-    from app.services import notifications as notif_mod
-
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: calls.append((to, subj, html)),
-    )
-
-    from sqlalchemy import select
-
-    from app.database import SessionLocal
-    from app.models import User
-
-    async with SessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == registered_user["user"]["id"])
-        )).scalar_one()
-        token = create_password_reset_token(user)
+    token = await _reset_token_for(registered_user["user"]["id"])
 
     r = await client.post(
         "/api/password-reset/confirm",
         json={"token": token, "new_password": "notice-rotation-pwd"},
     )
     assert r.status_code == 200
-    assert len(calls) == 1
-    to_email, subject, _html = calls[0]
+    assert len(capture_emails) == 1
+    to_email, subject, _html = capture_emails[0]
     assert to_email == registered_user["user"]["email"]
-    assert "пароль" in subject.lower() or "password" in subject.lower()
+    assert "пароль" in subject.lower()
 
 
 async def test_confirm_rejects_short_password(client, registered_user):

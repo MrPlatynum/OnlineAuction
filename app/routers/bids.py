@@ -73,9 +73,8 @@ async def place_bid(
 ):
     bid_amount = to_decimal(bid.amount)
 
-    # Take a row-level lock on the auction for the rest of this transaction.
-    # Concurrent bids on the same auction queue here at the database, so the
-    # read-check-write below is atomic across all workers/processes.
+    # FOR UPDATE so concurrent bids on the same lot queue here at the DB —
+    # the read-check-write below is atomic across workers.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == bid.auction_id).with_for_update()
@@ -159,7 +158,7 @@ async def place_bid(
             await notify_user(
                 db, previous_leader, NotificationType.BID_OUTBID,
                 "😔 Вашу ставку перебили",
-                f"{current_user.username} сделал ставку ${bid.amount:.2f}. Сделайте новую ставку, чтобы вернуть лидерство!",
+                f"{current_user.username} сделал ставку {bid.amount:.2f} ₽. Сделайте новую ставку, чтобы вернуть лидерство!",
                 auction.id, auction.title, manager,
             )
 
@@ -170,7 +169,7 @@ async def place_bid(
         await notify_user(
             db, creator, NotificationType.BID_PLACED,
             "🎯 Новая ставка на ваш лот",
-            f"{current_user.username} сделал ставку ${bid.amount:.2f}",
+            f"{current_user.username} сделал ставку {bid.amount:.2f} ₽",
             auction.id, auction.title, manager,
         )
 
@@ -185,4 +184,4 @@ async def place_bid(
         "current_price": float(auction.current_price),
     }, bid.auction_id)
 
-    return {"message": "Bid placed successfully", "bid_id": db_bid.id}
+    return {"message": "Ставка принята", "bid_id": db_bid.id}

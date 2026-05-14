@@ -39,6 +39,21 @@ from app.utils.time import utcnow
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
+async def _invalidate_user_sessions(user: User) -> None:
+    """Bump ``user.token_version`` and close every open notification WS
+    for this user. Used after credential-rotating events
+    (/change-password, /password-reset/confirm) so leaked tokens and
+    in-flight sockets both stop working. Caller is responsible for
+    committing the tv bump."""
+    user.token_version = (user.token_version or 0) + 1
+    for ws in list(manager.user_connections.get(user.id, [])):
+        try:
+            await ws.close(code=1008)
+        except Exception:
+            pass
+        manager.disconnect_user(ws, user.id)
+
+
 @router.post("/register", response_model=dict)
 @limiter.limit("5/minute")
 async def register(request: Request, user: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -181,23 +196,12 @@ async def change_password(
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
     current_user.hashed_password = hash_password(data.new_password)
-    # Bump token_version so every JWT issued before this point fails
-    # get_current_user. The caller still has *this* request's token in
-    # their browser — return a fresh one so they don't get kicked out
-    # of the very session they used to change the password.
-    current_user.token_version = (current_user.token_version or 0) + 1
+    # Bump tv + close in-flight WS in one step. The caller still has
+    # *this* request's token in their browser — return a fresh one so
+    # they don't get kicked out of the very session they used to
+    # change the password.
+    await _invalidate_user_sessions(current_user)
     await db.commit()
-
-    # /ws/notifications verifies token_version only at handshake; without
-    # closing existing sockets, a leaked-token connection keeps receiving
-    # pushes long after the legitimate user rotates their credentials.
-    stale_sockets = list(manager.user_connections.get(current_user.id, []))
-    for ws in stale_sockets:
-        try:
-            await ws.close(code=1008)
-        except Exception:
-            pass
-        manager.disconnect_user(ws, current_user.id)
 
     new_token = create_user_access_token(current_user)
     return {"message": "Пароль успешно изменён", "token": new_token}
@@ -214,8 +218,8 @@ class PasswordResetConfirmBody(BaseModel):
 
 # Generic responses kept identical regardless of whether the address
 # corresponds to a registered account — without this, response timing
-# or text could be used to enumerate users (the same protection
-# /register has had since #33).
+# or text could be used to enumerate users (same anti-enumeration
+# guarantee /register makes).
 _GENERIC_REQUEST_RESPONSE = {
     "message": (
         "Если этот email зарегистрирован, мы отправили на него письмо "
@@ -299,19 +303,8 @@ async def password_reset_confirm(
     # password forces a re-login on /login (we don't auto-issue a
     # token here: the user typed the new password into the reset
     # form, they should type it again at /login as a confirmation).
-    user.token_version = (user.token_version or 0) + 1
+    await _invalidate_user_sessions(user)
     await db.commit()
-
-    # Same WS cleanup as /change-password: any socket authenticated
-    # with the now-invalid tv stays connected without it. Close
-    # them so the next push doesn't reach the stale session.
-    stale_sockets = list(manager.user_connections.get(user.id, []))
-    for ws in stale_sockets:
-        try:
-            await ws.close(code=1008)
-        except Exception:
-            pass
-        manager.disconnect_user(ws, user.id)
 
     send_password_changed_email(user)
     return {"message": "Пароль успешно сброшен"}

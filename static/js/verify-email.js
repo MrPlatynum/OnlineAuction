@@ -1,8 +1,6 @@
 (function () {
   'use strict';
 
-  const $ = (id) => document.getElementById(id);
-
   function renderState({ icon, title, message, showActions }) {
     $('verifyIcon').textContent = icon;
     $('verifyTitle').textContent = title;

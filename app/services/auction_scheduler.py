@@ -16,9 +16,11 @@ would need to be moved behind a DB-level advisory lock.
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import database as _db_module
 from app.models import Auction
@@ -30,6 +32,24 @@ ENDING_SOON_LEAD = timedelta(minutes=5)
 
 _completion_tasks: dict[int, asyncio.Task] = {}
 _ending_soon_tasks: dict[int, asyncio.Task] = {}
+
+# Handlers are injected by ``services/auctions.py`` at module import so this
+# module doesn't have to ``from app.services.auctions import ...`` itself —
+# that direction would close the loop with auctions.py's import of
+# ``schedule_auction``. With injection the dependency is one-way: scheduler
+# is the upstream module, auctions registers into it.
+SettleHandler = Callable[[int, AsyncSession], Awaitable[None]]
+EndingSoonHandler = Callable[[Auction, AsyncSession], Awaitable[None]]
+_settle_handler: SettleHandler | None = None
+_ending_soon_handler: EndingSoonHandler | None = None
+
+
+def register_handlers(
+    settle: SettleHandler, ending_soon: EndingSoonHandler
+) -> None:
+    global _settle_handler, _ending_soon_handler
+    _settle_handler = settle
+    _ending_soon_handler = ending_soon
 
 
 def _sleep_seconds(until: datetime) -> float:
@@ -43,8 +63,6 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
     extension) we re-schedule instead of completing early; if it was
     already settled (buy-now race) we exit silently.
     """
-    from app.services.auctions import complete_auction
-
     current = asyncio.current_task()
     try:
         await asyncio.sleep(_sleep_seconds(expected_end))
@@ -60,7 +78,13 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
                 if auction.end_time > utcnow():
                     schedule_auction(auction)
                     return
-                await complete_auction(auction_id, db)
+                if _settle_handler is None:
+                    logger.error(
+                        "scheduler: no settle handler registered, lot %s stranded",
+                        auction_id,
+                    )
+                    return
+                await _settle_handler(auction_id, db)
             except Exception:
                 logger.exception("Error completing auction %s", auction_id)
                 await db.rollback()
@@ -76,8 +100,6 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
 
 
 async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> None:
-    from app.services.auctions import notify_auction_ending_soon
-
     current = asyncio.current_task()
     try:
         await asyncio.sleep(_sleep_seconds(fire_at))
@@ -94,7 +116,13 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
                     or auction.ending_soon_notified
                 ):
                     return
-                await notify_auction_ending_soon(auction, db)
+                if _ending_soon_handler is None:
+                    logger.error(
+                        "scheduler: no ending-soon handler registered, lot %s",
+                        auction_id,
+                    )
+                    return
+                await _ending_soon_handler(auction, db)
                 auction.ending_soon_notified = True
                 await db.commit()
             except Exception:
@@ -149,7 +177,7 @@ async def schedule_active_auctions() -> None:
     async with _db_module.SessionLocal() as db:
         active = (
             await db.execute(
-                select(Auction).where(Auction.is_active == True)
+                select(Auction).where(Auction.is_active.is_(True))
             )
         ).scalars().all()
         for auction in active:

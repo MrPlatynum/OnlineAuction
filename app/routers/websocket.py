@@ -1,8 +1,7 @@
 import asyncio
 import logging
 import time
-from collections import defaultdict, deque
-from typing import Optional
+from collections import deque
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
@@ -22,7 +21,7 @@ router = APIRouter()
 # this cap any peer can open thousands of connections and stall the
 # event loop on broadcast fan-out.
 MAX_AUCTION_WS_PER_IP = 50
-_auction_ws_per_ip: dict[str, int] = defaultdict(int)
+_auction_ws_per_ip: dict[str, int] = {}
 
 # Cap incoming messages per /ws/auction connection: every receive_text
 # triggers a SELECT auctions, so an attacker can DoS Postgres through
@@ -40,15 +39,17 @@ def _client_ip(websocket: WebSocket) -> str:
 @router.websocket("/ws/auction/{auction_id}")
 async def websocket_endpoint(websocket: WebSocket, auction_id: int):
     ip = _client_ip(websocket)
-    if _auction_ws_per_ip[ip] >= MAX_AUCTION_WS_PER_IP:
+    # ``.get`` instead of ``[ip]`` — direct subscript on a defaultdict creates
+    # a 0-entry for every probing IP we then reject, leaking keys forever.
+    held = _auction_ws_per_ip.get(ip, 0)
+    if held >= MAX_AUCTION_WS_PER_IP:
         logger.warning(
-            "WS auction denied: IP %s already holds %d connections",
-            ip, _auction_ws_per_ip[ip],
+            "WS auction denied: IP %s already holds %d connections", ip, held,
         )
         await websocket.close(code=1008)
         return
 
-    _auction_ws_per_ip[ip] += 1
+    _auction_ws_per_ip[ip] = held + 1
     msg_timestamps: deque[float] = deque()
     await manager.connect(websocket, auction_id)
     try:
@@ -88,23 +89,25 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
         manager.disconnect(websocket, auction_id)
     finally:
         # Always release the per-IP slot, even on unexpected errors
-        # before the disconnect path runs.
-        if _auction_ws_per_ip[ip] > 0:
-            _auction_ws_per_ip[ip] -= 1
-        if _auction_ws_per_ip[ip] == 0:
+        # before the disconnect path runs. Pop the key when it hits 0
+        # so the dict doesn't accumulate dead IPs.
+        remaining = _auction_ws_per_ip.get(ip, 0) - 1
+        if remaining > 0:
+            _auction_ws_per_ip[ip] = remaining
+        else:
             _auction_ws_per_ip.pop(ip, None)
 
 
 @router.websocket("/ws/notifications/{user_id}")
 async def notifications_websocket(
-    websocket: WebSocket, user_id: int, token: Optional[str] = Query(None)
+    websocket: WebSocket, user_id: int, token: str | None = Query(None)
 ):
     # Token preferred via Sec-WebSocket-Protocol subprotocol — clients send
     #   new WebSocket(url, ['bearer', '<jwt>'])
     # — so the JWT never lands in URLs (proxy/access logs / browser history).
     # Query-string fallback retained for backward compat; will be removed
     # once all clients are on the subprotocol scheme.
-    accepted_protocol: Optional[str] = None
+    accepted_protocol: str | None = None
     sub = websocket.headers.get("sec-websocket-protocol", "")
     parts = [p.strip() for p in sub.split(",") if p.strip()]
     if len(parts) == 2 and parts[0] == "bearer":

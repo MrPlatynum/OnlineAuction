@@ -15,7 +15,6 @@
   function isUserLeading() {
     return currentUserId !== null && leaderUserId !== null && currentUserId === leaderUserId;
   }
-  const $ = id => document.getElementById(id);
 
   // showToast — общий из common.js (window.showToast)
 
@@ -497,15 +496,50 @@
     }
   }
 
+  const _SUB_ICON_ACTIVE =
+    `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>` +
+    `<circle cx="9" cy="7" r="4"/>` +
+    `<line x1="22" y1="11" x2="16" y2="11"/>`;
+  const _SUB_ICON_PLUS =
+    `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>` +
+    `<circle cx="9" cy="7" r="4"/>` +
+    `<line x1="19" y1="8" x2="19" y2="14"/>` +
+    `<line x1="22" y1="11" x2="16" y2="11"/>`;
+
   function updateSubBtn() {
-    const btn=$('subBtn'); if(!btn)return;
-    if(isSubscribed){btn.classList.add('subscribed');syncEl('subBtnText','Отписаться');btn.querySelector('svg').innerHTML=`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="11" x2="16" y2="11"/>`;}
-    else{btn.classList.remove('subscribed');syncEl('subBtnText','Подписаться');btn.querySelector('svg').innerHTML=`<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>`;}
+    const btn = $('subBtn');
+    if (!btn) return;
+    if (isSubscribed) {
+      btn.classList.add('subscribed');
+      syncEl('subBtnText', 'Отписаться');
+      btn.querySelector('svg').innerHTML = _SUB_ICON_ACTIVE;
+    } else {
+      btn.classList.remove('subscribed');
+      syncEl('subBtnText', 'Подписаться');
+      btn.querySelector('svg').innerHTML = _SUB_ICON_PLUS;
+    }
   }
 
   async function toggleSubscription() {
-    if(!token||!sellerId)return;
-    try{const method=isSubscribed?'DELETE':'POST';const r=await fetch(`${API}/api/sellers/${sellerId}/subscribe`,{method,headers:{'Authorization':'Bearer '+token}});if(r.ok){const d=await r.json();isSubscribed=d.subscribed;syncEl('sellerSubs',d.subscribers_count);updateSubBtn();showToast(isSubscribed?'Подписка':'Отписка',isSubscribed?`Вы подписались на @${sellerUsername}`:`Вы отписались от @${sellerUsername}`,'ok');}}catch{showToast('Ошибка','Не удалось изменить подписку','bad');}
+    if (!token || !sellerId) return;
+    try {
+      const method = isSubscribed ? 'DELETE' : 'POST';
+      const r = await apiFetch(`${API}/api/sellers/${sellerId}/subscribe`, { method });
+      if (!r.ok) return;
+      const d = await r.json();
+      isSubscribed = d.subscribed;
+      syncEl('sellerSubs', d.subscribers_count);
+      updateSubBtn();
+      showToast(
+        isSubscribed ? 'Подписка' : 'Отписка',
+        isSubscribed
+          ? `Вы подписались на @${sellerUsername}`
+          : `Вы отписались от @${sellerUsername}`,
+        'ok',
+      );
+    } catch {
+      showToast('Ошибка', 'Не удалось изменить подписку', 'bad');
+    }
   }
 
   // Состояние отзывов / фильтра — два независимых стейта:
@@ -665,9 +699,21 @@
     if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
   }
 
-  document.addEventListener('DOMContentLoaded',()=>{
-    const picker=$('starPicker');
-    if(picker){picker.querySelectorAll('.star-pick').forEach(s=>{s.addEventListener('mouseover',()=>{const val=+s.dataset.val;picker.querySelectorAll('.star-pick').forEach(x=>x.classList.toggle('sel',+x.dataset.val<=val));});s.addEventListener('click',()=>{currentRating=+s.dataset.val;picker.querySelectorAll('.star-pick').forEach(x=>x.classList.toggle('sel',+x.dataset.val<=currentRating));});});picker.addEventListener('mouseleave',()=>{picker.querySelectorAll('.star-pick').forEach(x=>x.classList.toggle('sel',+x.dataset.val<=currentRating));});}
+  document.addEventListener('DOMContentLoaded', () => {
+    const picker = $('starPicker');
+    if (!picker) return;
+    const stars = picker.querySelectorAll('.star-pick');
+    const highlight = (upTo) => {
+      stars.forEach(x => x.classList.toggle('sel', +x.dataset.val <= upTo));
+    };
+    stars.forEach(s => {
+      s.addEventListener('mouseover', () => highlight(+s.dataset.val));
+      s.addEventListener('click', () => {
+        currentRating = +s.dataset.val;
+        highlight(currentRating);
+      });
+    });
+    picker.addEventListener('mouseleave', () => highlight(currentRating));
   });
 
   const REVIEW_COMMENT_MAX = 1000;
@@ -717,39 +763,240 @@
   }
 
   async function deleteReview(id) {
-    if(!confirm('Удалить отзыв?'))return;
-    try{const r=await fetch(`${API}/api/reviews/${id}`,{method:'DELETE',headers:{'Authorization':'Bearer '+token}});if(r.ok){showToast('Отзыв','Отзыв удалён','ok');const rev=await fetch(`${API}/api/sellers/${sellerId}/reviews`);if(rev.ok)renderReviews(await rev.json());}}catch{}
+    if (!confirm('Удалить отзыв?')) return;
+    try {
+      const r = await apiFetch(`${API}/api/reviews/${id}`, { method: 'DELETE' });
+      if (!r.ok) return;
+      showToast('Отзыв', 'Отзыв удалён', 'ok');
+      const rev = await fetch(`${API}/api/sellers/${sellerId}/reviews`);
+      if (rev.ok) renderReviews(await rev.json());
+    } catch { /* silent — toast уже не нужен после удаления */ }
   }
 
   // ---- Edit Lot ----
-  let editImageUrls=[],editNewFiles=[],auctionData=null;
+  let editImageUrls = [];
+  let editNewFiles = [];
+  let auctionData = null;
 
   async function openEditModal() {
-    if(!auctionData)return;const a=auctionData;
-    $('editTitle').value=a.title||'';$('editDescription').value=a.description||'';$('editPrice').value=a.starting_price||'';$('editBinPrice').value=a.bin_price||'';$('editExtend').value='';$('editError').style.display='none';
+    if (!auctionData) return;
+    const a = auctionData;
+    $('editTitle').value = a.title || '';
+    $('editDescription').value = a.description || '';
+    $('editPrice').value = a.starting_price || '';
+    $('editBinPrice').value = a.bin_price || '';
+    $('editExtend').value = '';
+    $('editError').style.display = 'none';
 
     const isBinOnly = a.auction_type==='bin';
     $('editStartPriceWrap').style.display = isBinOnly ? 'none' : 'block';
     $('editBinPriceBlock').style.display = (a.auction_type==='bin'||a.bin_price) ? 'block' : 'none';
     $('editPriceBlock').style.flexDirection = isBinOnly ? 'column' : 'row';
     $('editExtendBlock').style.display=a.is_active?'block':'none';
-    const parentSel=$('editCategoryParent'),subSel=$('editCategory');
-    if(parentSel){try{const r=await fetch(`${API}/api/categories`);const cats=await r.json();parentSel.innerHTML='<option value="">— Выберите категорию —</option>';cats.forEach(cat=>{const opt=document.createElement('option');opt.value=cat.id;opt.textContent=cat.name;opt.dataset.hasChildren=cat.children&&cat.children.length?'1':'';parentSel.appendChild(opt);});const updateSub=(catId,selectSubId)=>{const cat=cats.find(c=>c.id===+catId);if(subSel){subSel.innerHTML='<option value="">— Вся категория —</option>';subSel.style.display='none';}if(cat&&cat.children&&cat.children.length){cat.children.forEach(ch=>{const o=document.createElement('option');o.value=ch.id;o.textContent=ch.name;subSel.appendChild(o);});if(subSel){subSel.style.display='block';subSel.value=selectSubId||'';}}};parentSel.onchange=()=>updateSub(parentSel.value,null);if(a.category_id){const parentCat=cats.find(c=>c.id===a.category_id);if(parentCat){parentSel.value=a.category_id;updateSub(a.category_id,null);}else{const parent=cats.find(c=>c.children&&c.children.some(ch=>ch.id===a.category_id));if(parent){parentSel.value=parent.id;updateSub(parent.id,a.category_id);}}}}catch{}}
-    editImageUrls=(a.image_urls&&a.image_urls.length)?[...a.image_urls]:(a.image_url?[a.image_url]:[]);editNewFiles=[];renderEditImgPreview();
-    const fileInput=$('editImageFile');if(fileInput&&!fileInput._wired){fileInput._wired=true;fileInput.addEventListener('change',e=>{Array.from(e.target.files||[]).forEach(f=>{if((editImageUrls.length+editNewFiles.length)<5)editNewFiles.push(f);});fileInput.value='';renderEditImgPreview();});}
-    $('editModal').style.display='flex';
+    const parentSel = $('editCategoryParent');
+    const subSel = $('editCategory');
+    if (parentSel) {
+      try {
+        const r = await fetch(`${API}/api/categories`);
+        const cats = await r.json();
+        parentSel.innerHTML = '<option value="">— Выберите категорию —</option>';
+        cats.forEach(cat => {
+          const opt = document.createElement('option');
+          opt.value = cat.id;
+          opt.textContent = cat.name;
+          opt.dataset.hasChildren = cat.children && cat.children.length ? '1' : '';
+          parentSel.appendChild(opt);
+        });
+
+        const updateSub = (catId, selectSubId) => {
+          const cat = cats.find(c => c.id === +catId);
+          if (subSel) {
+            subSel.innerHTML = '<option value="">— Вся категория —</option>';
+            subSel.style.display = 'none';
+          }
+          if (cat && cat.children && cat.children.length) {
+            cat.children.forEach(ch => {
+              const o = document.createElement('option');
+              o.value = ch.id;
+              o.textContent = ch.name;
+              subSel.appendChild(o);
+            });
+            if (subSel) {
+              subSel.style.display = 'block';
+              subSel.value = selectSubId || '';
+            }
+          }
+        };
+
+        parentSel.onchange = () => updateSub(parentSel.value, null);
+        if (a.category_id) {
+          const parentCat = cats.find(c => c.id === a.category_id);
+          if (parentCat) {
+            parentSel.value = a.category_id;
+            updateSub(a.category_id, null);
+          } else {
+            const parent = cats.find(
+              c => c.children && c.children.some(ch => ch.id === a.category_id)
+            );
+            if (parent) {
+              parentSel.value = parent.id;
+              updateSub(parent.id, a.category_id);
+            }
+          }
+        }
+      } catch { /* silent — категории не критичны для открытия модалки */ }
+    }
+
+    editImageUrls = (a.image_urls && a.image_urls.length)
+      ? [...a.image_urls]
+      : (a.image_url ? [a.image_url] : []);
+    editNewFiles = [];
+    renderEditImgPreview();
+
+    const fileInput = $('editImageFile');
+    if (fileInput && !fileInput._wired) {
+      fileInput._wired = true;
+      fileInput.addEventListener('change', e => {
+        Array.from(e.target.files || []).forEach(f => {
+          if ((editImageUrls.length + editNewFiles.length) < 5) editNewFiles.push(f);
+        });
+        fileInput.value = '';
+        renderEditImgPreview();
+      });
+    }
+    $('editModal').style.display = 'flex';
   }
   function closeEditModal(){$('editModal').style.display='none';}
-  function renderEditImgPreview(){const el=$('editImgPreview');if(!el)return;const allCount=editImageUrls.length+editNewFiles.length;el.innerHTML=[...editImageUrls.map((url,i)=>{const src=String(url).startsWith('http')?url:API+url;return`<div class="multi-img-thumb${i===0?' is-cover':''}"><img src="${esc(src)}"><button class="thumb-del" type="button" onclick="removeEditImg('url',${i})">✕</button></div>`;}),...editNewFiles.map((f,i)=>`<div class="multi-img-thumb${(editImageUrls.length+i)===0?' is-cover':''}"><img src="${URL.createObjectURL(f)}"><button class="thumb-del" type="button" onclick="removeEditImg('file',${i})">✕</button></div>`)].join('');const addBtn=document.querySelector('label[for="editImageFile"]');if(addBtn)addBtn.style.display=allCount>=5?'none':'inline-flex';}
+  function renderEditImgPreview() {
+    const el = $('editImgPreview');
+    if (!el) return;
+    const urlThumbs = editImageUrls.map((url, i) => {
+      const src = String(url).startsWith('http') ? url : API + url;
+      const cover = i === 0 ? ' is-cover' : '';
+      return `<div class="multi-img-thumb${cover}">` +
+             `<img src="${esc(src)}">` +
+             `<button class="thumb-del" type="button" onclick="removeEditImg('url',${i})">✕</button>` +
+             `</div>`;
+    });
+    const fileThumbs = editNewFiles.map((f, i) => {
+      const cover = (editImageUrls.length + i) === 0 ? ' is-cover' : '';
+      return `<div class="multi-img-thumb${cover}">` +
+             `<img src="${URL.createObjectURL(f)}">` +
+             `<button class="thumb-del" type="button" onclick="removeEditImg('file',${i})">✕</button>` +
+             `</div>`;
+    });
+    el.innerHTML = [...urlThumbs, ...fileThumbs].join('');
+    const addBtn = document.querySelector('label[for="editImageFile"]');
+    if (addBtn) {
+      addBtn.style.display =
+        (editImageUrls.length + editNewFiles.length) >= 5 ? 'none' : 'inline-flex';
+    }
+  }
   function removeEditImg(type,idx){if(type==='url')editImageUrls.splice(idx,1);else editNewFiles.splice(idx,1);renderEditImgPreview();}
   function setExtend(mins){$('editExtend').value=mins;}
-  async function saveEdit(){const btn=$('editSaveBtn');btn.disabled=true;btn.textContent='Сохраняем…';$('editError').style.display='none';try{const uploadedUrls=[];for(const f of editNewFiles){const fd=new FormData();fd.append('file',f);const r=await fetch(`${API}/api/upload-image`,{method:'POST',headers:{'Authorization':'Bearer '+token},body:fd});if(r.ok){const d=await r.json();uploadedUrls.push(d.image_url);}}const allUrls=[...editImageUrls,...uploadedUrls];const subSel=$('editCategory'),parentSel=$('editCategoryParent');const catVal=(subSel&&subSel.value&&subSel.style.display!=='none')?subSel.value:(parentSel?parentSel.value:'');const payload={title:$('editTitle').value.trim(),description:$('editDescription').value.trim(),category_id:catVal?+catVal:null,starting_price:$('editPrice').value?+$('editPrice').value:null,bin_price:$('editBinPrice').value?+$('editBinPrice').value:null,image_urls:allUrls};const ext=+$('editExtend').value;if(ext>0)payload.extend_minutes=ext;const r=await fetch(`${API}/api/auctions/${auctionId}`,{method:'PATCH',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(payload)});if(r.ok){closeEditModal();showToast('✅ Сохранено','Лот успешно обновлён','ok');setTimeout(()=>location.reload(),1200);}else{const err=await r.json();$('editError').textContent=window.formatError(err,'Ошибка сохранения');$('editError').style.display='block';}}catch{$('editError').textContent='Ошибка соединения';$('editError').style.display='block';}finally{btn.disabled=false;btn.textContent='Сохранить';}}
+  async function saveEdit() {
+    const btn = $('editSaveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Сохраняем…';
+    $('editError').style.display = 'none';
+    try {
+      // Upload any newly-selected files first; the auction PATCH wants
+      // final URLs, not File objects.
+      const uploadedUrls = [];
+      for (const f of editNewFiles) {
+        const fd = new FormData();
+        fd.append('file', f);
+        const r = await apiFetch(`${API}/api/upload-image`, { method: 'POST', body: fd });
+        if (r.ok) {
+          const d = await r.json();
+          uploadedUrls.push(d.image_url);
+        }
+      }
+      const allUrls = [...editImageUrls, ...uploadedUrls];
 
-  async function buyNow(){if(!token){showToast('Ошибка','Войдите в аккаунт','bad');return;}const btn=$('binBtn');if(btn){btn.disabled=true;btn.textContent='Покупаем…';}try{const r=await apiFetch(`${API}/api/auctions/${auctionId}/buy-now`,{method:'POST'});if(r.ok){const d=await r.json();showToast('🎉 Покупка совершена!',`Вы купили лот за ${fmtMoney(d.price)}`,'ok');setTimeout(()=>location.reload(),2000);}else{const err=await r.json();showToast('Ошибка',err.detail||'Не удалось купить лот','bad');if(btn){btn.disabled=false;btn.textContent='⚡ Купить сразу';}}}catch{showToast('Ошибка','Нет соединения','bad');if(btn){btn.disabled=false;btn.textContent='⚡ Купить сразу';}}}
+      const subSel = $('editCategory');
+      const parentSel = $('editCategoryParent');
+      const catVal =
+        (subSel && subSel.value && subSel.style.display !== 'none')
+          ? subSel.value
+          : (parentSel ? parentSel.value : '');
 
-  let lotCurrentSlide=0;
-  function lotGoTo(idx){const slides=document.querySelectorAll('.lot-slide'),dots=document.querySelectorAll('.lot-dot'),counter=$('lotCounter');if(!slides.length)return;slides[lotCurrentSlide]?.classList.remove('active');dots[lotCurrentSlide]?.classList.remove('active');lotCurrentSlide=(idx+slides.length)%slides.length;slides[lotCurrentSlide]?.classList.add('active');dots[lotCurrentSlide]?.classList.add('active');if(counter)counter.textContent=`${lotCurrentSlide+1} / ${slides.length}`;updateThumbs(lotCurrentSlide);}
-  function lotSlide(dir){lotGoTo(lotCurrentSlide+dir);}
+      const payload = {
+        title: $('editTitle').value.trim(),
+        description: $('editDescription').value.trim(),
+        category_id: catVal ? +catVal : null,
+        starting_price: $('editPrice').value ? +$('editPrice').value : null,
+        bin_price: $('editBinPrice').value ? +$('editBinPrice').value : null,
+        image_urls: allUrls,
+      };
+      const ext = +$('editExtend').value;
+      if (ext > 0) payload.extend_minutes = ext;
+
+      const r = await apiFetch(`${API}/api/auctions/${auctionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) {
+        closeEditModal();
+        showToast('✅ Сохранено', 'Лот успешно обновлён', 'ok');
+        setTimeout(() => location.reload(), 1200);
+      } else {
+        const err = await r.json();
+        $('editError').textContent = window.formatError(err, 'Ошибка сохранения');
+        $('editError').style.display = 'block';
+      }
+    } catch {
+      $('editError').textContent = 'Ошибка соединения';
+      $('editError').style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Сохранить';
+    }
+  }
+
+  async function buyNow() {
+    if (!token) {
+      showToast('Ошибка', 'Войдите в аккаунт', 'bad');
+      return;
+    }
+    const btn = $('binBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Покупаем…'; }
+    const resetBtn = () => {
+      if (btn) { btn.disabled = false; btn.textContent = '⚡ Купить сразу'; }
+    };
+    try {
+      const r = await apiFetch(`${API}/api/auctions/${auctionId}/buy-now`, { method: 'POST' });
+      if (r.ok) {
+        const d = await r.json();
+        showToast('🎉 Покупка совершена!', `Вы купили лот за ${fmtMoney(d.price)}`, 'ok');
+        setTimeout(() => location.reload(), 2000);
+      } else {
+        const err = await r.json();
+        showToast('Ошибка', err.detail || 'Не удалось купить лот', 'bad');
+        resetBtn();
+      }
+    } catch {
+      showToast('Ошибка', 'Нет соединения', 'bad');
+      resetBtn();
+    }
+  }
+
+  let lotCurrentSlide = 0;
+  function lotGoTo(idx) {
+    const slides = document.querySelectorAll('.lot-slide');
+    const dots = document.querySelectorAll('.lot-dot');
+    const counter = $('lotCounter');
+    if (!slides.length) return;
+    slides[lotCurrentSlide]?.classList.remove('active');
+    dots[lotCurrentSlide]?.classList.remove('active');
+    lotCurrentSlide = (idx + slides.length) % slides.length;
+    slides[lotCurrentSlide]?.classList.add('active');
+    dots[lotCurrentSlide]?.classList.add('active');
+    if (counter) counter.textContent = `${lotCurrentSlide + 1} / ${slides.length}`;
+    updateThumbs(lotCurrentSlide);
+  }
+  function lotSlide(dir) { lotGoTo(lotCurrentSlide + dir); }
 
   // ===== Lightbox: открытие фото лота на полный экран с zoom/pan =====
   const lb = {

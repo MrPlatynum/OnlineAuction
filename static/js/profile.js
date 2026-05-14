@@ -7,7 +7,6 @@
   
 
 const token = localStorage.getItem('token');
-const $ = id => document.getElementById(id);
 
 function logout() { localStorage.removeItem('token'); location.href = 'index.html'; }
 if (!token) { showToast('Требуется вход', 'Войдите, чтобы открыть профиль', 'warn'); setTimeout(() => location.href = 'index.html', 1200); }

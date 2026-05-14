@@ -1,3 +1,14 @@
+from datetime import timedelta
+
+from sqlalchemy import select, update
+
+from app import database as _db_module
+from app.models import Auction
+from app.services.auction_scheduler import _completion_tasks, cancel_auction
+from app.services.auctions import complete_auction
+from app.utils.time import utcnow
+
+
 def _make_auction_payload(**overrides):
     payload = {
         "title": "Test lot",
@@ -128,11 +139,6 @@ async def test_update_auction_not_found(client, registered_user):
 async def test_update_auction_rejects_inactive_lot(client, registered_user):
     """Once a lot is settled, no further field edits are permitted —
     otherwise the seller could rewrite history of a sold item."""
-    from sqlalchemy import update
-
-    from app import database as _db_module
-    from app.models import Auction
-
     auction = await _seed_active_auction(client, registered_user["headers"])
     async with _db_module.SessionLocal() as db:
         await db.execute(
@@ -272,16 +278,6 @@ async def test_buy_now_past_end_time_defers_to_scheduler(
     is_completed from the handler short-circuits its later tick. BIN
     lots reject bids (fixed-price), so the test exercises the empty-lot
     case where the scheduler should still close the listing cleanly."""
-    from datetime import timedelta
-
-    from sqlalchemy import select
-
-    from app import database as _db_module
-    from app.models import Auction
-    from app.services.auction_scheduler import cancel_auction
-    from app.services.auctions import complete_auction
-    from app.utils.time import utcnow
-
     create = await client.post(
         "/api/auctions",
         json=_make_auction_payload(
@@ -327,16 +323,6 @@ async def test_late_bid_past_end_time_defers_to_scheduler(
     handler set is_active=False here, which then made complete_auction's
     own is_active guard skip the lot — stranding the leading bidder
     with no payout."""
-    from datetime import timedelta
-
-    from sqlalchemy import select
-
-    from app import database as _db_module
-    from app.models import Auction
-    from app.services.auction_scheduler import cancel_auction
-    from app.services.auctions import complete_auction
-    from app.utils.time import utcnow
-
     create = await client.post(
         "/api/auctions",
         json=_make_auction_payload(starting_price=100.0, duration_minutes=60),
@@ -388,8 +374,6 @@ async def test_late_bid_past_end_time_defers_to_scheduler(
 async def test_delete_own_empty_auction_succeeds(client, registered_user):
     """Auction with no bids and no winner: the owner can delete it.
     Cleans up the in-memory scheduler task as a side-effect."""
-    from app.services.auction_scheduler import _completion_tasks
-
     create = await client.post(
         "/api/auctions",
         json=_make_auction_payload(),

@@ -39,8 +39,8 @@ async def deposit(
     new_balance = round(current_user.balance + amount, 2)
     if new_balance > MAX_USER_BALANCE:
         raise HTTPException(
-            400,
-            detail=f"Максимальный баланс — ${MAX_USER_BALANCE:.2f}",
+            status_code=400,
+            detail=f"Максимальный баланс — {MAX_USER_BALANCE:.2f} ₽",
         )
     current_user.balance = new_balance
     add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
@@ -68,10 +68,10 @@ async def withdraw(
     available = current_user.balance - committed
     if available < amount:
         raise HTTPException(
-            400,
+            status_code=400,
             detail=(
-                f"Недостаточно средств. Доступно: ${available:.2f} "
-                f"(${committed:.2f} удерживается на активных аукционах)."
+                f"Недостаточно средств. Доступно: {available:.2f} ₽ "
+                f"({committed:.2f} ₽ удерживается на активных аукционах)."
             ),
         )
     current_user.balance = round(current_user.balance - amount, 2)

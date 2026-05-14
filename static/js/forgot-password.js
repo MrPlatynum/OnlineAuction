@@ -1,8 +1,6 @@
 (function () {
   'use strict';
 
-  const $ = (id) => document.getElementById(id);
-
   async function submit(e) {
     e.preventDefault();
     const email = $('forgotEmail').value.trim();

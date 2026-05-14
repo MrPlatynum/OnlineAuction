@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Auction, Bid, NotificationType, User
+from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
@@ -13,46 +14,98 @@ from app.utils.time import utcnow
 logger = logging.getLogger(__name__)
 
 
+def settle_bin_purchase(
+    db: AsyncSession,
+    auction: Auction,
+    buyer: User,
+    seller: User | None,
+) -> None:
+    """Apply the money side of a BIN purchase: debit the buyer, credit
+    the seller (if present), flip the lot to settled state, log both
+    transactions. Caller still owns the commit so it can sequence it
+    with row locks and notifications.
+
+    ``seller is None`` is the "creator account was deleted while their
+    listing was up" edge case — buyer still gets the goods, the lot
+    just doesn't credit anyone."""
+    price = auction.bin_price
+    buyer.balance -= price
+    add_transaction(
+        db, buyer, "bin_purchase", price,
+        f"Покупка «{auction.title}» по цене BIN", auction_id=auction.id,
+    )
+    auction.current_price = price
+    auction.is_active = False
+    auction.is_completed = True
+    auction.winner_id = buyer.id
+    auction.end_time = utcnow()
+    if seller:
+        seller.balance += price
+        add_transaction(
+            db, seller, "auction_sale", price,
+            f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
+        )
+
+
+async def fetch_auction_bidders(
+    db: AsyncSession,
+    auction_id: int,
+    *,
+    exclude_user_ids: tuple[int, ...] = (),
+) -> list[User]:
+    """Return distinct bidders on ``auction_id`` minus ``exclude_user_ids``,
+    in a single SELECT. Shared between ``complete_auction`` (which then
+    splits the list into winner + losers) and ``/buy-now`` (which notifies
+    everyone but the buyer that the lot ended without them)."""
+    user_ids = {
+        uid for uid in (
+            await db.execute(
+                select(Bid.user_id)
+                .where(Bid.auction_id == auction_id)
+                .distinct()
+            )
+        ).scalars()
+    } - set(exclude_user_ids)
+    if not user_ids:
+        return []
+    return (
+        await db.execute(select(User).where(User.id.in_(user_ids)))
+    ).scalars().all()
+
+
 async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     """Уведомление участникам, что аукцион скоро завершится."""
-    bids = (
-        await db.execute(select(Bid).where(Bid.auction_id == auction.id))
-    ).scalars().all()
-    user_ids = set([bid.user_id for bid in bids])
+    last_bid = (
+        await db.execute(
+            select(Bid)
+            .where(Bid.auction_id == auction.id)
+            .order_by(Bid.timestamp.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
-    for user_id in user_ids:
-        user = (
-            await db.execute(select(User).where(User.id == user_id))
-        ).scalar_one_or_none()
-        if user:
-            last_bid = (
-                await db.execute(
-                    select(Bid)
-                    .where(Bid.auction_id == auction.id)
-                    .order_by(Bid.timestamp.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            is_winning = last_bid and last_bid.user_id == user_id
+    users = await fetch_auction_bidders(db, auction.id)
+    if not users:
+        return
+    leader_id = last_bid.user_id if last_bid else None
 
-            message = "Аукцион завершится через 5 минут! " + (
-                "Вы лидируете! 🎉" if is_winning else "Сделайте ставку, чтобы выиграть!"
-            )
-
-            await notify_user(
-                db, user, NotificationType.AUCTION_ENDING,
-                "⏰ Аукцион скоро завершится",
-                message,
-                auction.id, auction.title, manager,
-            )
+    for user in users:
+        is_winning = user.id == leader_id
+        message = "Аукцион завершится через 5 минут! " + (
+            "Вы лидируете! 🎉" if is_winning else "Сделайте ставку, чтобы выиграть!"
+        )
+        await notify_user(
+            db, user, NotificationType.AUCTION_ENDING,
+            "⏰ Аукцион скоро завершится",
+            message,
+            auction.id, auction.title, manager,
+        )
 
 
 async def complete_auction(auction_id: int, db: AsyncSession):
     """Завершение аукциона и уведомление участников."""
-    # Row-lock the auction first. Guards against a duplicate scheduler
-    # tick after server restart (or multi-worker race with /buy-now)
-    # double-settling the same lot — the second caller sees is_active=False
-    # and exits.
+    # FOR UPDATE so a duplicate scheduler tick (post-restart) or a race
+    # with /buy-now can't double-settle — second caller sees is_active=False.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()
@@ -65,8 +118,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
     # tick fired but before we acquired the row lock. Re-arm the tick at
     # the new deadline and exit without settling.
     if auction.end_time > utcnow():
-        from app.services.auction_scheduler import schedule_auction
-        schedule_auction(auction)
+        auction_scheduler.schedule_auction(auction)
         return
 
     auction.is_active = False
@@ -110,23 +162,13 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 f"Продажа лота «{auction.title}»", auction_id=auction.id,
             )
 
-        bids = (
-            await db.execute(select(Bid).where(Bid.auction_id == auction_id))
-        ).scalars().all()
-        user_ids = set([bid.user_id for bid in bids])
-
-        for user_id in user_ids:
-            user = (
-                await db.execute(select(User).where(User.id == user_id))
-            ).scalar_one_or_none()
-            if not user:
-                continue
-
-            if user_id == last_bid.user_id:
+        users = await fetch_auction_bidders(db, auction_id)
+        for user in users:
+            if user.id == last_bid.user_id:
                 pending_notifications.append((
                     user, NotificationType.AUCTION_WON,
                     "🎉 Поздравляем! Вы выиграли аукцион!",
-                    f"Вы выиграли лот за ${last_bid.amount:.2f}. Средства списаны с вашего баланса.",
+                    f"Вы выиграли лот за {last_bid.amount:.2f} ₽. Средства списаны с вашего баланса.",
                 ))
             else:
                 pending_notifications.append((
@@ -139,7 +181,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
             pending_notifications.append((
                 creator, NotificationType.AUCTION_SOLD,
                 "💰 Ваш лот продан!",
-                f"Лот продан за ${last_bid.amount:.2f}. Средства зачислены на ваш баланс.",
+                f"Лот продан за {last_bid.amount:.2f} ₽. Средства зачислены на ваш баланс.",
             ))
 
     await db.commit()
@@ -156,3 +198,10 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         "winner_id": auction.winner_id,
         "final_price": float(auction.current_price),
     }, auction_id)
+
+
+# Wire the scheduler's "settle this id" / "ending-soon" hooks to our
+# implementations. Done at module-import time so scheduler tasks armed
+# from anywhere (request handlers, schedule_active_auctions on startup,
+# tests) see registered handlers. See auction_scheduler.register_handlers.
+auction_scheduler.register_handlers(complete_auction, notify_auction_ending_soon)

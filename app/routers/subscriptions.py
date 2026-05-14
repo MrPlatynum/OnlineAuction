@@ -115,7 +115,7 @@ async def subscribe(
     db: AsyncSession = Depends(get_db),
 ):
     if seller_id == current_user.id:
-        raise HTTPException(400, "Нельзя подписаться на себя")
+        raise HTTPException(status_code=400, detail="Нельзя подписаться на себя")
     # Pre-check existence instead of letting the FK violation bubble as
     # 500 — a non-existent seller_id is a client mistake (stale link),
     # not an internal error.
@@ -123,7 +123,7 @@ async def subscribe(
         await db.execute(select(User.id).where(User.id == seller_id))
     ).scalar_one_or_none()
     if seller is None:
-        raise HTTPException(404, "Продавец не найден")
+        raise HTTPException(status_code=404, detail="Продавец не найден")
     exists = (
         await db.execute(
             select(Subscription).where(
@@ -133,7 +133,7 @@ async def subscribe(
         )
     ).scalar_one_or_none()
     if exists:
-        raise HTTPException(400, "Уже подписаны")
+        raise HTTPException(status_code=400, detail="Уже подписаны")
     db.add(Subscription(subscriber_id=current_user.id, seller_id=seller_id))
     await db.commit()
     count = await db.scalar(
@@ -159,7 +159,7 @@ async def unsubscribe(
         )
     ).scalar_one_or_none()
     if not sub:
-        raise HTTPException(400, "Вы не подписаны")
+        raise HTTPException(status_code=400, detail="Вы не подписаны")
     await db.delete(sub)
     await db.commit()
     count = await db.scalar(

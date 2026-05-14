@@ -240,7 +240,10 @@ async def test_concurrent_cross_auction_bids_respect_balance(
     )
 
     statuses = sorted([r1.status_code, r2.status_code])
-    assert statuses == [200, 400], (r1.text, r2.text)
+    assert statuses == [200, 400], (
+        f"cross-auction same-user race on lots {a1['id']}/{a2['id']}: "
+        f"got {[r1.status_code, r2.status_code]}, bodies={r1.text!r} / {r2.text!r}"
+    )
 
 
 async def test_concurrent_equal_bids_only_one_wins(
@@ -268,7 +271,10 @@ async def test_concurrent_equal_bids_only_one_wins(
     )
 
     statuses = sorted([r_a.status_code, r_b.status_code])
-    assert statuses == [200, 400], (r_a.text, r_b.text)
+    assert statuses == [200, 400], (
+        f"equal-amount race on lot {auction['id']}: "
+        f"got {[r_a.status_code, r_b.status_code]}, bodies={r_a.text!r} / {r_b.text!r}"
+    )
 
     refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
     assert refreshed["current_price"] == 150.0

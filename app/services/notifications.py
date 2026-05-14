@@ -1,4 +1,3 @@
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,11 +24,10 @@ def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
 
 def send_verification_email(user: User) -> None:
     """Post-register verification email. Goes through the durable
-    outbox (#47): ``_fire_and_forget_email`` enqueues a row in
-    ``email_outbox`` and returns; the background worker drains it
-    with retry/backoff and dead-lettering. Caller is expected to
-    have committed the User row so its id and current email are
-    stable."""
+    outbox (``enqueue_email``): the background worker drains the
+    table with retry/backoff and dead-lettering, so app crashes or
+    SMTP outages don't lose mail. Caller is expected to have
+    committed the User row so its id and current email are stable."""
     token = create_email_verify_token(user)
     link = f"{PUBLIC_BASE_URL}/verify-email.html?token={token}"
     html_content = build_verification_email_html(user.username, link)
@@ -74,8 +72,8 @@ async def create_notification(
     notification_type: NotificationType,
     title: str,
     message: str,
-    auction_id: Optional[int] = None,
-    auction_title: Optional[str] = None,
+    auction_id: int | None = None,
+    auction_title: str | None = None,
 ):
     """Создание уведомления в БД."""
     notification = Notification(
@@ -98,8 +96,8 @@ async def notify_user(
     notification_type: NotificationType,
     title: str,
     message: str,
-    auction_id: Optional[int] = None,
-    auction_title: Optional[str] = None,
+    auction_id: int | None = None,
+    auction_title: str | None = None,
     manager=None,
 ):
     """In-app + email уведомление пользователя."""

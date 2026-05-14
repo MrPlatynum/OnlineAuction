@@ -42,7 +42,7 @@ import app.database as _db_module  # noqa: E402
 from app import app  # noqa: E402
 from app.database import Base  # noqa: E402
 from app.models import User  # noqa: E402
-from app.services.migrations import seed_categories  # noqa: E402
+from app.services.seed_data import seed_categories  # noqa: E402
 
 
 async def _force_verified(username: str) -> None:
@@ -63,10 +63,10 @@ async def _force_verified(username: str) -> None:
 @pytest_asyncio.fixture(autouse=True)
 def _suppress_outbox_enqueue(monkeypatch):
     """Default behaviour for *every* test: emails sent during a
-    request go nowhere. Existing tests that need to assert the call
-    happened (email-verification, password-reset) install their own
-    monkeypatch which wins over this fixture. Test files that
-    actually exercise the outbox queue itself use
+    request go nowhere. Tests that want to *capture* the call (assert
+    on subject/body/recipient) take the ``capture_emails`` fixture
+    instead — it overrides this stub with a list-appending one. Test
+    files that exercise the outbox queue itself use
     ``monkeypatch.setattr`` to put the real implementation back
     before invoking the worker."""
     from app.services import notifications as notif_mod
@@ -74,6 +74,24 @@ def _suppress_outbox_enqueue(monkeypatch):
     monkeypatch.setattr(
         notif_mod, "_fire_and_forget_email", lambda *_a, **_kw: None
     )
+
+
+@pytest_asyncio.fixture
+def capture_emails(monkeypatch):
+    """Capture every email the request handler enqueues during the
+    test. Replaces the autouse no-op stub with a list-appending
+    callable and yields the list of ``(to, subject, html)`` tuples,
+    so tests can ``assert len(capture_emails) == 1`` etc. The later
+    monkeypatch wins over the autouse one."""
+    from app.services import notifications as notif_mod
+
+    calls: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        notif_mod,
+        "_fire_and_forget_email",
+        lambda to, subj, html: calls.append((to, subj, html)),
+    )
+    return calls
 
 
 @pytest_asyncio.fixture(autouse=True)
