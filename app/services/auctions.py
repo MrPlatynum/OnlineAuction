@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Auction, Bid, NotificationType, User
+from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.transactions import add_transaction
@@ -103,10 +104,8 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
 
 async def complete_auction(auction_id: int, db: AsyncSession):
     """Завершение аукциона и уведомление участников."""
-    # Row-lock the auction first. Guards against a duplicate scheduler
-    # tick after server restart (or multi-worker race with /buy-now)
-    # double-settling the same lot — the second caller sees is_active=False
-    # and exits.
+    # FOR UPDATE so a duplicate scheduler tick (post-restart) or a race
+    # with /buy-now can't double-settle — second caller sees is_active=False.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()
@@ -119,8 +118,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
     # tick fired but before we acquired the row lock. Re-arm the tick at
     # the new deadline and exit without settling.
     if auction.end_time > utcnow():
-        from app.services.auction_scheduler import schedule_auction
-        schedule_auction(auction)
+        auction_scheduler.schedule_auction(auction)
         return
 
     auction.is_active = False
@@ -200,3 +198,10 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         "winner_id": auction.winner_id,
         "final_price": float(auction.current_price),
     }, auction_id)
+
+
+# Wire the scheduler's "settle this id" / "ending-soon" hooks to our
+# implementations. Done at module-import time so scheduler tasks armed
+# from anywhere (request handlers, schedule_active_auctions on startup,
+# tests) see registered handlers. See auction_scheduler.register_handlers.
+auction_scheduler.register_handlers(complete_auction, notify_auction_ending_soon)

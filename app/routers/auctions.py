@@ -197,10 +197,8 @@ async def buy_now(
     current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Row-lock the auction first. Two simultaneous /buy-now calls (or
-    # /buy-now racing complete_auction at end_time) queue here at the DB,
-    # so the second one sees is_active=False after the first commits and
-    # exits cleanly instead of double-charging.
+    # FOR UPDATE so two /buy-now (or /buy-now racing complete_auction)
+    # don't double-charge — the second caller sees is_active=False.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()
@@ -408,8 +406,8 @@ async def update_auction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Lock the row so a concurrent place_bid / complete_auction can't
-    # mutate state between our checks and the commit.
+    # FOR UPDATE so concurrent place_bid / complete_auction can't mutate
+    # state between our checks and the commit.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()
@@ -485,8 +483,8 @@ async def delete_auction(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Row-lock the auction so the scheduler's _wait_and_complete can't
-    # try to settle it between our checks and the commit.
+    # FOR UPDATE so scheduler._wait_and_complete can't settle the lot
+    # between our checks and the commit.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()

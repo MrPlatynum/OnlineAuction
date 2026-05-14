@@ -73,9 +73,8 @@ async def place_bid(
 ):
     bid_amount = to_decimal(bid.amount)
 
-    # Take a row-level lock on the auction for the rest of this transaction.
-    # Concurrent bids on the same auction queue here at the database, so the
-    # read-check-write below is atomic across all workers/processes.
+    # FOR UPDATE so concurrent bids on the same lot queue here at the DB —
+    # the read-check-write below is atomic across workers.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == bid.auction_id).with_for_update()

@@ -1,13 +1,9 @@
 """Make Notification.auction_id and Transaction.auction_id real FKs
 
-Both columns were plain ``Integer NULL`` — there was no referential
-integrity, and once an auction was deleted, every notification or
-transaction pointing at it carried a dangling id (the frontend
-"go to lot" deep-link from a notification ended in 404).
-
-Adds a ``FOREIGN KEY (...) REFERENCES auctions(id) ON DELETE SET NULL``
-on each. NULL-existing-dangling rows first so the constraint applies
-cleanly — those references were already broken.
+Adds ``FOREIGN KEY (...) REFERENCES auctions(id) ON DELETE SET NULL``
+on both columns so deleting an auction clears the references instead
+of leaving dangling ids. The pre-upgrade UPDATEs NULL out any already-
+broken rows so the constraint applies cleanly.
 
 Revision ID: f1a4e2c8b9d0
 Revises: a8b5c1f0d2e9
