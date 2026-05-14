@@ -14,6 +14,12 @@
   // ---- helpers ----
   function getToken() { return localStorage.getItem('token'); }
 
+  // Shorthand для `document.getElementById`. Удобство для per-page скриптов
+  // (auction.js, profile.js, и т.д.) — раньше каждый объявлял локальный
+  // `const $ = …`. Глобал из common.js работает потому что common.js
+  // загружается раньше всех per-page assets.
+  window.$ = (id) => document.getElementById(id);
+
   window.esc = function(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({
       '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'

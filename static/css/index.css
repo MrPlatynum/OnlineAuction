@@ -496,19 +496,55 @@ body {
   border-radius: 12px;
   overflow: hidden;
   cursor: default;
-  transition: box-shadow .18s;
+  transition: transform .2s cubic-bezier(.2,.7,.2,1),
+              box-shadow .2s cubic-bezier(.2,.7,.2,1),
+              border-color .2s;
   color: inherit;
-  display: flex !important;
-  flex-direction: column !important;
-  flex-wrap: nowrap !important;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
   background: var(--bg-2);
   border: 1px solid var(--border);
   position: relative;
   width: 100%;
 }
 .auction-card:hover {
-  box-shadow: 0 4px 20px rgba(0,0,0,.45);
-  border-color: var(--border-hi);
+  transform: translateY(-3px);
+  border-color: rgba(232,160,32,0.35);
+  box-shadow:
+    0 12px 32px rgba(0,0,0,.45),
+    0 0 0 1px rgba(232,160,32,0.10),
+    0 0 28px rgba(232,160,32,0.08);
+}
+[data-theme="light"] .auction-card:hover {
+  box-shadow:
+    0 12px 32px rgba(0,0,0,.10),
+    0 0 0 1px rgba(232,160,32,0.18);
+}
+.auction-card .auction-image img {
+  transition: transform .35s cubic-bezier(.2,.7,.2,1);
+}
+.auction-card:hover .auction-image img,
+.auction-card:hover .card-slide.active {
+  transform: scale(1.04);
+}
+
+/* Cards fade-in on first paint. ``animation: none !important`` in the
+   prefers-reduced-motion block below disables it for users who opt out. */
+.auctions-grid > .auction-card {
+  animation: card-in .45s cubic-bezier(.2,.7,.2,1) both;
+}
+.auctions-grid > .auction-card:nth-child(1)  { animation-delay: .02s; }
+.auctions-grid > .auction-card:nth-child(2)  { animation-delay: .05s; }
+.auctions-grid > .auction-card:nth-child(3)  { animation-delay: .08s; }
+.auctions-grid > .auction-card:nth-child(4)  { animation-delay: .11s; }
+.auctions-grid > .auction-card:nth-child(5)  { animation-delay: .14s; }
+.auctions-grid > .auction-card:nth-child(6)  { animation-delay: .17s; }
+.auctions-grid > .auction-card:nth-child(7)  { animation-delay: .20s; }
+.auctions-grid > .auction-card:nth-child(8)  { animation-delay: .23s; }
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Ссылка-обёртка для картинки */
@@ -613,6 +649,7 @@ body {
 .auction-price {
   font-size: 18px; font-weight: 700; color: var(--text-1);
   letter-spacing: -.3px; line-height: 1.2;
+  font-feature-settings: "tnum";
 }
 .auction-start { font-size: 11px; color: var(--text-3); margin-top: 1px; }
 .auction-meta-row {
@@ -1052,26 +1089,13 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 #auctionsContainer { opacity: 1; }
 #auctionsContainer.fade-out { animation: grid-fade-out .18s ease forwards; }
 #auctionsContainer.fade-in  { animation: grid-fade-in  .22s ease forwards; }
-.filter-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.filter-tag {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px 3px 10px; border-radius: 20px;
-  background: var(--accent-dim); border: 1px solid rgba(232,160,32,.3);
-  color: var(--accent); font-size: 11px; font-weight: 600;
-}
-.filter-tag-remove {
-  background: none; border: none; color: var(--accent);
-  cursor: pointer; padding: 0; line-height: 1; font-size: 13px; margin-left: 2px;
-}
-.filter-tag-remove:hover { color: var(--red); }
 .crumb-link {
   transition: all .12s;
-  text-decoration: none !important;
   padding: 1px 4px; margin: 0 -4px;
   border-radius: 4px;
   cursor: pointer;
 }
-.crumb-link:hover { background: rgba(232,160,32,.2); color: var(--accent-2) !important; }
+.crumb-link:hover { background: rgba(232,160,32,.2); color: var(--accent-2); }
 
 @media (max-width: 768px) {
   #createModal .modal-box { max-height: 95vh; }
@@ -1438,55 +1462,6 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 
 /* ================================================================
-   AUCTION CARD — polish (additive — overrides previous hover)
-   ================================================================ */
-.auction-card {
-  transition: transform .2s cubic-bezier(.2,.7,.2,1),
-              box-shadow .2s cubic-bezier(.2,.7,.2,1),
-              border-color .2s;
-}
-.auction-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(232,160,32,0.35);
-  box-shadow:
-    0 12px 32px rgba(0,0,0,.45),
-    0 0 0 1px rgba(232,160,32,0.10),
-    0 0 28px rgba(232,160,32,0.08);
-}
-[data-theme="light"] .auction-card:hover {
-  box-shadow:
-    0 12px 32px rgba(0,0,0,.10),
-    0 0 0 1px rgba(232,160,32,0.18);
-}
-.auction-card .auction-image img {
-  transition: transform .35s cubic-bezier(.2,.7,.2,1);
-}
-.auction-card:hover .auction-image img,
-.auction-card:hover .card-slide.active {
-  transform: scale(1.04);
-}
-.auction-price {
-  font-feature-settings: "tnum";
-}
-
-/* Cards fade-in on first paint */
-.auctions-grid > .auction-card {
-  animation: card-in .45s cubic-bezier(.2,.7,.2,1) both;
-}
-.auctions-grid > .auction-card:nth-child(1)  { animation-delay: .02s; }
-.auctions-grid > .auction-card:nth-child(2)  { animation-delay: .05s; }
-.auctions-grid > .auction-card:nth-child(3)  { animation-delay: .08s; }
-.auctions-grid > .auction-card:nth-child(4)  { animation-delay: .11s; }
-.auctions-grid > .auction-card:nth-child(5)  { animation-delay: .14s; }
-.auctions-grid > .auction-card:nth-child(6)  { animation-delay: .17s; }
-.auctions-grid > .auction-card:nth-child(7)  { animation-delay: .20s; }
-.auctions-grid > .auction-card:nth-child(8)  { animation-delay: .23s; }
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* ================================================================
    PAGE TITLE — bigger to match hero
    ================================================================ */
 .page-title {
@@ -1611,7 +1586,10 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 
 /* ================================================================
-   FILTER SIDEBAR — refined v2 (overrides earlier rules)
+   FILTER SIDEBAR — visual polish (gradient, shadow, custom controls).
+   The basic layout (sticky, width, scroll) lives in the FILTER SIDEBAR
+   block earlier in the file; this section adds the visual treatment
+   and the per-control components (stab, check, num stepper).
    ================================================================ */
 .filter-sidebar {
   width: 252px;
@@ -2074,7 +2052,9 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 
 /* ================================================================
-   FILTER CHIPS — refined v2 (overrides earlier .filter-tag rules)
+   FILTER CHIPS — pill-style chips shown above the auctions grid
+   to summarise currently-applied filters. (Old `.filter-tag` rules
+   were deleted; this is the single source for the chip styling.)
    ================================================================ */
 .filter-tags {
   display: flex;

@@ -1,8 +1,6 @@
 (function () {
   'use strict';
 
-  const $ = (id) => document.getElementById(id);
-
   function getToken() {
     return new URLSearchParams(window.location.search).get('token');
   }
