@@ -13,7 +13,7 @@ from app.database import get_db
 from app.models import User
 from app.utils.images import validate_and_normalise_image
 from app.utils.rate_limit import limiter
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, require_verified_user
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
 async def upload_image(
     request: Request,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
 ):
     sanitised, ext = await _accept_image(file)
     filename = f"{uuid.uuid4().hex}.{ext}"

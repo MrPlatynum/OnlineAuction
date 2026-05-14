@@ -129,6 +129,10 @@ EMAIL_VERIFY_TOKEN_TTL_HOURS = 24
 PASSWORD_RESET_PURPOSE = "password_reset"
 PASSWORD_RESET_TOKEN_TTL_HOURS = 1
 PASSWORD_RESET_THROTTLE_SECONDS = 60
+# Минимальная длительность отклика /password-reset/request — гарантирует
+# что unknown-email / throttled-existing / fresh-existing ветки невозможно
+# различить по latency. 100 мс заметно больше любой из трёх веток без падинга.
+PASSWORD_RESET_REQUEST_FLOOR_SECONDS = 0.1
 
 
 def create_email_verify_token(user: "User") -> str:

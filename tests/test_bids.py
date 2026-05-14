@@ -149,9 +149,11 @@ async def test_cannot_overcommit_balance_across_active_auctions(
     assert "зарезервировано" in r2.json()["detail"].lower()
 
 
-async def test_user_can_raise_their_own_bid_within_balance(
-    client, registered_user, second_user
+async def test_user_cannot_outbid_themselves(
+    client, registered_user, second_user, third_user
 ):
+    """Leading bidder can't raise their own bid — only another user
+    breaking the leader's streak unlocks a fresh bid from them."""
     a1 = await _create_auction(client, registered_user["headers"])
 
     r1 = await client.post(
@@ -166,7 +168,22 @@ async def test_user_can_raise_their_own_bid_within_balance(
         json={"auction_id": a1["id"], "amount": 800.0},
         headers=second_user["headers"],
     )
-    assert r2.status_code == 200, r2.text
+    assert r2.status_code == 400
+    assert "лидиру" in r2.json()["detail"].lower()
+
+    r3 = await client.post(
+        "/api/bids",
+        json={"auction_id": a1["id"], "amount": 600.0},
+        headers=third_user["headers"],
+    )
+    assert r3.status_code == 200
+
+    r4 = await client.post(
+        "/api/bids",
+        json={"auction_id": a1["id"], "amount": 900.0},
+        headers=second_user["headers"],
+    )
+    assert r4.status_code == 200, r4.text
 
 
 async def test_outbid_user_can_reuse_their_full_balance(
@@ -261,4 +278,34 @@ async def test_concurrent_equal_bids_only_one_wins(
 
     refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
     assert refreshed["current_price"] == 150.0
+    assert refreshed["bids_count"] == 1
+
+
+async def test_concurrent_same_user_bids_on_same_auction(
+    client, registered_user, second_user
+):
+    """Fire two simultaneous bids from the *same* user on the *same*
+    auction. The self-outbid guard reads the latest bid under the
+    auction row lock — the second call must see the first as leader
+    and 400 with 'вы уже лидируете', not double-up the user as both
+    bidder positions."""
+    auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
+
+    r1, r2 = await asyncio.gather(
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=second_user["headers"],
+        ),
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 175.0},
+            headers=second_user["headers"],
+        ),
+    )
+
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [200, 400], (r1.text, r2.text)
+
+    refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
     assert refreshed["bids_count"] == 1

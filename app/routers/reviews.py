@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Auction, Review, User
 from app.schemas import ReviewCreate
-from app.utils.security import get_current_user
+from app.utils.security import get_current_user, require_verified_user
 
 router = APIRouter(prefix="/api", tags=["reviews"])
 
@@ -88,7 +88,7 @@ async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db))
 @router.post("/reviews")
 async def create_review(
     data: ReviewCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     if data.seller_id == current_user.id:

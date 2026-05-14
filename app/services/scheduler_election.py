@@ -32,19 +32,23 @@ Lifecycle:
   automatically — the next worker restart can claim it.
 - Graceful shutdown closes the connection explicitly.
 
-Known trade-offs (left as future work):
-- No re-election while the worker is running: if a follower wants
-  to take over after the leader dies, it has to be restarted (the
-  election only runs in lifespan startup). A periodic retry-to-promote
-  task would close this gap; not needed for the single-machine
-  deployment Лотус targets.
-- No heartbeat on the leader connection: managed Postgres services
-  that idle-disconnect after N minutes would silently release the
-  lock; on bare PG this isn't an issue.
+Heartbeat (#M3):
+- Every worker runs a background task (``_heartbeat_loop``) that
+  pings the leader connection with ``SELECT 1`` so managed Postgres
+  doesn't idle-disconnect under us (the lock is connection-scoped;
+  a dropped backend silently releases it).
+- If the leader process loses its connection / lock, the heartbeat
+  also acts as a step-down detector for that worker.
+- Follower workers use the same loop to retry ``pg_try_advisory_lock``;
+  when the previous leader dies, the next-fastest follower promotes
+  itself and arms ``schedule_active_auctions``. Without this, a dead
+  leader would silently freeze the scheduler until manual restart.
 """
 
+import asyncio
 import logging
 import os
+from collections.abc import Awaitable, Callable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -147,3 +151,117 @@ async def _force_release_for_tests() -> None:
     drop the lock without depending on the env override. Kept under
     a name that flags it as test-only."""
     await release_scheduler_lock()
+
+
+# --- Heartbeat: keep leader connection alive + retry-to-promote followers ---
+
+# Tick interval. Short enough that a dead leader is replaced within a minute;
+# long enough that idle workers don't hammer Postgres. The SELECT 1 ping is
+# cheap (no transaction, no lock contention).
+HEARTBEAT_INTERVAL_SECONDS = 30
+
+_heartbeat_task: asyncio.Task | None = None
+_heartbeat_stop: asyncio.Event | None = None
+
+
+async def _ping_leader_connection() -> bool:
+    """Run ``SELECT 1`` on the leader connection. Returns True if it
+    succeeds (connection alive, lock still held implicitly), False if
+    it errors — in which case we step down by closing the connection
+    and clearing module state."""
+    global _leader_connection
+    if _leader_connection is None:
+        return False
+    try:
+        await _leader_connection.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        logger.exception(
+            "scheduler leader: heartbeat ping failed; stepping down"
+        )
+        conn = _leader_connection
+        _leader_connection = None
+        try:
+            await conn.close()
+        except Exception:
+            pass
+        return False
+
+
+async def _heartbeat_tick(
+    on_promote: Callable[[], Awaitable[None]] | None,
+) -> bool:
+    """One tick of the heartbeat. If we're leader, ping. If we're
+    not (or ping just failed), try to become leader. On a fresh
+    promotion call ``on_promote`` so the caller can arm the
+    scheduler. Returns whether we ended this tick as leader."""
+    was_leader = _leader_connection is not None
+    if was_leader:
+        if await _ping_leader_connection():
+            return True
+        # Lost the lock — fall through to try-claim path.
+    became_leader = await try_become_scheduler_leader()
+    if became_leader and not was_leader and on_promote is not None:
+        try:
+            await on_promote()
+            logger.info("scheduler leader: promoted, on_promote ran")
+        except Exception:
+            logger.exception("scheduler leader: on_promote failed")
+    return became_leader
+
+
+async def _heartbeat_loop(
+    stop_event: asyncio.Event,
+    on_promote: Callable[[], Awaitable[None]] | None,
+) -> None:
+    """Run ``_heartbeat_tick`` on a fixed cadence until ``stop_event``
+    fires. Errors are logged but don't kill the loop."""
+    logger.info("scheduler heartbeat started")
+    try:
+        while not stop_event.is_set():
+            try:
+                await _heartbeat_tick(on_promote)
+            except Exception:
+                logger.exception("scheduler heartbeat: tick failed")
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(), HEARTBEAT_INTERVAL_SECONDS
+                )
+            except TimeoutError:
+                pass
+    finally:
+        logger.info("scheduler heartbeat stopped")
+
+
+def start_scheduler_heartbeat(
+    on_promote: Callable[[], Awaitable[None]] | None = None,
+) -> None:
+    """Start the heartbeat task. No-op if election is disabled (tests)
+    or if a task is already running. ``on_promote`` is called once
+    per fresh promotion — typically ``schedule_active_auctions``."""
+    global _heartbeat_task, _heartbeat_stop
+    if not _election_enabled():
+        return
+    if _heartbeat_task is not None and not _heartbeat_task.done():
+        return
+    _heartbeat_stop = asyncio.Event()
+    _heartbeat_task = asyncio.create_task(
+        _heartbeat_loop(_heartbeat_stop, on_promote),
+        name="scheduler-heartbeat",
+    )
+
+
+async def stop_scheduler_heartbeat() -> None:
+    """Signal the heartbeat to stop and await its exit. Called from
+    the FastAPI lifespan ``finally`` before ``release_scheduler_lock``
+    so the ping loop doesn't see a half-closed connection."""
+    global _heartbeat_task, _heartbeat_stop
+    if _heartbeat_stop is not None:
+        _heartbeat_stop.set()
+    if _heartbeat_task is not None:
+        try:
+            await asyncio.wait_for(_heartbeat_task, timeout=5)
+        except (TimeoutError, asyncio.CancelledError):
+            _heartbeat_task.cancel()
+    _heartbeat_task = None
+    _heartbeat_stop = None

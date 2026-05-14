@@ -30,6 +30,8 @@ from app.services.auction_scheduler import schedule_active_auctions, shutdown_sc
 from app.services.email_outbox import start_outbox_worker, stop_outbox_worker
 from app.services.scheduler_election import (
     release_scheduler_lock,
+    start_scheduler_heartbeat,
+    stop_scheduler_heartbeat,
     try_become_scheduler_leader,
 )
 from app.services.seed_data import seed_categories
@@ -124,19 +126,29 @@ async def lifespan(fastapi_app: FastAPI):
     # the per-auction asyncio.Tasks; followers serve HTTP/WS traffic
     # only. The outbox worker uses ``SELECT FOR UPDATE SKIP LOCKED``
     # and is intentionally safe to run in every worker.
-    is_leader = await try_become_scheduler_leader()
-    if is_leader:
+    became_leader = await try_become_scheduler_leader()
+    if became_leader:
         await schedule_active_auctions()
+    # Heartbeat keeps the leader connection alive against idle-disconnect
+    # on managed Postgres AND lets followers retry-to-promote if the
+    # leader dies. ``on_promote`` arms the scheduler on a fresh promotion.
+    start_scheduler_heartbeat(on_promote=schedule_active_auctions)
     start_outbox_worker()
     logger.info(
         "Application startup complete (scheduler %s)",
-        "leader" if is_leader else "follower",
+        "leader" if became_leader else "follower",
     )
     try:
         yield
     finally:
-        if is_leader:
-            await shutdown_scheduler()
+        # Stop the heartbeat first so the ping loop doesn't observe a
+        # half-closed connection while we tear down.
+        await stop_scheduler_heartbeat()
+        # Called unconditionally — a follower that promoted via the
+        # heartbeat has armed tasks in this process even though
+        # ``is_leader`` (captured at startup) was False. The function
+        # is a no-op when no tasks were armed.
+        await shutdown_scheduler()
         await stop_outbox_worker()
         await release_scheduler_lock()
         logger.info("Application shutdown complete")

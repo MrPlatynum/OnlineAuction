@@ -8,6 +8,7 @@ anti-enumeration: always 200, with a per-email 60s throttle on top
 of the per-IP slowapi limit.
 """
 
+import asyncio
 from datetime import timedelta
 
 import jwt
@@ -177,6 +178,43 @@ async def test_confirm_replay_fails_after_first_success(
     )
     assert r1.status_code == 200
     assert r2.status_code == 400
+
+
+async def test_confirm_concurrent_same_token_only_one_wins(
+    client, registered_user, monkeypatch
+):
+    """Fire two concurrent /confirm calls with the same valid token. The
+    user-row ``SELECT ... FOR UPDATE`` must serialise them so only the
+    first commit wins; the second sees the bumped tv and gets a 400."""
+    monkeypatch.setattr(
+        "app.services.notifications._fire_and_forget_email",
+        lambda *_a, **_kw: None,
+    )
+
+    from sqlalchemy import select
+
+    from app.database import SessionLocal
+    from app.models import User
+
+    async with SessionLocal() as db:
+        user = (await db.execute(
+            select(User).where(User.id == registered_user["user"]["id"])
+        )).scalar_one()
+        token = create_password_reset_token(user)
+
+    r1, r2 = await asyncio.gather(
+        client.post(
+            "/api/password-reset/confirm",
+            json={"token": token, "new_password": "race-rotation-a"},
+        ),
+        client.post(
+            "/api/password-reset/confirm",
+            json={"token": token, "new_password": "race-rotation-b"},
+        ),
+    )
+
+    statuses = sorted([r1.status_code, r2.status_code])
+    assert statuses == [200, 400], (r1.text, r2.text)
 
 
 async def test_confirm_invalidates_existing_session_token(

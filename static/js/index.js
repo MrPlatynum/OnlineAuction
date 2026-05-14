@@ -28,6 +28,43 @@ function setStatus(el, status) {
 function onSortChange() { /* применяется через кнопку Применить */ }
 function onCategoryChange() { /* применяется через selectCategory */ }
 
+// Записать текущие фильтры в URL (без перезагрузки страницы).
+// Параметры опускаются, если соответствуют дефолтному значению,
+// чтобы «чистая» главная давала чистый адрес index.html.
+window.syncUrlFromFilters = function() {
+  if (typeof currentFilters === 'undefined') return;
+  const f = currentFilters;
+  const p = new URLSearchParams();
+  if (f.status && f.status !== 'active')   p.set('status',       f.status);
+  if (f.search)                            p.set('search',       f.search);
+  if (f.category)                          p.set('category',     f.category);
+  if (f.minPrice)                          p.set('min_price',    f.minPrice);
+  if (f.maxPrice)                          p.set('max_price',    f.maxPrice);
+  if (f.createdBy)                         p.set('created_by',   f.createdBy);
+  if (f.auctionType)                       p.set('auction_type', f.auctionType);
+  if (f.sortBy && f.sortBy !== 'time')     p.set('sort_by',      f.sortBy);
+  if (f.page && f.page > 1)                p.set('page',         f.page);
+  const qs = p.toString();
+  const newUrl = location.pathname + (qs ? '?' + qs : '') + location.hash;
+  if (newUrl === location.pathname + location.search + location.hash) return;
+  // pushState (а не replaceState), чтобы Back/Forward работали как
+  // ожидает пользователь — каждый коммит фильтра = отдельная запись
+  // истории. popstate-обработчик ниже перезагружает страницу: проще
+  // и надёжнее чем дублировать всю логику UI-sync из init-IIFE.
+  history.pushState({ filters: true }, '', newUrl);
+};
+
+// При навигации Back/Forward — перезагружаем страницу, чтобы инициализация
+// полностью отработала по новой URL. Альтернатива — вручную синхронизировать
+// все инпуты/чекбоксы/активные классы/breadcrumb — на ~80 строк кода больше
+// и легче расходится с init IIFE.
+window.addEventListener('popstate', () => {
+  // Защита от случая, когда наша же pushState внутри loadAuctions
+  // как-то прокатилась — реальный popstate всегда несёт state≠null от нас
+  // или null от первой записи. Перезагрузка идемпотентна в обоих случаях.
+  location.reload();
+});
+
 document.addEventListener('DOMContentLoaded', () => setTimeout(loadCategories, 150));
 
 // Загрузка категорий с сервера
@@ -192,6 +229,51 @@ async function loadCategories() {
       });
     }
 
+    // Восстановить визуальное состояние выбранной категории из URL.
+    // Без этого после reload чип «📂 …» отрисуется по slug, но активная
+    // кнопка в сайдбаре и breadcrumb не подсветятся.
+    if (typeof currentFilters !== 'undefined' && currentFilters.category && listEl) {
+      const slug = currentFilters.category;
+      let parentSlug = null, parentName = null, name = slug;
+      let sub = null, parent = null;
+      for (const cat of cats) {
+        if (cat.slug === slug) { parent = cat; name = cat.name; break; }
+        if (cat.children) {
+          const ch = cat.children.find(c => c.slug === slug);
+          if (ch) { sub = ch; parent = cat; parentSlug = cat.slug; parentName = cat.name; name = ch.name; break; }
+        }
+      }
+      if (parent || sub) {
+        document.querySelectorAll('.fs-cat-item,.fs-sub-item').forEach(b => b.classList.remove('active'));
+        const sel = listEl.querySelector(
+          sub ? `.fs-sub-item[data-slug="${CSS.escape(slug)}"]`
+              : `.fs-cat-item[data-slug="${CSS.escape(slug)}"]`
+        );
+        if (sel) sel.classList.add('active');
+        const containerSlug = parentSlug || slug;
+        const subs = document.getElementById(`subs-${containerSlug}`);
+        if (subs) subs.style.display = 'block';
+        currentFilters.categoryName = name;
+        currentFilters.categoryParentSlug = parentSlug;
+        currentFilters.categoryParentName = parentName;
+        currentFilters.categoryLabel = parentName ? `${parentName} → ${name}` : name;
+      } else {
+        // Slug из URL не найден в каталоге (категория удалена / переименована).
+        // Сбрасываем фильтр, иначе сервер ответит пустым результатом, а чип
+        // будет залипать со slug'ом, не имеющим смысла для пользователя.
+        currentFilters.category = '';
+        currentFilters.categoryName = '';
+        currentFilters.categoryParentSlug = null;
+        currentFilters.categoryParentName = null;
+        currentFilters.categoryLabel = '';
+        if (typeof showToast === 'function') {
+          showToast('Категория не найдена', 'Фильтр по категории сброшен.', 'warn');
+        }
+      }
+      if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
+      if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
+    }
+
     // Двухшаговый пикер категорий в форме создания
     window._catsData = cats; // кэшируем для sub-select
     const parentSel = document.getElementById('auctionCategoryParent');
@@ -201,7 +283,7 @@ async function loadCategories() {
         const opt = document.createElement('option');
         opt.value = cat.id;
         opt.dataset.slug = cat.slug;
-        opt.textContent = `${cat.icon} ${cat.name}`;
+        opt.textContent = cat.name;
         parentSel.appendChild(opt);
       });
       parentSel.addEventListener('change', () => {
@@ -211,7 +293,7 @@ async function loadCategories() {
         if (cat && cat.children && cat.children.length) {
           cat.children.forEach(ch => {
             const o = document.createElement('option');
-            o.value = ch.id; o.textContent = `${ch.icon} ${ch.name}`;
+            o.value = ch.id; o.textContent = ch.name;
             subSel.appendChild(o);
           });
           subSel.style.display = 'block';
@@ -284,7 +366,11 @@ window.renderFilterTags = function() {
   if (currentFilters.category) {
     const parentSlug = currentFilters.categoryParentSlug;
     const parentName = currentFilters.categoryParentName;
-    const name       = currentFilters.categoryName;
+    // Имена приходят из loadCategories асинхронно (~150мс задержка после
+    // DOMContentLoaded). До этого либо если slug отсутствует в каталоге,
+    // имя пустое — показываем сам slug как fallback, иначе чип будет
+    // выглядеть пустым «📂 ».
+    const name = currentFilters.categoryName || currentFilters.category;
     let label;
     if (parentSlug && parentName) {
       // Подкатегория — "Одежда → Мужская", клик на "Одежда" переключает на родителя
@@ -294,8 +380,8 @@ window.renderFilterTags = function() {
     }
     tags.push({ label, key: 'category', raw: true });
   }
-  if (currentFilters.minPrice)   tags.push({ label: `от ${currentFilters.minPrice} ₽`, key: 'minPrice' });
-  if (currentFilters.maxPrice)   tags.push({ label: `до ${currentFilters.maxPrice} ₽`, key: 'maxPrice' });
+  if (currentFilters.minPrice)   tags.push({ label: `от ${esc(String(currentFilters.minPrice))} ₽`, key: 'minPrice' });
+  if (currentFilters.maxPrice)   tags.push({ label: `до ${esc(String(currentFilters.maxPrice))} ₽`, key: 'maxPrice' });
   if (currentFilters.createdBy)  tags.push({ label: `@${esc(currentFilters.createdBy)}`, key: 'createdBy' });
   if (currentFilters.auctionType) tags.push({
     label: currentFilters.auctionType === 'bin' ? '⚡ BIN' : '🔨 BID', key: 'auctionType'
@@ -467,13 +553,6 @@ document.addEventListener('click', e => {
   if (typeof loadAuctions === 'function') loadAuctions();
 });
 
-// Patch init to sync buttons after user loaded
-const _origInit = window.init;
-window.init = async function() {
-  if (typeof _origInit === 'function') await _origInit();
-  syncCreateBtns();
-};
-
 /* Advanced filter panel open class handler */
 document.addEventListener('DOMContentLoaded', () => {
   const adv = document.getElementById('advancedFilters');
@@ -571,11 +650,56 @@ document.addEventListener('DOMContentLoaded', () => {
             if (p.get('category')) {
                 currentFilters.category = p.get('category');
             }
+            const minP = p.get('min_price');
+            if (minP) {
+                currentFilters.minPrice = minP;
+                const inp = document.getElementById('minPrice');
+                if (inp) inp.value = minP;
+            }
+            const maxP = p.get('max_price');
+            if (maxP) {
+                currentFilters.maxPrice = maxP;
+                const inp = document.getElementById('maxPrice');
+                if (inp) inp.value = maxP;
+            }
+            const at = p.get('auction_type');
+            if (at === 'bid' || at === 'bin') {
+                currentFilters.auctionType = at;
+                const box = document.getElementById(at === 'bid' ? 'filterBid' : 'filterBin');
+                if (box) box.checked = true;
+            }
+            const sb = p.get('sort_by');
+            if (sb === 'time' || sb === 'price_asc' || sb === 'price_desc') {
+                currentFilters.sortBy = sb;
+                const sel = document.getElementById('sortFilter');
+                if (sel) sel.value = sb;
+                // обновить декоративный dropdown — селект + лейбл
+                document.querySelectorAll('.fs-dd-opt').forEach(o => {
+                    const isSel = o.dataset.value === sb;
+                    o.classList.toggle('is-selected', isSel);
+                    o.setAttribute('aria-selected', isSel ? 'true' : 'false');
+                    if (isSel) {
+                        const labelEl = o.querySelector('.fs-dd-opt-label');
+                        const ddCurrent = o.closest('.fs-dropdown')?.querySelector('.fs-dd-current');
+                        if (labelEl && ddCurrent) ddCurrent.textContent = labelEl.textContent;
+                    }
+                });
+            }
+            const pg = parseInt(p.get('page') || '', 10);
+            if (Number.isFinite(pg) && pg > 1) currentFilters.page = pg;
             // Если в URL есть фильтры — пользователь пришёл из ссылки
             // «Все лоты» / «Все завершённые». После первой загрузки лотов
             // плавно прокручиваем к началу списка.
-            window._scrollToLotsOnLoad =
-                !!(p.get('created_by') || p.get('status') || p.get('search') || p.get('category'));
+            const hasUrlFilters = !!(
+                p.get('created_by') || p.get('status') || p.get('search') || p.get('category')
+                || p.get('min_price') || p.get('max_price') || p.get('auction_type')
+                || p.get('sort_by') || p.get('page')
+            );
+            window._scrollToLotsOnLoad = hasUrlFilters || !!p.get('scroll');
+            // URL — авторитетный источник фильтров: запретить позже
+            // loadFiltersFromStorage перезаписывать значения из localStorage,
+            // иначе расшаренная ссылка перестанет восстанавливаться один-в-один.
+            window._filtersFromUrl = hasUrlFilters;
         })();
 
         // ===== Multi-image upload =====
@@ -663,6 +787,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function loadFiltersFromStorage() {
+            if (window._filtersFromUrl) return;
             try {
                 const raw = localStorage.getItem(FILTERS_KEY);
                 if (!raw) return;
@@ -824,6 +949,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function loadAuctions() {
             const container = document.getElementById('auctionsContainer');
+            // Любой запрос — это и есть «зафиксированные фильтры»: синхронизируем
+            // URL и активные чипы фильтров, чтобы оба индикатора шли в ногу.
+            if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
+            if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
 
             // 1. Fade-out — гарантированно ждём конца анимации
             if (container) {
