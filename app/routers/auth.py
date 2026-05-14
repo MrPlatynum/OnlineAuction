@@ -264,8 +264,14 @@ async def password_reset_confirm(
     fails: the first confirm bumped tv, the second's claim no longer
     matches."""
     user_id, claimed_tv = decode_password_reset_token(data.token)
+    # Row-lock the user so two concurrent confirms with the same token
+    # serialise. Without this, both reads see the original token_version,
+    # both pass the check, both bump tv to N+1, both commit — and the
+    # link is two-shot instead of one-shot.
     user = (
-        await db.execute(select(User).where(User.id == user_id))
+        await db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        )
     ).scalar_one_or_none()
     if user is None or claimed_tv != user.token_version:
         # Don't distinguish "user gone" from "token superseded" — both
