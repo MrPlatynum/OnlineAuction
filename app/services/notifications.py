@@ -24,11 +24,11 @@ def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
 
 
 def send_verification_email(user: User) -> None:
-    """Fire-and-forget the post-register verification email. Same
-    pattern as notification emails: scheduled on the loop, strong-ref'd
-    so the GC doesn't kill it mid-send, drained on shutdown via
-    flush_pending_emails. Caller is expected to have committed the
-    User row so its id and current email are stable."""
+    """Post-register verification email. Goes through the durable
+    outbox (``enqueue_email``): the background worker drains the
+    table with retry/backoff and dead-lettering, so app crashes or
+    SMTP outages don't lose mail. Caller is expected to have
+    committed the User row so its id and current email are stable."""
     token = create_email_verify_token(user)
     link = f"{PUBLIC_BASE_URL}/verify-email.html?token={token}"
     html_content = build_verification_email_html(user.username, link)

@@ -201,7 +201,7 @@ async def buy_now(
     if current_user.balance < auction.bin_price:
         raise HTTPException(
             400,
-            f"Недостаточно средств. Нужно ${auction.bin_price:.2f}, у вас ${current_user.balance:.2f}",
+            f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, у вас {current_user.balance:.2f} ₽",
         )
 
     current_user.balance -= auction.bin_price
@@ -229,7 +229,7 @@ async def buy_now(
         await notify_user(
             db, creator, NotificationType.AUCTION_SOLD,
             "✅ Лот куплен по цене BIN",
-            f"{current_user.username} купил «{auction.title}» за ${auction.bin_price:.2f}",
+            f"{current_user.username} купил «{auction.title}» за {auction.bin_price:.2f} ₽",
             auction.id, auction.title, manager,
         )
 

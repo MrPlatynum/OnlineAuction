@@ -212,8 +212,8 @@ class PasswordResetConfirmBody(BaseModel):
 
 # Generic responses kept identical regardless of whether the address
 # corresponds to a registered account — without this, response timing
-# or text could be used to enumerate users (the same protection
-# /register has had since #33).
+# or text could be used to enumerate users (same anti-enumeration
+# guarantee /register makes).
 _GENERIC_REQUEST_RESPONSE = {
     "message": (
         "Если этот email зарегистрирован, мы отправили на него письмо "

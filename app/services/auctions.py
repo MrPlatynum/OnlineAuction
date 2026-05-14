@@ -126,7 +126,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 pending_notifications.append((
                     user, NotificationType.AUCTION_WON,
                     "🎉 Поздравляем! Вы выиграли аукцион!",
-                    f"Вы выиграли лот за ${last_bid.amount:.2f}. Средства списаны с вашего баланса.",
+                    f"Вы выиграли лот за {last_bid.amount:.2f} ₽. Средства списаны с вашего баланса.",
                 ))
             else:
                 pending_notifications.append((
@@ -139,7 +139,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
             pending_notifications.append((
                 creator, NotificationType.AUCTION_SOLD,
                 "💰 Ваш лот продан!",
-                f"Лот продан за ${last_bid.amount:.2f}. Средства зачислены на ваш баланс.",
+                f"Лот продан за {last_bid.amount:.2f} ₽. Средства зачислены на ваш баланс.",
             ))
 
     await db.commit()

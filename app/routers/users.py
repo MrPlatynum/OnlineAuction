@@ -26,7 +26,7 @@ async def update_notification_settings(
     current_user.notify_lost = settings.notify_lost
 
     await db.commit()
-    return {"message": "Settings updated successfully"}
+    return {"message": "Настройки сохранены"}
 
 
 @router.get("/users/{username}")

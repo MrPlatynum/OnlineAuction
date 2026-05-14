@@ -60,7 +60,7 @@ async def mark_notification_read(
 
     notification.is_read = True
     await db.commit()
-    return {"message": "Marked as read"}
+    return {"message": "Уведомление помечено как прочитанное"}
 
 
 @router.post("/mark-all-read")
@@ -77,7 +77,7 @@ async def mark_all_read(
         .values(is_read=True)
     )
     await db.commit()
-    return {"message": "All notifications marked as read"}
+    return {"message": "Все уведомления отмечены как прочитанные"}
 
 
 @router.delete("/{notification_id}")
@@ -100,4 +100,4 @@ async def delete_notification(
 
     await db.delete(notification)
     await db.commit()
-    return {"message": "Notification deleted"}
+    return {"message": "Уведомление удалено"}
