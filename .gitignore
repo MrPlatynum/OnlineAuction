@@ -33,3 +33,4 @@ otchet/
 *.swp
 .DS_Store
 Thumbs.db
+static/email_preview/
