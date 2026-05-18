@@ -113,6 +113,15 @@
           <span class="price-hero-val" id="currentPrice">—</span>
         </div>
         <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">—</span></div>
+        <!-- Owner-only hint: how much actually lands on the seller's
+             balance after the platform takes its cut. Hidden by default,
+             flipped to display:flex from auction.js when the viewer is
+             the lot's creator. -->
+        <div class="seller-payout-hint" id="sellerPayoutHint" style="display:none;">
+          <span class="seller-payout-label">К получению</span>
+          <span class="seller-payout-val" id="sellerPayoutVal">—</span>
+          <span class="seller-payout-note" id="sellerPayoutNote">после комиссии</span>
+        </div>
 
         <div class="timer-row" id="timerRow">
           <span class="timer-pulse"></span>

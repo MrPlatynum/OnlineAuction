@@ -286,6 +286,27 @@
   margin-bottom: 16px;
 }
 
+/* Owner-only "net payout" hint under price-hero. Sits in the same
+   12-px metadata row as price-start, but visually grouped by an accent-
+   tinted background so the seller doesn't confuse it with a buyer-side
+   stat. Hidden by default — auction.js flips display:flex when the
+   viewer owns the lot. */
+.seller-payout-hint {
+  display: none;
+  align-items: baseline;
+  gap: 6px;
+  margin: -8px 0 16px;
+  padding: 6px 10px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 12px;
+  width: fit-content;
+}
+.seller-payout-label { color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; font-size: 10px; }
+.seller-payout-val   { color: var(--accent); font-weight: 700; font-size: 14px; }
+.seller-payout-note  { color: var(--text-3); font-size: 11px; }
+
 @keyframes price-flash {
   0%   { color: var(--accent-2); transform: scale(1.06); }
   100% { color: var(--text-1); transform: scale(1); }

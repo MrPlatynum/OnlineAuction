@@ -67,6 +67,30 @@ window.addEventListener('popstate', () => {
 
 document.addEventListener('DOMContentLoaded', () => setTimeout(loadCategories, 150));
 
+// Fetch the live platform constants and reflect the seller commission
+// in the hero strip. Falls back silently to the hard-coded "7%" already
+// in the HTML if the endpoint is unreachable — the page must not break
+// because a marketing badge couldn't update.
+document.addEventListener('DOMContentLoaded', async () => {
+  const el = document.getElementById('statCommission');
+  if (!el) return;
+  try {
+    const r = await fetch(`${API_URL}/api/platform`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (typeof data.commission_percent === 'number') {
+      // Integer percent looks better in the marketing strip; the
+      // backend stores Decimal so we render whatever it ships.
+      const pct = Number.isInteger(data.commission_percent)
+        ? data.commission_percent
+        : data.commission_percent.toFixed(1);
+      el.textContent = `${pct}%`;
+    }
+  } catch {
+    /* keep the hard-coded fallback */
+  }
+});
+
 // Загрузка категорий с сервера
 // ===== Search History =====
 const SEARCH_HISTORY_KEY = 'auction_search_history';

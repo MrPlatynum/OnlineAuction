@@ -753,11 +753,12 @@ function syncSettingsAvatar(src) {
 let txPage = 1, txHasMore = false;
 
 const TX_META = {
-  deposit:      { icon: '💳', label: 'Пополнение',       plus: true  },
-  withdrawal:   { icon: '🏦', label: 'Вывод средств',    plus: false },
-  bid_win:      { icon: '🏆', label: 'Победа в аукционе',plus: false },
-  auction_sale: { icon: '✅', label: 'Продажа лота',     plus: true  },
-  bin_purchase: { icon: '⚡', label: 'Покупка BIN',      plus: false },
+  deposit:      { icon: '💳', label: 'Пополнение',         plus: true  },
+  withdrawal:   { icon: '🏦', label: 'Вывод средств',      plus: false },
+  bid_win:      { icon: '🏆', label: 'Победа в аукционе',  plus: false },
+  auction_sale: { icon: '✅', label: 'Продажа лота',       plus: true  },
+  bin_purchase: { icon: '⚡', label: 'Покупка BIN',        plus: false },
+  commission:   { icon: '🧾', label: 'Комиссия платформы', plus: false },
 };
 
 function updateBalanceDisplay(val) {

@@ -1,5 +1,11 @@
 import asyncio
 
+from sqlalchemy import select
+
+from app import database as _db_module
+from app.models import Auction
+from app.utils.time import utcnow
+
 
 async def test_deposit_increases_balance(client, registered_user):
     response = await client.post(
@@ -60,8 +66,11 @@ async def test_buy_now_completes_auction_and_transfers_funds(
 
     buyer = (await client.get("/api/me", headers=second_user["headers"])).json()
     seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
+    # Buyer pays the full BIN price (400 ₽). Seller receives the gross
+    # 400 ₽ minus 7% platform commission = 372 ₽ net. Starting balance
+    # is 1000 ₽ on both sides.
     assert buyer["balance"] == 600.0
-    assert seller["balance"] == 1400.0
+    assert seller["balance"] == 1372.0
 
 
 async def test_buy_now_own_lot_rejected(client, registered_user):
@@ -181,8 +190,9 @@ async def test_concurrent_buy_now_only_one_succeeds(
     assert statuses == [200, 400], (r_a.text, r_b.text)
 
     seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
-    # Seller starts at 1000, credited exactly once (+400), not twice.
-    assert seller["balance"] == 1400.0
+    # Seller starts at 1000, credited exactly once (+400 gross, −28
+    # commission at 7% = +372 net), not twice.
+    assert seller["balance"] == 1372.0
 
 
 async def test_deposit_beyond_max_balance_rejected(client, registered_user):
@@ -259,3 +269,102 @@ async def test_transactions_pagination(client, registered_user):
 async def test_transactions_requires_auth(client):
     r = await client.get("/api/transactions")
     assert r.status_code == 401
+
+
+# -- Platform commission (seller side) -- ------------------------------------
+
+async def test_bin_purchase_writes_commission_row(client, registered_user, second_user):
+    """A settled BIN sale writes three transactions: bin_purchase on the
+    buyer, auction_sale on the seller (gross), and commission on the
+    seller (the 7% platform cut). The seller's last two rows must sum
+    to the net payout (sale price × 0.93)."""
+    auction = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Comm BIN",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": 1000.0,
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    r = await client.post(
+        f"/api/auctions/{auction['id']}/buy-now",
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 200
+
+    seller_tx = (
+        await client.get("/api/transactions", headers=registered_user["headers"])
+    ).json()
+    types = [t["type"] for t in seller_tx["items"][:2]]
+    # Newest first — commission is the second move on the seller side.
+    assert types == ["commission", "auction_sale"]
+    commission_row = seller_tx["items"][0]
+    sale_row = seller_tx["items"][1]
+    assert commission_row["amount"] == 70.0     # 7% of 1000
+    assert sale_row["amount"] == 1000.0
+    assert sale_row["balance_after"] == 2000.0  # 1000 starting + 1000 gross
+    assert commission_row["balance_after"] == 1930.0  # − 70 commission
+
+
+async def test_completed_auction_writes_commission_row(
+    client, registered_user, second_user
+):
+    """Same as the BIN path but for the bid-auction settle path
+    (complete_auction in app/services/auctions.py). The 7% deduction
+    applies to the winning bid amount."""
+    from datetime import timedelta
+
+    from app.services.auctions import complete_auction
+
+    auction = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Comm auction",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 500.0},
+        headers=second_user["headers"],
+    )
+
+    # Force end_time into the past, then drive settle directly. Avoids
+    # waiting on the real scheduler tick.
+    async with _db_module.SessionLocal() as db:
+        auc = (
+            await db.execute(select(Auction).where(Auction.id == auction["id"]))
+        ).scalar_one()
+        auc.end_time = utcnow() - timedelta(seconds=5)
+        await db.commit()
+    async with _db_module.SessionLocal() as db:
+        await complete_auction(auction["id"], db)
+
+    seller_tx = (
+        await client.get("/api/transactions", headers=registered_user["headers"])
+    ).json()
+    types = [t["type"] for t in seller_tx["items"][:2]]
+    assert types == ["commission", "auction_sale"]
+    assert seller_tx["items"][0]["amount"] == 35.0      # 7% of 500
+    assert seller_tx["items"][1]["amount"] == 500.0
+
+
+async def test_platform_endpoint_exposes_commission_rate(client):
+    """The home page's hero strip and the auction page's owner-only
+    payout hint both fetch /api/platform on load. The value must be
+    a number so the JS Math doesn't blow up."""
+    r = await client.get("/api/platform")
+    assert r.status_code == 200
+    body = r.json()
+    assert isinstance(body["commission_percent"], (int, float))
+    assert body["commission_percent"] > 0

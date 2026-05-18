@@ -368,7 +368,9 @@ async def test_late_bid_past_end_time_defers_to_scheduler(
     bidder = (await client.get("/api/me", headers=second_user["headers"])).json()
     seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
     assert bidder["balance"] == 1000.0 - 250.0
-    assert seller["balance"] == 1000.0 + 250.0
+    # Seller settles gross 250 ₽ → 7% commission (17.50 ₽) deducted
+    # → net 232.50 ₽ on top of the starting 1000 ₽.
+    assert seller["balance"] == 1232.50
 
 
 async def test_delete_own_empty_auction_succeeds(client, registered_user):

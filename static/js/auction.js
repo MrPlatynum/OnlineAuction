@@ -444,7 +444,37 @@
       $('editLotBtn').style.display='inline-flex';
       if (new URLSearchParams(location.search).get('edit')==='1') setTimeout(()=>openEditModal(),300);
     }
+    if (me && a.created_by === me.id && a.is_active) {
+      // Owner sees the post-commission net so a "10 000 ₽" bid doesn't
+      // surprise them with a 9 300 ₽ payout. Fire-and-forget — if the
+      // /api/platform fetch fails the hint stays hidden, no UX harm.
+      renderSellerPayoutHint(a);
+    }
     tick(); await loadBids(); connectWS();
+  }
+
+  // Owner-only payout preview. Reads the live platform commission, picks
+  // BIN price for BIN lots and current_price for bid lots (whichever is
+  // what the seller will actually receive on settle), formats with the
+  // page-wide fmtMoney helper.
+  async function renderSellerPayoutHint(a) {
+    const hint = $('sellerPayoutHint');
+    if (!hint) return;
+    let pct = 7;
+    try {
+      const r = await fetch(`${API}/api/platform`);
+      if (r.ok) {
+        const data = await r.json();
+        if (typeof data.commission_percent === 'number') pct = data.commission_percent;
+      }
+    } catch { /* fall back to 7% */ }
+    const isBin = a.auction_type === 'bin' && a.bin_price;
+    const gross = Number(isBin ? a.bin_price : a.current_price) || 0;
+    const net = gross * (1 - pct / 100);
+    $('sellerPayoutVal').textContent = fmtMoney(net);
+    const pctLabel = Number.isInteger(pct) ? pct : pct.toFixed(1);
+    $('sellerPayoutNote').textContent = `после комиссии ${pctLabel}%`;
+    hint.style.display = 'flex';
   }
 
   // ---- Seller + Reviews ----
