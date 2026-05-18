@@ -244,3 +244,18 @@ async def test_register_concurrent_duplicate_returns_400_not_500(client):
     )
     statuses = sorted([r_a.status_code, r_b.status_code])
     assert statuses == [200, 400], (r_a.text, r_b.text)
+
+
+async def test_change_password_with_wrong_current_rejected(client, registered_user):
+    """Covers the ``verify_password`` failure branch in /change-password
+    (auth.py:196-197). Without this, the suite only exercises the
+    success path."""
+    r = await client.put(
+        "/api/change-password",
+        json={
+            "current_password": "definitely-not-my-password",
+            "new_password": "anything-new",
+        },
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400

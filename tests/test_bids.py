@@ -309,3 +309,71 @@ async def test_concurrent_same_user_bids_on_same_auction(
 
     refreshed = (await client.get(f"/api/auctions/{auction['id']}")).json()
     assert refreshed["bids_count"] == 1
+
+
+# -- GET /api/auctions/{id}/bids (bid history) -- ----------------------------
+
+async def test_bid_history_empty_returns_empty_list(client, registered_user):
+    auction = await _create_auction(client, registered_user["headers"])
+    r = await client.get(f"/api/auctions/{auction['id']}/bids")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["items"] == []
+    assert body["total"] == 0
+
+
+async def test_bid_history_lists_bids_in_reverse_order(client, registered_user, second_user, third_user):
+    auction = await _create_auction(client, registered_user["headers"])
+    await client.post("/api/deposit", json={"amount": 500.0}, headers=second_user["headers"])
+    await client.post("/api/deposit", json={"amount": 500.0}, headers=third_user["headers"])
+    await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 200.0},
+        headers=third_user["headers"],
+    )
+
+    r = await client.get(f"/api/auctions/{auction['id']}/bids")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 2
+    # Newest first.
+    assert body["items"][0]["amount"] == 200.0
+    assert body["items"][1]["amount"] == 150.0
+    # Username carried through the selectinload join.
+    usernames = {b["username"] for b in body["items"]}
+    assert usernames == {"bob", "carol"}
+
+
+async def test_bid_history_pagination(
+    client, registered_user, second_user, third_user
+):
+    # Need >= 2 distinct bidders — a user who is already the leader
+    # can't outbid themselves, so a single bidder yields exactly one
+    # bid no matter how many POSTs we do.
+    auction = await _create_auction(client, registered_user["headers"])
+    await client.post(
+        "/api/deposit", json={"amount": 500.0}, headers=second_user["headers"]
+    )
+    await client.post(
+        "/api/deposit", json={"amount": 500.0}, headers=third_user["headers"]
+    )
+    amount = 125.0
+    bidders = [second_user, third_user, second_user]
+    for bidder in bidders:
+        r = await client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": amount},
+            headers=bidder["headers"],
+        )
+        assert r.status_code == 200, r.text
+        amount += 25.0
+    r = await client.get(f"/api/auctions/{auction['id']}/bids?page=1&page_size=2")
+    body = r.json()
+    assert body["total"] == 3
+    assert body["total_pages"] == 2
+    assert len(body["items"]) == 2
