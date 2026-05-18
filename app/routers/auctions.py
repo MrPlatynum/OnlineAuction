@@ -1,3 +1,11 @@
+"""Auction CRUD + the seller-side flows around a single lot.
+
+Owns the lifecycle endpoints (create, update, delete, list, fetch one),
+the BIN ``/buy-now`` settle path, and the personal-history aggregations
+(``/my/participation``). Bid placement lives in ``bids.py``; money-only
+mutations on the user balance live in ``balance.py``.
+"""
+
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -36,6 +44,21 @@ from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auctions"])
+
+
+def _empty_auctions_page(page: int, page_size: int) -> "PaginatedAuctionsResponse":
+    """Empty listing response used by ``get_auctions`` when a filter
+    references a value that doesn't exist (unknown ``created_by``
+    username, unknown ``category`` slug). Lets the handler short-
+    circuit instead of building a query that's guaranteed to return
+    nothing — saves the COUNT and the eager-load round trips."""
+    return PaginatedAuctionsResponse(
+        items=[],
+        total=0,
+        page=page,
+        page_size=page_size,
+        total_pages=0,
+    )
 
 
 def _time_remaining(auction: Auction) -> int:
@@ -308,31 +331,27 @@ async def get_auctions(
         creator_user = (
             await db.execute(select(User).where(User.username == created_by))
         ).scalar_one_or_none()
-        if creator_user:
-            query = query.where(Auction.created_by == creator_user.id)
-        else:
-            query = query.where(Auction.id == -1)
+        if creator_user is None:
+            return _empty_auctions_page(page, page_size)
+        query = query.where(Auction.created_by == creator_user.id)
 
     if category:
         cat_obj = (
             await db.execute(select(Category).where(Category.slug == category))
         ).scalar_one_or_none()
-        if cat_obj:
-            cat_ids = [cat_obj.id]
-            children = (
-                await db.execute(
-                    select(Category).where(Category.parent_id == cat_obj.id)
-                )
-            ).scalars().all()
-            cat_ids += [c.id for c in children]
-            query = query.where(Auction.category_id.in_(cat_ids))
-        else:
-            query = query.where(Auction.id == -1)
+        if cat_obj is None:
+            return _empty_auctions_page(page, page_size)
+        cat_ids = [cat_obj.id]
+        children = (
+            await db.execute(
+                select(Category).where(Category.parent_id == cat_obj.id)
+            )
+        ).scalars().all()
+        cat_ids += [c.id for c in children]
+        query = query.where(Auction.category_id.in_(cat_ids))
 
-    if auction_type == "bid":
-        query = query.where(Auction.auction_type == "bid")
-    elif auction_type == "bin":
-        query = query.where(Auction.auction_type == "bin")
+    if auction_type in {"bid", "bin"}:
+        query = query.where(Auction.auction_type == auction_type)
 
     total = await db.scalar(
         select(func.count()).select_from(query.subquery())

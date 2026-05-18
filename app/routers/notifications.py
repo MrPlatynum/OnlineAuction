@@ -1,3 +1,10 @@
+"""In-app notification feed.
+
+Lists the user's notifications, exposes an unread counter for the nav
+bell badge, and toggles read/unread state. Delivery (in-app + WS +
+email) happens in ``services.notifications.notify_user`` — this router
+only owns the recipient-side read API.
+"""
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update

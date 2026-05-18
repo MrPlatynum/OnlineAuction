@@ -1,3 +1,13 @@
+"""Real-time WebSocket endpoints.
+
+Two channels: ``/ws/auction/{id}`` is anonymous and broadcasts new
+bids + the auction-end event (capped at 20 concurrent sockets per
+source IP to keep one client from exhausting the bucket);
+``/ws/notifications/{user_id}`` is token-gated and delivers per-user
+events to every open tab. Both share the connection registry in
+``services.websocket_manager``.
+"""
+
 import asyncio
 import logging
 import time

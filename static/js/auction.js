@@ -490,6 +490,12 @@
     // Ссылка на все отзывы продавца
     const allLink=$('allReviewsLink');
     if(allLink){allLink.href=`user.html?username=${encodeURIComponent(username)}`;allLink.style.display='inline';}
+    // Three independent fetches: seller profile, seller reviews,
+    // current-user subscription state. Each is wrapped in a swallowing
+    // try/catch — if one of the side panels fails to load, the rest
+    // of the auction page still works. The user just sees the panel
+    // empty rather than the whole page blowing up with an unhandled
+    // promise rejection.
     try {
       const r=await fetch(`${API}/api/users/${encodeURIComponent(username)}`);
       if (r.ok) {

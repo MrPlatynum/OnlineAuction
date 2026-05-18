@@ -93,6 +93,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Загрузка категорий с сервера
 // ===== Search History =====
+// localStorage can throw on every access in private-browsing mode
+// (Safari) and when the user has disabled site data — search history
+// is a nice-to-have, never let it break the page. Each access below
+// is wrapped in try/catch that intentionally swallows; the function
+// returns an empty array / no-ops so callers don't need to branch.
 const SEARCH_HISTORY_KEY = 'auction_search_history';
 const SEARCH_HISTORY_MAX = 8;
 

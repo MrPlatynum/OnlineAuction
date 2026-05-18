@@ -1,3 +1,12 @@
+"""SMTP send + HTML body builders for every transactional email.
+
+Templates are pure f-strings — no Jinja, no per-render IO — so the
+outbox worker can render and ship a body without touching disk. Every
+user-controlled field is escaped through ``html.escape`` before
+interpolation; a lot title like ``<img src=x onerror=...>`` would
+otherwise render as live HTML in the recipient's mail client.
+"""
+
 import html
 import logging
 from datetime import datetime

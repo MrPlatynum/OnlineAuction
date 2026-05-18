@@ -26,9 +26,9 @@ _PIL_FORMAT_TO_META: dict[str, tuple[str, str]] = {
 }
 
 
-def validate_and_normalise_image(data: bytes) -> tuple[bytes, str, str]:
-    """Verify *data* decodes as one of the allowed image formats and
-    return ``(sanitised_bytes, content_type, extension)``.
+def validate_and_normalise_image(image_bytes: bytes) -> tuple[bytes, str, str]:
+    """Verify *image_bytes* decodes as one of the allowed image formats
+    and return ``(sanitised_bytes, content_type, extension)``.
 
     ``Image.verify()`` parses the file enough to confirm it isn't a
     payload disguised behind a valid magic-byte prefix; the second
@@ -36,7 +36,7 @@ def validate_and_normalise_image(data: bytes) -> tuple[bytes, str, str]:
     attacker can't smuggle data through them.
     """
     try:
-        with Image.open(io.BytesIO(data)) as probe:
+        with Image.open(io.BytesIO(image_bytes)) as probe:
             probe.verify()
     except Image.DecompressionBombError:
         # Pixel count exceeds Image.MAX_IMAGE_PIXELS — decompression-bomb
@@ -47,7 +47,7 @@ def validate_and_normalise_image(data: bytes) -> tuple[bytes, str, str]:
 
     # ``verify()`` consumes the stream — re-open for the actual encode.
     try:
-        img = Image.open(io.BytesIO(data))
+        img = Image.open(io.BytesIO(image_bytes))
     except Image.DecompressionBombError:
         raise HTTPException(status_code=400, detail="Image is too large to decode") from None
     fmt = img.format
