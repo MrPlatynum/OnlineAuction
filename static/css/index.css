@@ -1130,14 +1130,65 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 /* ================================================================
    RESPONSIVE
    ================================================================ */
+/* "Filters" trigger button — desktop hides it (sidebar is always
+   visible there), mobile shows it as the only entry into the filter
+   drawer. Lives in the page-header, after the title block. */
+.filter-toggle {
+  display: none;
+  align-items: center; gap: 8px;
+  padding: 8px 14px; height: 38px;
+  background: var(--bg-3); color: var(--text-1);
+  border: 1px solid var(--border); border-radius: 10px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.filter-toggle:hover { border-color: var(--border-hi); }
+.filter-toggle svg { width: 14px; height: 14px; }
+.filter-toggle .badge {
+  display: none;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  background: var(--accent); color: #000;
+  border-radius: 9px; font-size: 11px; font-weight: 700;
+  align-items: center; justify-content: center;
+}
+.filter-toggle.has-active .badge { display: inline-flex; }
+
+/* Drawer close-button + handle — only visible inside the mobile
+   drawer. The handle sits in a sticky header at the top of the
+   scrollable sidebar so the user can dismiss without scrolling. */
+.filter-sidebar .fs-drawer-head {
+  display: none;
+  position: sticky; top: 0; z-index: 2;
+  align-items: center; justify-content: space-between;
+  padding: 4px 4px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  margin: -16px -16px 12px;
+  padding: 14px 16px;
+}
+.filter-sidebar .fs-drawer-title { font-size: 16px; font-weight: 700; color: var(--text-1); }
+.filter-sidebar .fs-drawer-close {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  background: none; border: none; color: var(--text-2);
+  border-radius: 8px; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.filter-sidebar .fs-drawer-close:hover { background: var(--bg-3); color: var(--text-1); }
+
+/* Backdrop behind the open drawer — taps anywhere on it dismiss. */
+.filter-backdrop {
+  position: fixed; inset: 0; z-index: 99;
+  background: rgba(0,0,0,.55);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+}
+.filter-backdrop.is-visible { opacity: 1; pointer-events: auto; }
+
 @media (max-width: 900px) {
   .page-layout { flex-direction: column; padding: 16px 16px 48px; }
-  .filter-sidebar { width: 100%; position: static; flex-direction: row; flex-wrap: wrap; gap: 8px; padding: 12px; }
-  .fs-section { padding: 6px 8px; border-bottom: none; border-right: 1px solid var(--border); }
-  .fs-section:last-child { border-right: none; }
-  .filter-sidebar .fs-actions { display: flex; gap: 6px; padding-top: 0; }
-  .filter-sidebar .fs-actions .btn { width: auto; }
 }
+
 @media (max-width: 768px) {
   .nav-links { display: none; }
   .nav-hamburger { display: flex; }
@@ -1147,12 +1198,40 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
   .fab { display: flex; }
   #createBtn { display: none !important; }
   .auctions-grid { grid-template-columns: 1fr 1fr; }
-  .filter-sidebar { flex-direction: column; }
-  .fs-section { border-right: none; border-bottom: 1px solid var(--border); }
+
+  /* Mobile: filter trigger appears, sidebar becomes off-canvas drawer.
+     Without is-open it sits off-screen left; with is-open it slides
+     into view above the page content. Width caps at 86vw / 340px so
+     part of the page stays visible behind the dim backdrop, signalling
+     that this is a transient overlay, not a navigation. */
+  .filter-toggle { display: inline-flex; }
+  .filter-sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: min(86vw, 340px);
+    max-height: 100vh;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid var(--border);
+    z-index: 100;
+    padding: 16px;
+  }
+  .filter-sidebar.is-open { transform: translateX(0); }
+  .filter-sidebar .fs-drawer-head { display: flex; }
+
+  /* Page content owns the full row when sidebar is off-canvas. */
+  .page-content { width: 100%; }
 }
 @media (max-width: 480px) {
   .auctions-grid { grid-template-columns: 1fr; }
 }
+
+/* iOS body-scroll-lock companion class — JS adds it on <body> when
+   the drawer opens so the page beneath doesn't scroll while the user
+   pans inside the filters. */
+body.no-scroll { overflow: hidden; touch-action: none; }
 
 /* Mobile nav drawer */
 .mobile-nav {
