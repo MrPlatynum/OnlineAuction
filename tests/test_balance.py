@@ -212,3 +212,50 @@ async def test_deposit_beyond_max_balance_rejected(client, registered_user):
     )
     assert r.status_code == 400
     assert "Максимальный" in r.json()["detail"] or "макс" in r.json()["detail"].lower()
+
+
+# -- GET /api/transactions -- ------------------------------------------------
+
+async def test_transactions_returns_deposit_record(client, registered_user):
+    # Registration grants a starting balance; capture it so assertions
+    # hold whether or not that grant writes a sibling Transaction row.
+    starting_balance = registered_user["user"]["balance"]
+    await client.post(
+        "/api/deposit", json={"amount": 100.0}, headers=registered_user["headers"]
+    )
+    r = await client.get("/api/transactions", headers=registered_user["headers"])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["balance"] == starting_balance + 100.0
+    assert body["page"] == 1
+    # Newest first — the deposit we just made is item 0 regardless of
+    # any starting-balance grant.
+    deposit_txn = body["items"][0]
+    assert deposit_txn["type"] == "deposit"
+    assert deposit_txn["amount"] == 100.0
+    assert deposit_txn["balance_after"] == starting_balance + 100.0
+    assert "created_at" in deposit_txn
+
+
+async def test_transactions_pagination(client, registered_user):
+    # Five fresh deposits — we assert on the page size, not on absolute
+    # ``total``, because a starting-balance grant may or may not seed a
+    # Transaction row depending on registration logic.
+    for amount in (10.0, 20.0, 30.0, 40.0, 50.0):
+        await client.post(
+            "/api/deposit",
+            json={"amount": amount},
+            headers=registered_user["headers"],
+        )
+    r = await client.get(
+        "/api/transactions?page=1&page_size=2",
+        headers=registered_user["headers"],
+    )
+    body = r.json()
+    assert body["total"] >= 5
+    assert len(body["items"]) == 2
+
+
+async def test_transactions_requires_auth(client):
+    r = await client.get("/api/transactions")
+    assert r.status_code == 401

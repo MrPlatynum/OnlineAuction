@@ -444,3 +444,210 @@ async def test_delete_unauthenticated_rejected(client, registered_user):
     )
     r = await client.delete(f"/api/auctions/{create.json()['id']}")
     assert r.status_code == 401
+
+
+# -- Listing filters -- ------------------------------------------------------
+
+async def test_list_filter_by_search_matches_title(client, registered_user):
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Vintage camera", description="..."),
+        headers=registered_user["headers"],
+    )
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Office chair", description="..."),
+        headers=registered_user["headers"],
+    )
+    r = await client.get("/api/auctions?search=camera")
+    body = r.json()
+    titles = [a["title"] for a in body["items"]]
+    assert "Vintage camera" in titles
+    assert "Office chair" not in titles
+
+
+async def test_list_filter_by_created_by_username(client, registered_user, second_user):
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Alice lot"),
+        headers=registered_user["headers"],
+    )
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Bob lot"),
+        headers=second_user["headers"],
+    )
+    r = await client.get(
+        f"/api/auctions?created_by={registered_user['user']['username']}"
+    )
+    body = r.json()
+    assert {a["title"] for a in body["items"]} == {"Alice lot"}
+
+
+async def test_list_filter_by_created_by_unknown_user_returns_empty(client):
+    r = await client.get("/api/auctions?created_by=ghost_user_404")
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+async def test_list_filter_by_category_includes_children(client, registered_user):
+    # "electronics" is a seeded parent slug, "phones" is one of its
+    # children — see app/services/seed_data.py. A filter on the parent
+    # must include lots placed under its children.
+    cats = (await client.get("/api/categories")).json()
+    parent = next(c for c in cats if c["slug"] == "electronics")
+    child = next(c for c in parent["children"] if c["slug"] == "phones")
+
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Phone lot", category_id=child["id"]),
+        headers=registered_user["headers"],
+    )
+    r = await client.get("/api/auctions?category=electronics")
+    titles = [a["title"] for a in r.json()["items"]]
+    assert "Phone lot" in titles
+
+
+async def test_list_filter_by_unknown_category_returns_empty(client):
+    r = await client.get("/api/auctions?category=no-such-category")
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+async def test_list_filter_by_auction_type_bin(client, registered_user):
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Bid lot"),
+        headers=registered_user["headers"],
+    )
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(
+            title="BIN lot",
+            auction_type="bin",
+            bin_price=500.0,
+        ),
+        headers=registered_user["headers"],
+    )
+    r = await client.get("/api/auctions?auction_type=bin")
+    titles = {a["title"] for a in r.json()["items"]}
+    assert titles == {"BIN lot"}
+
+
+async def test_list_filter_by_min_max_price(client, registered_user):
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Cheap", starting_price=50.0),
+        headers=registered_user["headers"],
+    )
+    await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Pricey", starting_price=5000.0),
+        headers=registered_user["headers"],
+    )
+    r = await client.get("/api/auctions?min_price=100&max_price=1000")
+    titles = {a["title"] for a in r.json()["items"]}
+    assert titles == set()  # neither lot fits the band
+
+
+async def test_list_status_completed_returns_only_finished(client, registered_user):
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="To be done"),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+    # Force-complete via the model so we don't have to wait on the timer.
+    async with _db_module.SessionLocal() as session:
+        await session.execute(
+            update(Auction)
+            .where(Auction.id == auction_id)
+            .values(is_active=False, is_completed=True)
+        )
+        await session.commit()
+    r = await client.get("/api/auctions?status=completed")
+    assert any(a["id"] == auction_id for a in r.json()["items"])
+
+
+# -- /my/participation -- ----------------------------------------------------
+
+async def test_my_participation_empty_for_new_user(client, registered_user):
+    r = await client.get("/api/my/participation", headers=registered_user["headers"])
+    assert r.status_code == 200
+    body = r.json()
+    assert body["active_bids"] == []
+    assert body["won_auctions"] == []
+    assert body["lost_auctions"] == []
+    assert body["created_auctions"] == []
+
+
+async def test_my_participation_lists_active_bid(client, registered_user, second_user):
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Active lot"),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+
+    await client.post("/api/deposit", json={"amount": 500.0}, headers=second_user["headers"])
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200
+
+    r = await client.get("/api/my/participation", headers=second_user["headers"])
+    assert r.status_code == 200
+    body = r.json()
+    active = body["active_bids"]
+    assert len(active) == 1
+    assert active[0]["title"] == "Active lot"
+    assert active[0]["my_bid"] == 150.0
+    assert active[0]["is_winning"] is True
+
+
+async def test_my_participation_lists_won_and_created(client, registered_user, second_user):
+    create = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(title="Win me"),
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+    await client.post("/api/deposit", json={"amount": 500.0}, headers=second_user["headers"])
+    await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    # Force-finish the auction with second_user as winner.
+    async with _db_module.SessionLocal() as session:
+        await session.execute(
+            update(Auction)
+            .where(Auction.id == auction_id)
+            .values(
+                is_active=False,
+                is_completed=True,
+                winner_id=second_user["user"]["id"],
+            )
+        )
+        await session.commit()
+
+    # Buyer side: won_auctions populated.
+    buyer_view = (
+        await client.get("/api/my/participation", headers=second_user["headers"])
+    ).json()
+    won_titles = [a["title"] for a in buyer_view["won_auctions"]]
+    assert "Win me" in won_titles
+
+    # Seller side: created_auctions populated with the same lot.
+    seller_view = (
+        await client.get("/api/my/participation", headers=registered_user["headers"])
+    ).json()
+    created_titles = [a["title"] for a in seller_view["created_auctions"]]
+    assert "Win me" in created_titles
+
+
+async def test_my_participation_requires_auth(client):
+    r = await client.get("/api/my/participation")
+    assert r.status_code == 401

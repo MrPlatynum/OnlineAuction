@@ -89,3 +89,36 @@ async def test_my_subscriptions_lists_current_seller(client, registered_user, se
     assert len(items) == 1
     assert items[0]["seller_id"] == seller_id
     assert items[0]["username"] == registered_user["user"]["username"]
+
+
+# -- GET /api/sellers/{seller_id}/subscription -- ----------------------------
+
+async def test_subscription_status_returns_false_before_subscribe(
+    client, registered_user, second_user
+):
+    seller_id = registered_user["user"]["id"]
+    r = await client.get(
+        f"/api/sellers/{seller_id}/subscription",
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["subscribed"] is False
+    assert body["subscribers_count"] == 0
+
+
+async def test_subscription_status_returns_true_after_subscribe(
+    client, registered_user, second_user
+):
+    seller_id = registered_user["user"]["id"]
+    await client.post(
+        f"/api/sellers/{seller_id}/subscribe",
+        headers=second_user["headers"],
+    )
+    r = await client.get(
+        f"/api/sellers/{seller_id}/subscription",
+        headers=second_user["headers"],
+    )
+    body = r.json()
+    assert body["subscribed"] is True
+    assert body["subscribers_count"] == 1

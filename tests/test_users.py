@@ -132,3 +132,37 @@ async def test_notify_lost_defaults_true_for_existing_users(client, registered_u
     look — keeps existing /me consumers stable."""
     me = (await client.get("/api/me", headers=registered_user["headers"])).json()
     assert me["notify_lost"] is True
+
+
+async def test_profile_stats_with_bids_counts_lost(client, registered_user, second_user):
+    """Covers the ``if bid_auction_ids:`` branch in the user profile
+    handler — without a user who has placed bids, ``lost_count`` is
+    hard-coded to 0 and the SQL count never runs."""
+    # registered_user creates a lot; second_user bids on it.
+    create = await client.post(
+        "/api/auctions",
+        json={
+            "title": "Lost lot",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )
+    auction_id = create.json()["id"]
+    await client.post(
+        "/api/deposit", json={"amount": 500.0}, headers=second_user["headers"]
+    )
+    await client.post(
+        "/api/bids",
+        json={"auction_id": auction_id, "amount": 150.0},
+        headers=second_user["headers"],
+    )
+
+    r = await client.get(f"/api/users/{second_user['user']['username']}")
+    body = r.json()
+    assert body["stats"]["total_bids"] == 1
+    # Auction is still active → not lost yet, so count stays 0 but the
+    # SQL branch ran.
+    assert body["stats"]["lost_count"] == 0

@@ -193,3 +193,24 @@ async def test_seller_reviews_returns_stats_and_list(
     assert body["stats"]["avg"] == 5.0
     assert body["stats"]["distribution"]["5"] == 1
     assert len(body["reviews"]) == 1
+
+
+async def test_seller_with_no_reviews_returns_empty_stats(client, registered_user):
+    """Empty-list branches: ``reviewers = {}`` (l.59) and
+    ``auctions_map = {}`` (l.68) fire when the seller has no reviews yet.
+    Without this, those else-branches never execute under the test
+    suite."""
+    seller_id = registered_user["user"]["id"]
+    r = await client.get(f"/api/sellers/{seller_id}/reviews")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stats"]["total"] == 0
+    assert body["stats"]["avg"] == 0
+    assert body["reviews"] == []
+
+
+async def test_delete_nonexistent_review_returns_404(client, registered_user):
+    r = await client.delete(
+        "/api/reviews/999999", headers=registered_user["headers"]
+    )
+    assert r.status_code == 404
