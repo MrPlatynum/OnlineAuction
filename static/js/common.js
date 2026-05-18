@@ -307,7 +307,11 @@
           const d = await r.json();
           setCount(d.count ?? 0);
         }
-      } catch {}
+      } catch {
+        // Bell badge is decorative — if the count fetch times out or
+        // the user is offline, keep the current value rather than
+        // surfacing an unhandled rejection.
+      }
     }
 
     async function fetchNotifications() {
@@ -331,7 +335,9 @@
         await window.apiFetch(`${window.API}/api/notifications/mark-all-read`, { method: 'POST' });
         setCount(0);
         await fetchNotifications();
-      } catch {}
+      } catch {
+        // Same story as fetchCount — user can retry by tapping the bell.
+      }
     }
 
     function openDropdown()  { isOpen = true;  dropdown.classList.add('open'); fetchNotifications(); }
@@ -352,6 +358,9 @@
         if (id && item.classList.contains('unread')) {
           item.classList.remove('unread');
           setCount(unreadCount - 1);
+          // Optimistically flip the unread class first — if the POST
+          // fails the worst case is a stale "unread" badge that the
+          // next page load will reconcile against the server.
           try { await window.apiFetch(`${window.API}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
         }
         if (aId) {
@@ -362,6 +371,9 @@
     }
 
     function connectNotifWS(userId) {
+      // Drop any half-open socket from a prior connect attempt. .close()
+      // on a CLOSED/CLOSING socket throws InvalidStateError in some
+      // browsers — irrelevant for the reconnect, swallow.
       if (wsNotif) { try { wsNotif.close(); } catch {} }
       const tk = getToken();
       if (!tk) return;
@@ -377,7 +389,11 @@
             setCount(unreadCount + 1);
             if (isOpen) fetchNotifications();
           }
-        } catch {}
+        } catch {
+          // Server only ever sends JSON; if it doesn't parse, ignore
+          // the frame rather than tearing down the socket — the next
+          // valid frame works fine.
+        }
       };
       wsNotif.onclose = (e) => {
         // Серверные коды отказа — auth-failure (4001), forbidden (4003),
@@ -408,7 +424,10 @@
           currentUserId = me.id;
           if (currentUserId) connectNotifWS(currentUserId);
         }
-      } catch {}
+      } catch {
+        // /me fails → WebSocket stays off. Polling below still keeps
+        // the badge up to date until the user logs in again.
+      }
       setInterval(fetchCount, 60000);
     }
 

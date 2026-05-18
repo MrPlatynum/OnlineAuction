@@ -1,3 +1,11 @@
+"""Seller reviews.
+
+A review is anchored to a settled auction the reviewer participated in —
+either as the winning bidder or as the BIN buyer. The endpoints handle
+creation, deletion by the author, and the seller-side aggregate
+(average + per-rating histogram) consumed by the auction page.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession

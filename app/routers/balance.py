@@ -1,3 +1,9 @@
+"""Money-only operations on the user balance: deposit, withdraw, and
+the paginated transaction ledger. Every mutating endpoint funnels
+through ``services.transactions.add_transaction`` so every ₽-move has
+a matching audit row with ``balance_after``.
+"""
+
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request

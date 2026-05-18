@@ -1,3 +1,12 @@
+"""Public user profile + per-user notification preferences.
+
+The profile endpoint returns the read-only view (lots created, bids
+placed, win/lose counts, the seller's recent listings) consumed by
+``user.html``. The notification-settings endpoint owns the
+``notify_*`` flag toggles that gate email delivery in
+``services.notifications.notify_user``.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession

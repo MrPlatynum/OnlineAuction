@@ -1,3 +1,13 @@
+"""Image upload endpoints for lot photos and user avatars.
+
+Every uploaded byte stream goes through
+``utils.images.validate_and_normalise_image`` first — Pillow ``verify``
+rejects payloads that don't match a real image header, then a re-open +
+save strips EXIF / ICC and re-encodes. The CPU-bound part runs on a
+worker thread so a multi-megabyte file doesn't stall the event loop;
+the disk write uses ``aiofiles`` for the same reason.
+"""
+
 import asyncio
 import logging
 import os

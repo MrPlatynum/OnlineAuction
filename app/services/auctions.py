@@ -1,3 +1,16 @@
+"""Money-and-state side of an auction's lifecycle.
+
+``settle_bin_purchase`` and ``complete_auction`` are the two sinks
+that flip a lot to its terminal state and move funds between the
+buyer, the seller, and the platform commission ledger row. Both run
+inside a row-locked transaction so a duplicate scheduler tick or a
+buy-now / settle race can't double-settle.
+
+The scheduler-side hooks (settle handler, ending-soon handler) are
+wired into ``auction_scheduler`` at import time so the scheduler
+module stays a one-way upstream dependency.
+"""
+
 import logging
 from decimal import ROUND_HALF_UP, Decimal
 

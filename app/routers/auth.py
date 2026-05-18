@@ -1,3 +1,11 @@
+"""Identity and credential flows.
+
+Covers registration, login, the current-user probe (``/me``), the
+post-register email-verification handshake, the password-change and
+password-reset flows, plus the token-version bump that invalidates
+already-issued JWTs after a credential rotation.
+"""
+
 import asyncio
 from datetime import timedelta
 

@@ -1,3 +1,12 @@
+"""Process-local registry of live WebSocket connections.
+
+Tracks anonymous per-auction sockets (``auction_connections``) and
+authenticated per-user sockets (``user_connections``). The shared
+``_fan_out`` loop is the only path that writes to the wire and
+prunes dead sockets in-place — without that pruning the buckets
+grow forever as tabs close without a clean shutdown handshake.
+"""
+
 import logging
 
 from fastapi import WebSocket

@@ -1,3 +1,10 @@
+"""Credential primitives: password hashing, JWT issuance and decode,
+plus the FastAPI dependency that pulls the current user out of an
+incoming Authorization header. New passwords use Argon2id; legacy
+bcrypt hashes (from before the migration) are verified by ``passlib``
+and re-hashed transparently on the next successful login.
+"""
+
 import hashlib
 import secrets
 from datetime import timedelta
@@ -109,11 +116,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return False
 
 
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+def create_access_token(claims: dict) -> str:
+    """Sign a JWT carrying ``claims`` plus a fixed expiry. Callers pass
+    in domain-specific fields (``user_id``, ``tv``, …); this function
+    only adds ``exp`` so the expiry policy stays in one place."""
+    payload = claims.copy()
+    payload["exp"] = utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_user_access_token(user: "User") -> str:

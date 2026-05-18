@@ -1,3 +1,11 @@
+"""Auction CRUD + the seller-side flows around a single lot.
+
+Owns the lifecycle endpoints (create, update, delete, list, fetch one),
+the BIN ``/buy-now`` settle path, and the personal-history aggregations
+(``/my/participation``). Bid placement lives in ``bids.py``; money-only
+mutations on the user balance live in ``balance.py``.
+"""
+
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query

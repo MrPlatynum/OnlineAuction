@@ -1,3 +1,12 @@
+"""Seller subscriptions.
+
+A logged-in user can subscribe to another user's storefront; when the
+seller posts a new lot, ``NEW_LOT`` notifications fan out to every
+subscriber through ``services.notifications``. The endpoints handle
+toggling the subscription, listing the caller's subscriptions, and
+exposing the subscriber count for the seller's public profile.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession

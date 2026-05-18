@@ -1,3 +1,10 @@
+"""Three-channel notification dispatch: in-app row, WebSocket push,
+and email. ``notify_user`` is the single fan-out helper every caller
+goes through — per-user ``notify_*`` flags gate each channel so a
+recipient can mute email without losing in-app history. Email send
+is fire-and-forget via the persistent outbox queue so an SMTP
+hiccup doesn't take down the request that triggered the notify.
+"""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

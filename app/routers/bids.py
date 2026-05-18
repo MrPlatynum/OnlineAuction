@@ -1,3 +1,12 @@
+"""Bid placement and bid-history listing.
+
+``POST /bids`` is the concurrency-critical write path: it takes a
+``SELECT FOR UPDATE`` on the auction row and locks the bidder's user
+row via the sorted-ids helper from ``services.balance`` so two
+simultaneous bids by the same user on different lots can't both pass
+the available-balance check.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
