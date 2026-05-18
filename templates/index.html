@@ -187,8 +187,23 @@
      ================================================================ -->
 <main class="page-layout">
 
+  <!-- Mobile-only backdrop. Tapping it closes the filter drawer.
+       On desktop it's invisible because the sidebar is permanently
+       visible, no need for any overlay. -->
+  <div class="filter-backdrop" id="filterBackdrop" hidden></div>
+
   <!-- ======= SIDEBAR FILTERS ======= -->
   <aside class="filter-sidebar" id="filterSidebar">
+
+    <!-- Drawer header — only rendered as visible inside the mobile
+         off-canvas mode (CSS hides it on desktop). Carries the title
+         and a close (×) button. -->
+    <div class="fs-drawer-head">
+      <span class="fs-drawer-title">Фильтры</span>
+      <button type="button" class="fs-drawer-close" id="filterCloseBtn" aria-label="Закрыть фильтры">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
 
     <!-- Статус -->
     <div class="fs-section">
@@ -312,6 +327,15 @@
         <p class="page-subtitle">Участвуйте в торгах и находите уникальные лоты</p>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <!-- Mobile-only trigger that opens the off-canvas filter
+             drawer. The badge inside is filled by JS with the number of
+             currently active filters (≥1 means "has-active" class
+             toggled, surfaces the badge). -->
+        <button type="button" class="filter-toggle" id="filterToggleBtn" aria-label="Открыть фильтры">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+          <span>Фильтры</span>
+          <span class="badge" id="filterActiveBadge">0</span>
+        </button>
         <span class="toolbar-count" id="resultInfoInline"></span>
       </div>
     </div>

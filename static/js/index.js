@@ -1610,8 +1610,90 @@ function buildPageList(current, total) {
             // toggleAdvanced теперь обрабатывается глобальным обработчиком ниже
             
             if (applyBtn) applyBtn.addEventListener('click', applyFilters);
-            
+
+            wireMobileFilterDrawer();
+
             filtersInitialized = true;
+        }
+
+        /**
+         * Mobile filter drawer: ≤768px viewport turns the always-visible
+         * desktop sidebar into an off-canvas drawer. CSS owns the slide-
+         * in animation; JS owns the open/close state, body-scroll lock,
+         * Esc / overlay / Apply dismissal, and the active-filter badge.
+         *
+         * Initialised once from initFiltersUI; the elements are present
+         * unconditionally in the markup so this is safe to call before
+         * the first viewport-resize event.
+         */
+        function wireMobileFilterDrawer() {
+            const sidebar = document.getElementById('filterSidebar');
+            const toggle  = document.getElementById('filterToggleBtn');
+            const closeBtn = document.getElementById('filterCloseBtn');
+            const backdrop = document.getElementById('filterBackdrop');
+            const badge   = document.getElementById('filterActiveBadge');
+            if (!sidebar || !toggle || !backdrop) return;
+
+            const setOpen = (open) => {
+                sidebar.classList.toggle('is-open', open);
+                backdrop.classList.toggle('is-visible', open);
+                backdrop.hidden = !open;
+                document.body.classList.toggle('no-scroll', open);
+                toggle.setAttribute('aria-expanded', String(open));
+            };
+
+            toggle.addEventListener('click', () => setOpen(true));
+            if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+            backdrop.addEventListener('click', () => setOpen(false));
+
+            // Esc dismisses — keyboard accessibility + a useful escape
+            // hatch for desktop testing in DevTools mobile emulation.
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {
+                    setOpen(false);
+                }
+            });
+
+            // Apply / Reset buttons inside the drawer should dismiss it
+            // on mobile — the user has expressed intent, no reason to
+            // keep the overlay covering the results they're about to see.
+            sidebar.addEventListener('click', (e) => {
+                const btn = e.target.closest('.fs-actions .btn');
+                if (btn && window.matchMedia('(max-width: 768px)').matches) {
+                    setOpen(false);
+                }
+            });
+
+            // Active-filter badge — recomputes whenever filters change so
+            // the user can see at a glance whether the drawer hides any
+            // narrowing rules. Counts: status≠active, any category, any
+            // type, any price, any creator, any non-default sort.
+            const updateBadge = () => {
+                let n = 0;
+                const status = document.getElementById('statusFilter')?.value;
+                if (status && status !== 'active') n++;
+                const cat = document.getElementById('categoryFilter')?.value;
+                if (cat) n++;
+                if (document.getElementById('filterBid')?.checked) n++;
+                if (document.getElementById('filterBin')?.checked) n++;
+                const minP = document.getElementById('minPrice')?.value;
+                const maxP = document.getElementById('maxPrice')?.value;
+                if (minP && Number(minP) > 0) n++;
+                if (maxP && Number(maxP) > 0) n++;
+                if (document.getElementById('creatorInput')?.value?.trim()) n++;
+                const sort = document.getElementById('sortFilter')?.value;
+                if (sort && sort !== 'time') n++;
+                if (badge) badge.textContent = String(n);
+                toggle.classList.toggle('has-active', n > 0);
+            };
+            updateBadge();
+            // Recompute after any handler that mutates filters — the
+            // sidebar fires applyFilters at the end of each change, and
+            // resetFilters writes the inputs synchronously, so a single
+            // listener on the sidebar is enough for both paths.
+            sidebar.addEventListener('change', updateBadge);
+            sidebar.addEventListener('input', updateBadge);
+            sidebar.addEventListener('click', updateBadge, true);
         }
 
         // initFiltersUI и первичный рендер будут вызваны из wire() ниже
