@@ -113,6 +113,15 @@
           <span class="price-hero-val" id="currentPrice">—</span>
         </div>
         <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">—</span></div>
+        <!-- Owner-only hint: how much actually lands on the seller's
+             balance after the platform takes its cut. Hidden by default,
+             flipped to display:flex from auction.js when the viewer is
+             the lot's creator. -->
+        <div class="seller-payout-hint" id="sellerPayoutHint" style="display:none;">
+          <span class="seller-payout-label">К получению</span>
+          <span class="seller-payout-val" id="sellerPayoutVal">—</span>
+          <span class="seller-payout-note" id="sellerPayoutNote">после комиссии</span>
+        </div>
 
         <div class="timer-row" id="timerRow">
           <span class="timer-pulse"></span>
@@ -338,10 +347,12 @@
         <div class="form-group" id="editStartPriceWrap" style="margin:0;">
           <label class="form-label">Стартовая цена (₽)</label>
           <input type="number" class="form-input" id="editPrice" min="1" step="0.01">
+          <div class="payout-hint" id="editPricePayout" hidden></div>
         </div>
         <div class="form-group" id="editBinPriceBlock" style="margin:0;">
           <label class="form-label">Цена BIN (₽)</label>
           <input type="number" class="form-input" id="editBinPrice" min="1" step="0.01">
+          <div class="payout-hint" id="editBinPricePayout" hidden></div>
         </div>
       </div>
 

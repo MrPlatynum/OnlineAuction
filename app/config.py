@@ -1,4 +1,5 @@
 import os
+from decimal import Decimal
 
 from dotenv import load_dotenv
 
@@ -52,6 +53,13 @@ EMAIL_FROM = os.getenv("EMAIL_FROM", "Лотус <noreply@localhost>")
 # для построения ссылок (auction.html, profile.html и т. п.).
 # В проде задаётся через env: PUBLIC_BASE_URL=https://lotus.example.com
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
+
+# Platform commission charged to the seller on every settled sale —
+# both BIN purchases and auction completions. Held in a single Decimal
+# so the multiplication path in app/services/auctions.py doesn't have
+# to coerce float → Decimal on the hot settlement path. Operators can
+# override per-deployment via env (e.g. PLATFORM_COMMISSION_PERCENT=10).
+PLATFORM_COMMISSION_PERCENT = Decimal(os.getenv("PLATFORM_COMMISSION_PERCENT", "7"))
 
 CORS_ORIGINS = [
     origin.strip()

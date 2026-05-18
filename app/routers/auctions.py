@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import PLATFORM_COMMISSION_PERCENT
 from app.database import get_db
 from app.models import (
     Auction,
@@ -23,7 +24,11 @@ from app.schemas import (
     PaginatedAuctionsResponse,
 )
 from app.services.auction_scheduler import cancel_auction, schedule_auction
-from app.services.auctions import fetch_auction_bidders, settle_bin_purchase
+from app.services.auctions import (
+    _seller_commission,
+    fetch_auction_bidders,
+    settle_bin_purchase,
+)
 from app.services.balance import lock_users_by_id
 from app.services.notifications import create_notification, notify_user
 from app.services.websocket_manager import manager
@@ -236,10 +241,16 @@ async def buy_now(
     cancel_auction(auction_id)
 
     if creator:
+        commission = _seller_commission(auction.bin_price)
+        net = auction.bin_price - commission
         await notify_user(
             db, creator, NotificationType.AUCTION_SOLD,
             "✅ Лот куплен по цене BIN",
-            f"{current_user.username} купил «{auction.title}» за {auction.bin_price:.2f} ₽",
+            (
+                f"{current_user.username} купил «{auction.title}» за {auction.bin_price:.2f} ₽. "
+                f"На баланс зачислено {net:.2f} ₽ "
+                f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% — {commission:.2f} ₽)."
+            ),
             auction.id, auction.title, manager,
         )
 

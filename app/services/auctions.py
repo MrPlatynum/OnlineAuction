@@ -1,8 +1,10 @@
 import logging
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import PLATFORM_COMMISSION_PERCENT
 from app.models import Auction, Bid, NotificationType, User
 from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
@@ -12,6 +14,16 @@ from app.services.websocket_manager import manager
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+
+def _seller_commission(gross_price: Decimal) -> Decimal:
+    """Platform fee withheld from the seller's payout on every settled
+    sale. Rounded to two decimal places with HALF_UP so the two seller
+    transaction rows (auction_sale gross + commission deduction) sum
+    cleanly to the net payout — banker's rounding would leave 0.005 ₽
+    drifts at scale."""
+    raw = gross_price * PLATFORM_COMMISSION_PERCENT / Decimal(100)
+    return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def settle_bin_purchase(
@@ -40,11 +52,23 @@ def settle_bin_purchase(
     auction.winner_id = buyer.id
     auction.end_time = utcnow()
     if seller:
+        # Gross credit first so the audit row shows the headline sale
+        # price the user expects to see — then deduct the platform fee
+        # as its own row. Net effect on balance is price − commission;
+        # splitting the rows keeps each transaction readable on its own.
         seller.balance += price
         add_transaction(
             db, seller, "auction_sale", price,
             f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
         )
+        commission = _seller_commission(price)
+        if commission > 0:
+            seller.balance -= commission
+            add_transaction(
+                db, seller, "commission", commission,
+                f"Комиссия платформы {PLATFORM_COMMISSION_PERCENT}%",
+                auction_id=auction.id,
+            )
 
 
 async def fetch_auction_bidders(
@@ -156,11 +180,22 @@ async def complete_auction(auction_id: int, db: AsyncSession):
             )
 
         if creator:
+            # See settle_bin_purchase: gross sale credit, then a
+            # separate commission deduction so the audit history reads
+            # naturally for both the seller and any future support tool.
             creator.balance += last_bid.amount
             add_transaction(
                 db, creator, "auction_sale", last_bid.amount,
                 f"Продажа лота «{auction.title}»", auction_id=auction.id,
             )
+            commission = _seller_commission(last_bid.amount)
+            if commission > 0:
+                creator.balance -= commission
+                add_transaction(
+                    db, creator, "commission", commission,
+                    f"Комиссия платформы {PLATFORM_COMMISSION_PERCENT}%",
+                    auction_id=auction.id,
+                )
 
         users = await fetch_auction_bidders(db, auction_id)
         for user in users:
@@ -178,10 +213,16 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 ))
 
         if creator and creator.id != last_bid.user_id:
+            commission = _seller_commission(last_bid.amount)
+            net = last_bid.amount - commission
             pending_notifications.append((
                 creator, NotificationType.AUCTION_SOLD,
                 "💰 Ваш лот продан!",
-                f"Лот продан за {last_bid.amount:.2f} ₽. Средства зачислены на ваш баланс.",
+                (
+                    f"Лот продан за {last_bid.amount:.2f} ₽. "
+                    f"На баланс зачислено {net:.2f} ₽ "
+                    f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% — {commission:.2f} ₽)."
+                ),
             ))
 
     await db.commit()

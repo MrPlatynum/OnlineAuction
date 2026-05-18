@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import PLATFORM_COMMISSION_PERCENT
 from app.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -32,3 +33,16 @@ async def health(response: Response, db: AsyncSession = Depends(get_db)):
         logger.exception("/health DB ping failed")
         response.status_code = 503
         return {"status": "degraded", "db": "fail"}
+
+
+@router.get("/api/platform")
+async def platform_info():
+    """Expose operator-tunable platform constants to the client.
+
+    Currently just the seller commission so the marketing strip on the
+    home page and the seller-side payout hints on the auction page can
+    show the live value instead of a hard-coded number that would drift
+    out of sync the moment ``PLATFORM_COMMISSION_PERCENT`` is changed
+    via env in a deployment.
+    """
+    return {"commission_percent": float(PLATFORM_COMMISSION_PERCENT)}

@@ -141,6 +141,11 @@
         <div class="hero-stat-value">0%</div>
         <div class="hero-stat-label">Комиссия покупателя</div>
       </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" id="statCommission">7%</div>
+        <div class="hero-stat-label">Комиссия продавца</div>
+      </div>
     </div>
 
     <div class="hero-trust">
@@ -544,6 +549,7 @@
               <label class="form-label">Стартовая цена (₽)</label>
               <input type="number" class="form-input" id="auctionPrice" min="1" step="0.01" placeholder="например, 100">
               <div class="img-hint">Минимальная ставка, с которой начнутся торги</div>
+              <div class="payout-hint" id="auctionPricePayout" hidden></div>
             </div>
             <div class="form-group">
               <label class="form-label">Длительность</label>
@@ -561,6 +567,7 @@
               <label class="form-label">Цена «Купить сразу» (₽)</label>
               <input type="number" class="form-input" id="auctionBinPrice" min="1" step="0.01" placeholder="например, 500">
               <div class="img-hint">Первый покупатель забирает лот по этой цене</div>
+              <div class="payout-hint" id="auctionBinPricePayout" hidden></div>
             </div>
             <div class="form-group">
               <label class="form-label">Длительность <span style="color:var(--text-3);font-weight:400">(необязательно)</span></label>

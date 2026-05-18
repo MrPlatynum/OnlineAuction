@@ -33,7 +33,8 @@ class Transaction(Base):
         Index("ix_transactions_user_created", "user_id", "created_at"),
         CheckConstraint("amount > 0", name="ck_transactions_amount_positive"),
         CheckConstraint(
-            "type IN ('deposit', 'withdrawal', 'bid_win', 'auction_sale', 'bin_purchase')",
+            "type IN ('deposit', 'withdrawal', 'bid_win', 'auction_sale', "
+            "'bin_purchase', 'commission')",
             name="ck_transactions_type_valid",
         ),
     )

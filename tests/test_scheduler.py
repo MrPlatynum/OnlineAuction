@@ -185,7 +185,11 @@ async def test_complete_auction_commits_money_before_notifying(
             await db.execute(select(User).where(User.id == registered_user["user"]["id"]))
         ).scalar_one()
         assert bidder.balance == 1000 - 250
-        assert seller.balance == 1000 + 250
+        # Seller is credited gross (+250) then debited 7% commission
+        # (−17.50) in the same transaction — both moves committed
+        # before the notification raise, so the net is the post-fee
+        # 1000 + 250 − 17.50 = 1232.50.
+        assert seller.balance == 1232.50
 
 
 async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
