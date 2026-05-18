@@ -179,59 +179,61 @@ def create_password_reset_token(user: "User") -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_password_reset_token(token: str) -> tuple[int, int]:
-    """Returns ``(user_id, token_version)`` from a valid reset JWT.
-    400 on expiry / bad signature / wrong purpose — verification
-    failures are user-facing form errors, not session-auth failures
-    (where 401 would be correct)."""
+def _decode_purpose_token(
+    token: str,
+    expected_purpose: str,
+    *,
+    expired_detail: str,
+    invalid_detail: str,
+) -> dict:
+    """Verify a purpose-tagged JWT and return its payload.
+
+    Shared core of ``decode_password_reset_token`` and
+    ``decode_email_verify_token``: both raise 400 (user-facing form
+    error, not session-auth) on expiry / bad signature / wrong
+    purpose. Callers do their own type checks on the domain-specific
+    claims because the failure detail there matches the expiry detail.
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=400, detail="Ссылка для сброса пароля истекла"
-        ) from None
+        raise HTTPException(status_code=400, detail=expired_detail) from None
     except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=400, detail="Неверная ссылка для сброса пароля"
-        ) from None
-    if payload.get("purpose") != PASSWORD_RESET_PURPOSE:
-        raise HTTPException(
-            status_code=400, detail="Неверная ссылка для сброса пароля"
-        )
+        raise HTTPException(status_code=400, detail=invalid_detail) from None
+    if payload.get("purpose") != expected_purpose:
+        raise HTTPException(status_code=400, detail=invalid_detail)
+    return payload
+
+
+def decode_password_reset_token(token: str) -> tuple[int, int]:
+    """Returns ``(user_id, token_version)`` from a valid reset JWT."""
+    invalid_detail = "Неверная ссылка для сброса пароля"
+    payload = _decode_purpose_token(
+        token,
+        PASSWORD_RESET_PURPOSE,
+        expired_detail="Ссылка для сброса пароля истекла",
+        invalid_detail=invalid_detail,
+    )
     user_id = payload.get("user_id")
     tv = payload.get("tv")
     if not isinstance(user_id, int) or not isinstance(tv, int):
-        raise HTTPException(
-            status_code=400, detail="Неверная ссылка для сброса пароля"
-        )
+        raise HTTPException(status_code=400, detail=invalid_detail)
     return user_id, tv
 
 
 def decode_email_verify_token(token: str) -> tuple[int, str]:
-    """Returns ``(user_id, email)`` from a valid email-verify JWT.
-    Raises ``HTTPException(400)`` on expiry, bad signature, or wrong
-    purpose — verification failures are user-facing input errors, not
-    auth failures, so they get 400 instead of decode_token's 401."""
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=400, detail="Ссылка для подтверждения email истекла"
-        ) from None
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=400, detail="Неверная ссылка для подтверждения email"
-        ) from None
-    if payload.get("purpose") != EMAIL_VERIFY_PURPOSE:
-        raise HTTPException(
-            status_code=400, detail="Неверная ссылка для подтверждения email"
-        )
+    """Returns ``(user_id, email)`` from a valid email-verify JWT."""
+    invalid_detail = "Неверная ссылка для подтверждения email"
+    payload = _decode_purpose_token(
+        token,
+        EMAIL_VERIFY_PURPOSE,
+        expired_detail="Ссылка для подтверждения email истекла",
+        invalid_detail=invalid_detail,
+    )
     user_id = payload.get("user_id")
     email = payload.get("email")
     if not isinstance(user_id, int) or not isinstance(email, str):
-        raise HTTPException(
-            status_code=400, detail="Неверная ссылка для подтверждения email"
-        )
+        raise HTTPException(status_code=400, detail=invalid_detail)
     return user_id, email
 
 
