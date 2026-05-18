@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import PLATFORM_COMMISSION_PERCENT
 from app.database import get_db
 from app.models import (
     Auction,
@@ -23,7 +24,6 @@ from app.schemas import (
     PaginatedAuctionsResponse,
 )
 from app.services.auction_scheduler import cancel_auction, schedule_auction
-from app.config import PLATFORM_COMMISSION_PERCENT
 from app.services.auctions import (
     _seller_commission,
     fetch_auction_bidders,
