@@ -921,3 +921,23 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 @media (prefers-reduced-motion: reduce) {
   .footer-status-dot { animation: none !important; }
 }
+
+/* ================================================================
+   PAYOUT HINT — shown live under seller-side price inputs (create
+   modal on the home page, edit modal on the lot page). Driven by
+   attachPayoutHint() in the per-page JS so the hint always reflects
+   the live commission rate from /api/platform.
+   ================================================================ */
+.payout-hint {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.payout-hint .payout-net  { font-weight: 700; }
+.payout-hint .payout-rate { color: var(--text-3); font-weight: 500; }

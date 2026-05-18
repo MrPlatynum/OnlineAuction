@@ -175,6 +175,59 @@
   };
 
   // ================================================================
+  // Platform commission cache — fetched once per page load from
+  // /api/platform and reused by every payout-hint helper on the page.
+  // Default falls back to 7%, matching the server-side default in
+  // app/config.py so the UI keeps showing a plausible figure when the
+  // network blip happens.
+  // ================================================================
+  let _platformCommissionPromise = null;
+  window.getPlatformCommission = function() {
+    if (_platformCommissionPromise) return _platformCommissionPromise;
+    _platformCommissionPromise = fetch(`${window.API}/api/platform`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => (d && typeof d.commission_percent === 'number') ? d.commission_percent : 7)
+      .catch(() => 7);
+    return _platformCommissionPromise;
+  };
+
+  /**
+   * attachPayoutHint(inputEl, hintEl, options?)
+   *
+   * Wires a price input to a hint element so the seller sees, in real
+   * time, how much will land on their balance after the platform
+   * takes its commission. Idempotent — calling twice with the same
+   * input just re-binds the listener.
+   *
+   * options.label  — leading word in the hint, defaults to "К получению".
+   *                  For BID start-price use "Со стартовой цены" so the
+   *                  copy doesn't mislead about the final settled amount.
+   */
+  window.attachPayoutHint = function(inputEl, hintEl, options) {
+    if (!inputEl || !hintEl) return;
+    const label = (options && options.label) || 'К получению';
+    window.getPlatformCommission().then(pct => {
+      const pctLabel = Number.isInteger(pct) ? pct : pct.toFixed(1);
+      const update = () => {
+        const gross = Number(inputEl.value);
+        if (!Number.isFinite(gross) || gross <= 0) {
+          hintEl.hidden = true;
+          return;
+        }
+        const net = gross * (1 - pct / 100);
+        hintEl.hidden = false;
+        hintEl.innerHTML =
+          `${label}: <span class="payout-net">${window.fmtMoney(net)} ₽</span> ` +
+          `<span class="payout-rate">(комиссия ${pctLabel}%)</span>`;
+      };
+      inputEl.addEventListener('input', update);
+      // Run once so a pre-filled input (edit modal opening with the
+      // current price) shows the hint without a keystroke.
+      update();
+    });
+  };
+
+  // ================================================================
   // Notification bell — авто-инициализация при наличии #notifBtn
   // ================================================================
   function initNotifBell() {

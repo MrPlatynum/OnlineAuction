@@ -895,6 +895,19 @@
       });
     }
     $('editModal').style.display = 'flex';
+    // Wire payout hints under both price inputs — common.js helper.
+    // Runs after the inputs have been populated above so the initial
+    // hint reflects the current values without waiting on a keystroke.
+    if (typeof window.attachPayoutHint === 'function') {
+      window.attachPayoutHint(
+        $('editPrice'), $('editPricePayout'),
+        { label: 'Со стартовой цены вы получите' },
+      );
+      window.attachPayoutHint(
+        $('editBinPrice'), $('editBinPricePayout'),
+        { label: 'К получению' },
+      );
+    }
   }
   function closeEditModal(){$('editModal').style.display='none';}
   function renderEditImgPreview() {

@@ -1762,6 +1762,20 @@ function buildPageList(current, total) {
             // Сбрасываем тип и загружаем категории если ещё не загружены
             if (typeof setAuctionType === 'function') setAuctionType('bid');
             if (typeof loadCategories === 'function') loadCategories();
+            // Wire the live "К получению" hints under both price inputs.
+            // Idempotent — attaches the listener once per modal lifetime.
+            if (typeof window.attachPayoutHint === 'function') {
+                window.attachPayoutHint(
+                    document.getElementById('auctionPrice'),
+                    document.getElementById('auctionPricePayout'),
+                    { label: 'Со стартовой цены вы получите' },
+                );
+                window.attachPayoutHint(
+                    document.getElementById('auctionBinPrice'),
+                    document.getElementById('auctionBinPricePayout'),
+                    { label: 'К получению' },
+                );
+            }
         }
 
         function closeCreateModal() {
