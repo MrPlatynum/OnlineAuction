@@ -27,3 +27,10 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
+
+[tool.coverage.run]
+# httpx.ASGITransport runs handlers via asyncio. SQLAlchemy's async
+# extension dispatches through greenlet. Without these, coverage misses
+# code executed inside async request handlers (~37% under-count).
+concurrency = ["thread", "greenlet"]
+source = ["app"]
