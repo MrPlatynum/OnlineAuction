@@ -5,7 +5,19 @@ from sqlalchemy import select, update
 
 from app import database as _db_module
 from app.models import Auction
+from app.services.websocket_manager import manager
 from app.utils.time import utcnow
+
+
+class _StubSocket:
+    """In-memory WebSocket double - captures broadcast payloads without
+    needing a running uvicorn or a real WS handshake. Mirrors the test
+    pattern in test_websocket_manager.py."""
+    def __init__(self):
+        self.sent: list[dict] = []
+
+    async def send_json(self, message: dict) -> None:
+        self.sent.append(message)
 
 
 async def _create_auction(client, headers, **overrides):
@@ -496,3 +508,72 @@ async def test_concurrent_late_bids_extend_end_time_once(
     assert 90 < seconds_left < 150, (
         f"expected single 120s extension, got {seconds_left:.1f}s left"
     )
+
+
+# -- Anti-sniping end-to-end (HTTP + WebSocket broadcast) -------------------
+
+async def test_late_bid_broadcasts_extended_until(
+    client, registered_user, second_user
+):
+    """Through the full bid handler: subscribe a stub WebSocket to the
+    auction broadcast bucket, place a bid inside the closing window,
+    assert the new_bid payload carries extended_until + time_remaining
+    so the JS client can re-arm its countdown timer.
+
+    This integration test covers the data path that the browser would
+    have observed in a manual smoke test - request -> handler ->
+    manager.broadcast -> socket.send_json -> payload - without
+    requiring a live browser."""
+    auction = await _create_auction(client, registered_user["headers"])
+    await _force_end_time(auction["id"], seconds_from_now=30)
+
+    stub = _StubSocket()
+    manager.active_connections.setdefault(auction["id"], []).append(stub)
+    try:
+        r = await client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=second_user["headers"],
+        )
+        assert r.status_code == 200, r.text
+    finally:
+        manager.disconnect(stub, auction["id"])
+
+    assert len(stub.sent) == 1, "expected exactly one broadcast"
+    msg = stub.sent[0]
+    assert msg["type"] == "new_bid"
+    assert msg["current_price"] == 150.0
+    assert msg["bid"]["amount"] == 150.0
+    # Anti-sniping payload fields - present iff extension fired.
+    assert "extended_until" in msg, "late bid must include extended_until"
+    assert "time_remaining" in msg, "late bid must include time_remaining"
+    assert 90 < msg["time_remaining"] < 150, (
+        f"time_remaining must be ~120s, got {msg['time_remaining']}"
+    )
+
+
+async def test_early_bid_omits_extended_until_in_broadcast(
+    client, registered_user, second_user
+):
+    """A bid placed well before the deadline must not include
+    anti-sniping fields in the broadcast - otherwise the client would
+    flash a 'lot extended' toast on every bid."""
+    auction = await _create_auction(client, registered_user["headers"])
+
+    stub = _StubSocket()
+    manager.active_connections.setdefault(auction["id"], []).append(stub)
+    try:
+        r = await client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=second_user["headers"],
+        )
+        assert r.status_code == 200, r.text
+    finally:
+        manager.disconnect(stub, auction["id"])
+
+    assert len(stub.sent) == 1
+    msg = stub.sent[0]
+    assert msg["type"] == "new_bid"
+    assert "extended_until" not in msg
+    assert "time_remaining" not in msg
