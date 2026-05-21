@@ -16,7 +16,7 @@
     return currentUserId !== null && leaderUserId !== null && currentUserId === leaderUserId;
   }
 
-  // showToast — общий из common.js (window.showToast)
+  // showToast - общий из common.js (window.showToast)
 
   function fmtTime(sec) {
     if (!Number.isFinite(sec)||sec<=0) return '0м 00с';
@@ -122,8 +122,8 @@
   function updateBidHint() {
     const hint=$('bidHint');
     if (!token) return void(hint.textContent='Войдите, чтобы делать ставки.');
-    if (!isActive) return void(hint.textContent='Аукцион завершён — ставки закрыты.');
-    if (isUserLeading()) return void(hint.textContent='Вы уже лидируете в этом аукционе — дождитесь чужой ставки.');
+    if (!isActive) return void(hint.textContent='Аукцион завершён - ставки закрыты.');
+    if (isUserLeading()) return void(hint.textContent='Вы уже лидируете в этом аукционе - дождитесь чужой ставки.');
     const min=currentPriceValue!==null?currentPriceValue+0.01:null;
     hint.textContent=min!==null?`Минимальная ставка: ${fmtMoney(min)}`:'Ставка должна превышать текущую цену.';
   }
@@ -150,7 +150,7 @@
       img.src=user.avatar_url.startsWith('http')?user.avatar_url:`${API}${user.avatar_url}`;
       img.alt=user.username; $('avatar').appendChild(img);
     }
-    $('userName').textContent=user.username||'—';
+    $('userName').textContent=user.username||'-';
     $('userBalance').textContent=fmtMoney(user.balance??0);
     profile.style.display='flex'; authBtn.style.display='none';
   }
@@ -172,7 +172,7 @@
     if (!r.ok) { syncEl('title','Лот не найден'); showToast('Не найдено','Лот не существует.','warn'); return null; }
     const a=await r.json();
 
-    document.title=`${a.title} — Лотус`;
+    document.title=`${a.title} - Лотус`;
     syncEl('title',a.title||'Лот'); syncEl('crumbTitle',a.title||'Лот');
     // Описание: если пусто, показываем muted-плейсхолдер
     const descEl = $('description');
@@ -206,7 +206,7 @@
       }
     }
 
-    // Stats — sync to both sidebar and info block
+    // Stats - sync to both sidebar and info block
     currentPriceValue=a.current_price;
     const priceStr=fmtMoney(currentPriceValue);
     syncEl('currentPrice',priceStr); syncEl('currentPrice2',priceStr);
@@ -231,7 +231,7 @@
         $('binDivider').style.display='none';
         $('priceStartRow').style.display='none';
         const ph=$('price-hero'); if(ph) ph.style.display='none';
-        // Скрываем блок текущей ставки — показываем только цену BIN
+        // Скрываем блок текущей ставки - показываем только цену BIN
         const priceHero=document.querySelector('.price-hero');
         if(priceHero) priceHero.style.display='none';
         syncEl('bidCardTitle','');
@@ -295,14 +295,14 @@
     leaderUserId = items.length ? (items[0].user_id ?? null) : null;
     refreshBidControls();
     const list=$('bidsList');
-    if (!items.length) { list.innerHTML='<div class="bids-empty">Ставок пока нет — будьте первым!</div>'; return; }
+    if (!items.length) { list.innerHTML='<div class="bids-empty">Ставок пока нет - будьте первым!</div>'; return; }
     const medals = ['🥇','🥈','🥉'];
     list.innerHTML=items.map((b,i)=>{
       const rank = medals[i] || `<span>${i+1}</span>`;
       return `<div class="bid-row ${i===0?'top-bid':''}">
         <div class="bid-rank">${i<3 ? `<span class="bid-rank-medal">${medals[i]}</span>` : (i+1)}</div>
         <div style="flex:1;min-width:0;">
-          <div class="bid-who">${esc(b.username??'—')}</div>
+          <div class="bid-who">${esc(b.username??'-')}</div>
           <div class="bid-when">${fmtDate(b.timestamp)}</div>
         </div>
         <div class="bid-amt ${i===0?'top':''}">${fmtMoney(b.amount)}</div>
@@ -315,9 +315,9 @@
   function bumpBid(amount) {
     // Прибавляем к текущей цене, а не к минимально допустимой
     // (current + 0.01). Иначе на лоте с круглой стартовой ценой
-    // («55») кнопка «+5» давала «60.01» — некрасиво и неудобно.
+    // («55») кнопка «+5» давала «60.01» - некрасиво и неудобно.
     // При current = 55 кнопка «+5» теперь даёт ровно 60, что
-    // всё равно строго больше текущей цены — сервер примет.
+    // всё равно строго больше текущей цены - сервер примет.
     const base = currentPriceValue !== null ? currentPriceValue : 0;
     const target = Math.round((base + amount) * 100) / 100;
     const inp = $('bidAmount');
@@ -373,6 +373,19 @@
           syncEl('currentPrice',p); syncEl('currentPrice2',p);
           flashPrice();
         }
+        // Anti-sniping: ставка в последние 2 мин продлила лот. Сервер
+        // присылает новое time_remaining - синхронизируем таймер обратного
+        // отсчёта и показываем уведомление пользователю.
+        if (data.extended_until && Number.isFinite(data.time_remaining)) {
+          remainingSec = data.time_remaining;
+          const t = fmtTime(remainingSec);
+          syncEl('timeLeft', t); syncEl('timeLeft2', t);
+          showToast(
+            'Лот продлён',
+            'Поздняя ставка - время торгов продлено на 2 минуты.',
+            'warn'
+          );
+        }
         // Пришёл чужой new_bid → старое значение leaderUserId уже неактуально.
         // loadBids() пересчитает его, но это ~50мс по сети; до тех пор
         // оптимистично сбрасываем, чтобы хинт «вы лидируете» не показывался
@@ -394,14 +407,14 @@
     };
     ws.onclose=(e)=>{
       if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}
-      // Policy / auth / internal codes — не реконнектимся, иначе будет
+      // Policy / auth / internal codes - не реконнектимся, иначе будет
       // hammer 1.5с в случае серверного отказа (например при превышении
       // лимита соединений с одного IP).
       if (e && (e.code === 1000 || e.code === 1008 || e.code === 1011)) {
         wsClosedByPolicy = true;
         return;
       }
-      // Exponential backoff с half-jitter — половина случайно, половина по
+      // Exponential backoff с half-jitter - половина случайно, половина по
       // экспоненте, чтобы N клиентов после общего разрыва не штормили
       // одним фронтом. Капаем на 30 с.
       const attempt = ++wsReconnectAttempts;
@@ -417,7 +430,7 @@
   });
   $('bidAmount').addEventListener('keydown',e=>{ if(e.key==='Enter') placeBid(); });
 
-  // Кастомный stepper рядом с полем ставки — шаг 1 ₽
+  // Кастомный stepper рядом с полем ставки - шаг 1 ₽
   document.querySelectorAll('.bid-num-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const inp = $('bidAmount');
@@ -446,7 +459,7 @@
     }
     if (me && a.created_by === me.id && a.is_active) {
       // Owner sees the post-commission net so a "10 000 ₽" bid doesn't
-      // surprise them with a 9 300 ₽ payout. Fire-and-forget — if the
+      // surprise them with a 9 300 ₽ payout. Fire-and-forget - if the
       // /api/platform fetch fails the hint stays hidden, no UX harm.
       renderSellerPayoutHint(a);
     }
@@ -492,7 +505,7 @@
     if(allLink){allLink.href=`user.html?username=${encodeURIComponent(username)}`;allLink.style.display='inline';}
     // Three independent fetches: seller profile, seller reviews,
     // current-user subscription state. Each is wrapped in a swallowing
-    // try/catch — if one of the side panels fails to load, the rest
+    // try/catch - if one of the side panels fails to load, the rest
     // of the auction page still works. The user just sees the panel
     // empty rather than the whole page blowing up with an unhandled
     // promise rejection.
@@ -501,7 +514,7 @@
       if (r.ok) {
         const d=await r.json();
         syncEl('sellerMeta',`С нами с ${new Date(d.user?.created_at+'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`);
-        syncEl('sellerLots',d.stats?.created_count??'—');
+        syncEl('sellerLots',d.stats?.created_count??'-');
         if (d.user?.avatar_url&&!$('sellerAvatar').querySelector('img')) {
           const img=document.createElement('img');img.src=d.user.avatar_url.startsWith('http')?d.user.avatar_url:`${API}${d.user.avatar_url}`;img.alt=username;$('sellerAvatar').appendChild(img);
         }
@@ -578,9 +591,9 @@
     }
   }
 
-  // Состояние отзывов / фильтра — два независимых стейта:
-  //   1) thisLotOnly — toggle (чекбокс), фильтр по auction_id
-  //   2) lotReviewFilter — exclusive (звезда), фильтр по rating
+  // Состояние отзывов / фильтра - два независимых стейта:
+  //   1) thisLotOnly - toggle (чекбокс), фильтр по auction_id
+  //   2) lotReviewFilter - exclusive (звезда), фильтр по rating
   // Оба применяются последовательно.
   let lotReviews = [];
   let lotReviewFilter = 'all';   // 'all' | 1..5
@@ -590,7 +603,7 @@
     const avg = data.stats.avg, total = data.stats.total, dist = data.stats.distribution || {};
     lotReviews = data.reviews || [];
 
-    syncEl('revAvg', total ? avg.toFixed(1) : '—');
+    syncEl('revAvg', total ? avg.toFixed(1) : '-');
     syncEl('revCount', `${total} отзыв${total === 1 ? '' : total > 4 ? 'ов' : 'а'}`);
     syncEl('reviewsTabCount', total);
     renderStars($('revBigStars'), avg, 15);
@@ -611,7 +624,7 @@
     const filterEl = $('revFilter');
     if (filterEl) filterEl.style.display = total > 0 ? 'flex' : 'none';
 
-    // Счётчик «Об этом лоте» (фиксированный — не зависит от других фильтров)
+    // Счётчик «Об этом лоте» (фиксированный - не зависит от других фильтров)
     const thisLotCount = lotReviews.filter(r => r.auction_id === +auctionId).length;
     syncEl('revPillThisLotCount', thisLotCount);
     const thisPill = $('revPillThisLot');
@@ -640,7 +653,7 @@
     thisLotOnly = !thisLotOnly;
     const pill = $('revPillThisLot');
     if (pill) pill.classList.toggle('active', thisLotOnly);
-    // Если активный звёзд-фильтр станет пустым — сбрасываем на «Все»
+    // Если активный звёзд-фильтр станет пустым - сбрасываем на «Все»
     refreshStarPillCounts();
     if (lotReviewFilter !== 'all') {
       const activePill = document.querySelector(`.rev-pill[data-rating="${lotReviewFilter}"]`);
@@ -670,7 +683,7 @@
       else if (lotReviewFilter !== 'all')
         msg = `Нет отзывов с оценкой ${lotReviewFilter}★`;
       else
-        msg = 'У этого продавца пока нет отзывов — будьте первым!';
+        msg = 'У этого продавца пока нет отзывов - будьте первым!';
       listEl.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-3);font-size:13px;">${msg}</div>`;
       return;
     }
@@ -806,7 +819,7 @@
       showToast('Отзыв', 'Отзыв удалён', 'ok');
       const rev = await fetch(`${API}/api/sellers/${sellerId}/reviews`);
       if (rev.ok) renderReviews(await rev.json());
-    } catch { /* silent — toast уже не нужен после удаления */ }
+    } catch { /* silent - toast уже не нужен после удаления */ }
   }
 
   // ---- Edit Lot ----
@@ -835,7 +848,7 @@
       try {
         const r = await fetch(`${API}/api/categories`);
         const cats = await r.json();
-        parentSel.innerHTML = '<option value="">— Выберите категорию —</option>';
+        parentSel.innerHTML = '<option value="">- Выберите категорию -</option>';
         cats.forEach(cat => {
           const opt = document.createElement('option');
           opt.value = cat.id;
@@ -847,7 +860,7 @@
         const updateSub = (catId, selectSubId) => {
           const cat = cats.find(c => c.id === +catId);
           if (subSel) {
-            subSel.innerHTML = '<option value="">— Вся категория —</option>';
+            subSel.innerHTML = '<option value="">- Вся категория -</option>';
             subSel.style.display = 'none';
           }
           if (cat && cat.children && cat.children.length) {
@@ -880,7 +893,7 @@
             }
           }
         }
-      } catch { /* silent — категории не критичны для открытия модалки */ }
+      } catch { /* silent - категории не критичны для открытия модалки */ }
     }
 
     editImageUrls = (a.image_urls && a.image_urls.length)
@@ -901,7 +914,7 @@
       });
     }
     $('editModal').style.display = 'flex';
-    // Wire payout hints under both price inputs — common.js helper.
+    // Wire payout hints under both price inputs - common.js helper.
     // Runs after the inputs have been populated above so the initial
     // hint reflects the current values without waiting on a keystroke.
     if (typeof window.attachPayoutHint === 'function') {
@@ -1111,7 +1124,7 @@
 
   // Клик по слайду открывает lightbox с текущим видимым фото.
   // Все слайды лежат друг на друге (position:absolute), и target
-  // указал бы на верхний по DOM, а не на визуально активный —
+  // указал бы на верхний по DOM, а не на визуально активный -
   // поэтому берём индекс не из e.target, а из lotCurrentSlide.
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.lot-image-wrap')) return;
@@ -1119,7 +1132,7 @@
     if (!e.target.closest('.lot-slide')) return;
     openLightbox(lotCurrentSlide);
   });
-  // Клик по сцене вне картинки и контролов — навигация: левая
+  // Клик по сцене вне картинки и контролов - навигация: левая
   // половина = prev, правая = next. Чтобы случайный промах по
   // визуальной стрелке не казался «глухим» нажатием.
   document.addEventListener('click', (e) => {
@@ -1128,7 +1141,7 @@
     if (lb.zoom > 1) return; // в режиме зума клик может быть частью drag
     const stage = e.target.closest('#lbStage');
     if (!stage) return;
-    // Игнорируем сам img — нужно чтобы wheel/drag работали без сюрпризов
+    // Игнорируем сам img - нужно чтобы wheel/drag работали без сюрпризов
     if (e.target.closest('.lb-img')) return;
     // Игнорируем клик по кнопкам и контролам
     if (e.target.closest('.lb-btn, .lb-controls, .lb-counter, .lb-nav')) return;

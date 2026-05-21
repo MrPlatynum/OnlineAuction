@@ -30,11 +30,18 @@ logger = logging.getLogger(__name__)
 
 ENDING_SOON_LEAD = timedelta(minutes=5)
 
+# Anti-sniping. A bid arriving within ANTISNIPING_WINDOW of the deadline
+# extends the auction so the new end_time = now + ANTISNIPING_EXTEND. The
+# whole window is granted from "now" rather than added to the old end_time -
+# a bid at +1s would otherwise leave only 2:01 instead of a clean 2 minutes.
+ANTISNIPING_WINDOW = timedelta(seconds=120)
+ANTISNIPING_EXTEND = timedelta(seconds=120)
+
 _completion_tasks: dict[int, asyncio.Task] = {}
 _ending_soon_tasks: dict[int, asyncio.Task] = {}
 
 # Handlers are injected by ``services/auctions.py`` at module import so this
-# module doesn't have to ``from app.services.auctions import ...`` itself —
+# module doesn't have to ``from app.services.auctions import ...`` itself -
 # that direction would close the loop with auctions.py's import of
 # ``schedule_auction``. With injection the dependency is one-way: scheduler
 # is the upstream module, auctions registers into it.
@@ -93,7 +100,7 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
     finally:
         # Only clear the slot if it still references *this* task. After a
         # reschedule (PATCH extend), schedule_auction has already replaced
-        # the dict entry with the new task — popping unconditionally would
+        # the dict entry with the new task - popping unconditionally would
         # orphan that new task from cancel_auction / shutdown.
         if _completion_tasks.get(auction_id) is current:
             _completion_tasks.pop(auction_id, None)
@@ -140,7 +147,7 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
 def schedule_auction(auction: Auction) -> None:
     """Schedule (or re-schedule) completion + ending-soon for ``auction``.
 
-    Safe to call multiple times — any pre-existing tasks for the same id
+    Safe to call multiple times - any pre-existing tasks for the same id
     are cancelled first. No-op for inactive auctions.
     """
     cancel_auction(auction.id)
@@ -169,7 +176,7 @@ def cancel_auction(auction_id: int) -> None:
 
 
 async def schedule_active_auctions() -> None:
-    """Startup hook — walks the table and schedules every active row.
+    """Startup hook - walks the table and schedules every active row.
 
     Auctions whose ``end_time`` is already in the past (server was down)
     have ``_sleep_seconds`` return 0 and complete on the next loop tick.
