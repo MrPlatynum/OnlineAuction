@@ -76,7 +76,7 @@ async def run_benchmark(base_url: str, endpoint: str, requests: int, concurrency
 
     limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
     async with httpx.AsyncClient(base_url=base_url, limits=limits, timeout=30.0) as client:
-        # Warm-up — 5 throwaway requests so the first measured request
+        # Warm-up - 5 throwaway requests so the first measured request
         # doesn't pay TCP/handshake costs that skew percentiles.
         for _ in range(5):
             try:
