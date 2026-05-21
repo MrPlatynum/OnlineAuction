@@ -1,4 +1,11 @@
 import asyncio
+from datetime import timedelta
+
+from sqlalchemy import select, update
+
+from app import database as _db_module
+from app.models import Auction
+from app.utils.time import utcnow
 
 
 async def _create_auction(client, headers, **overrides):
@@ -31,7 +38,7 @@ async def test_place_bid_increases_current_price(client, registered_user, second
 
 
 async def test_bid_on_bin_lot_rejected(client, registered_user, second_user):
-    """BIN lots are fixed-price listings, not auctions — /bids must
+    """BIN lots are fixed-price listings, not auctions - /bids must
     refuse them. Without this, a bidder could push current_price past
     bin_price while another user could still call /buy-now and grab the
     lot at the lower fixed price."""
@@ -129,7 +136,7 @@ async def test_cannot_overcommit_balance_across_active_auctions(
     client, registered_user, second_user
 ):
     """A user with $1000 leading on a $700 auction can't also lead a
-    $400 auction — the second bid would over-commit them ($1100 > $1000)."""
+    $400 auction - the second bid would over-commit them ($1100 > $1000)."""
     a1 = await _create_auction(client, registered_user["headers"], title="Lot 1")
     a2 = await _create_auction(client, registered_user["headers"], title="Lot 2")
 
@@ -152,7 +159,7 @@ async def test_cannot_overcommit_balance_across_active_auctions(
 async def test_user_cannot_outbid_themselves(
     client, registered_user, second_user, third_user
 ):
-    """Leading bidder can't raise their own bid — only another user
+    """Leading bidder can't raise their own bid - only another user
     breaking the leader's streak unlocks a fresh bid from them."""
     a1 = await _create_auction(client, registered_user["headers"])
 
@@ -286,7 +293,7 @@ async def test_concurrent_same_user_bids_on_same_auction(
 ):
     """Fire two simultaneous bids from the *same* user on the *same*
     auction. The self-outbid guard reads the latest bid under the
-    auction row lock — the second call must see the first as leader
+    auction row lock - the second call must see the first as leader
     and 400 with 'вы уже лидируете', not double-up the user as both
     bidder positions."""
     auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
@@ -352,7 +359,7 @@ async def test_bid_history_lists_bids_in_reverse_order(client, registered_user, 
 async def test_bid_history_pagination(
     client, registered_user, second_user, third_user
 ):
-    # Need >= 2 distinct bidders — a user who is already the leader
+    # Need >= 2 distinct bidders - a user who is already the leader
     # can't outbid themselves, so a single bidder yields exactly one
     # bid no matter how many POSTs we do.
     auction = await _create_auction(client, registered_user["headers"])
@@ -377,3 +384,115 @@ async def test_bid_history_pagination(
     assert body["total"] == 3
     assert body["total_pages"] == 2
     assert len(body["items"]) == 2
+
+
+# -- Anti-sniping -----------------------------------------------------------
+
+async def _force_end_time(auction_id: int, seconds_from_now: int) -> None:
+    """Push the auction deadline to ``now + seconds_from_now`` so the
+    closing-window logic can be exercised without waiting in real time."""
+    async with _db_module.SessionLocal() as db:
+        await db.execute(
+            update(Auction)
+            .where(Auction.id == auction_id)
+            .values(end_time=utcnow() + timedelta(seconds=seconds_from_now))
+        )
+        await db.commit()
+
+
+async def test_bid_in_closing_window_extends_end_time(
+    client, registered_user, second_user
+):
+    """A bid arriving within the 2-minute anti-sniping window must push
+    end_time to roughly now + 2 minutes so the previous leader has a
+    full window to react. Without this, a sniper bid at end_time - 1s
+    wins with no chance for counter-bids."""
+    auction = await _create_auction(client, registered_user["headers"])
+    original_end = utcnow() + timedelta(seconds=30)
+    await _force_end_time(auction["id"], seconds_from_now=30)
+
+    r = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["extended_until"] is not None
+
+    async with _db_module.SessionLocal() as db:
+        refreshed = (
+            await db.execute(select(Auction).where(Auction.id == auction["id"]))
+        ).scalar_one()
+    # Should be ~120s from now, definitely later than the original 30s deadline.
+    delta = (refreshed.end_time - original_end).total_seconds()
+    assert delta > 60, (
+        f"end_time moved by only {delta:.1f}s - expected ~90s "
+        f"(120s extension minus 30s of original lead)"
+    )
+
+
+async def test_bid_outside_closing_window_does_not_extend(
+    client, registered_user, second_user
+):
+    """A bid placed long before the deadline must leave end_time alone -
+    extending unconditionally would let any bid reset the timer and
+    auctions would never close."""
+    auction = await _create_auction(client, registered_user["headers"])
+    async with _db_module.SessionLocal() as db:
+        original = (
+            await db.execute(select(Auction).where(Auction.id == auction["id"]))
+        ).scalar_one()
+        original_end = original.end_time
+
+    r = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["extended_until"] is None
+
+    async with _db_module.SessionLocal() as db:
+        refreshed = (
+            await db.execute(select(Auction).where(Auction.id == auction["id"]))
+        ).scalar_one()
+    assert refreshed.end_time == original_end
+
+
+async def test_concurrent_late_bids_extend_end_time_once(
+    client, registered_user, second_user, third_user
+):
+    """Two simultaneous bids in the closing window must both pass the
+    SELECT FOR UPDATE serialisation - one wins, the other is rejected
+    on the 'higher than current price' check - and end_time must be
+    extended exactly once. A naive implementation could double-extend
+    by ~4 minutes; FOR UPDATE on the auction row prevents that because
+    the second bid sees the already-extended end_time."""
+    auction = await _create_auction(client, registered_user["headers"], starting_price=100.0)
+    await _force_end_time(auction["id"], seconds_from_now=30)
+
+    r_a, r_b = await asyncio.gather(
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=second_user["headers"],
+        ),
+        client.post(
+            "/api/bids",
+            json={"auction_id": auction["id"], "amount": 150.0},
+            headers=third_user["headers"],
+        ),
+    )
+    statuses = sorted([r_a.status_code, r_b.status_code])
+    assert statuses == [200, 400], (r_a.text, r_b.text)
+
+    async with _db_module.SessionLocal() as db:
+        refreshed = (
+            await db.execute(select(Auction).where(Auction.id == auction["id"]))
+        ).scalar_one()
+    seconds_left = (refreshed.end_time - utcnow()).total_seconds()
+    # Single extension = ~120s. Double extension would be ~240s.
+    assert 90 < seconds_left < 150, (
+        f"expected single 120s extension, got {seconds_left:.1f}s left"
+    )

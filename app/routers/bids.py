@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import Auction, Bid, NotificationType, User
 from app.schemas import BidCreate, BidResponse, PaginatedBidsResponse
+from app.services import auction_scheduler
 from app.services.balance import effective_committed_balance, lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
@@ -82,7 +83,7 @@ async def place_bid(
 ):
     bid_amount = to_decimal(bid.amount)
 
-    # FOR UPDATE so concurrent bids on the same lot queue here at the DB —
+    # FOR UPDATE so concurrent bids on the same lot queue here at the DB -
     # the read-check-write below is atomic across workers.
     auction = (
         await db.execute(
@@ -102,7 +103,7 @@ async def place_bid(
         # lot at the lower fixed price.
         raise HTTPException(
             status_code=400,
-            detail="Это лот с фиксированной ценой — ставки не принимаются, используйте «Купить сразу»",
+            detail="Это лот с фиксированной ценой - ставки не принимаются, используйте «Купить сразу»",
         )
 
     if auction.created_by == current_user.id:
@@ -130,7 +131,7 @@ async def place_bid(
     if previous_leader_bid and previous_leader_bid.user_id == current_user.id:
         raise HTTPException(
             status_code=400,
-            detail="Вы уже лидируете в этом аукционе — дождитесь чужой ставки",
+            detail="Вы уже лидируете в этом аукционе - дождитесь чужой ставки",
         )
 
     # Lock the bidder's user row before reading balance / committed-elsewhere.
@@ -155,9 +156,26 @@ async def place_bid(
     db_bid = Bid(amount=bid_amount, user_id=current_user.id, auction_id=bid.auction_id)
     auction.current_price = bid_amount
 
+    # Anti-sniping: a bid within the closing window resets end_time to a
+    # full extension from "now". Resetting ending_soon_notified lets the
+    # five-minute warning fire again ahead of the new deadline.
+    extended = False
+    if auction.end_time - utcnow() < auction_scheduler.ANTISNIPING_WINDOW:
+        auction.end_time = utcnow() + auction_scheduler.ANTISNIPING_EXTEND
+        auction.ending_soon_notified = False
+        extended = True
+
     db.add(db_bid)
     await db.commit()
     await db.refresh(db_bid)
+
+    if extended:
+        # Cancel the old completion task (still sleeping at the previous
+        # end_time) and start a fresh one at the new deadline. Without this
+        # the old task would still fire on schedule, see end_time > now in
+        # _wait_and_complete, and self-reschedule - functionally correct but
+        # leaves a needless extra wake-up.
+        auction_scheduler.schedule_auction(auction)
 
     if previous_leader_bid and previous_leader_bid.user_id != current_user.id:
         previous_leader = (
@@ -182,7 +200,7 @@ async def place_bid(
             auction.id, auction.title, manager,
         )
 
-    await manager.broadcast({
+    broadcast_payload = {
         "type": "new_bid",
         "bid": {
             "id": db_bid.id,
@@ -191,6 +209,16 @@ async def place_bid(
             "timestamp": db_bid.timestamp.isoformat(),
         },
         "current_price": float(auction.current_price),
-    }, bid.auction_id)
+    }
+    if extended:
+        broadcast_payload["extended_until"] = auction.end_time.isoformat()
+        broadcast_payload["time_remaining"] = int(
+            (auction.end_time - utcnow()).total_seconds()
+        )
+    await manager.broadcast(broadcast_payload, bid.auction_id)
 
-    return {"message": "Ставка принята", "bid_id": db_bid.id}
+    return {
+        "message": "Ставка принята",
+        "bid_id": db_bid.id,
+        "extended_until": auction.end_time.isoformat() if extended else None,
+    }
