@@ -106,7 +106,11 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
                 await _settle_handler(auction_id, db)
             except Exception:
                 logger.exception("Error completing auction %s", auction_id)
-                await db.rollback()
+                # Shield the rollback so a shutdown cancel arriving mid-
+                # await doesn't leave the session in a half-rolled state
+                # (open tx still held on the connection, returned to the
+                # pool in undefined state).
+                await asyncio.shield(db.rollback())
     except asyncio.CancelledError:
         raise
     finally:
@@ -159,7 +163,10 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
                 logger.exception(
                     "Error sending ending-soon for auction %s", auction_id
                 )
-                await db.rollback()
+                # Same shield rationale as _wait_and_complete above:
+                # don't let a shutdown cancel interrupt the rollback and
+                # leave the session half-torn-down.
+                await asyncio.shield(db.rollback())
     except asyncio.CancelledError:
         raise
     finally:
