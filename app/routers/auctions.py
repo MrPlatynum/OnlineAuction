@@ -6,6 +6,7 @@ the BIN ``/buy-now`` settle path, and the personal-history aggregations
 mutations on the user balance live in ``balance.py``.
 """
 
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,10 +40,12 @@ from app.services.auctions import (
     settle_bin_purchase,
 )
 from app.services.balance import get_committed_balance, lock_users_by_id
-from app.services.notifications import create_notification, notify_user
+from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["auctions"])
 
@@ -186,21 +189,34 @@ async def create_auction(
     if all_urls:
         await db.commit()
 
+    # Fan out NEW_LOT through notify_user so subscribers get the full
+    # three-channel delivery (in-app row + WS push + email), not just
+    # the in-app row. ``create_notification`` alone left this channel
+    # silent for everyone watching the bell and never produced an
+    # email, which made the "subscribe" feature feel broken.
+    # Notifications are best-effort: a single failed recipient must
+    # not abort the rest, and must not propagate up to roll back the
+    # create_auction commit that already persisted the row.
     subscribers = (
         await db.execute(
-            select(Subscription).where(Subscription.seller_id == current_user.id)
+            select(User)
+            .join(Subscription, Subscription.subscriber_id == User.id)
+            .where(Subscription.seller_id == current_user.id)
         )
     ).scalars().all()
-    for sub in subscribers:
-        await create_notification(
-            db=db,
-            user_id=sub.subscriber_id,
-            notification_type=NotificationType.NEW_LOT,
-            title="Новый лот",
-            message=f"@{current_user.username} выставил новый лот: «{db_auction.title}»",
-            auction_id=db_auction.id,
-            auction_title=db_auction.title,
-        )
+    for subscriber in subscribers:
+        try:
+            await notify_user(
+                db, subscriber, NotificationType.NEW_LOT,
+                "Новый лот",
+                f"@{current_user.username} выставил новый лот: «{db_auction.title}»",
+                db_auction.id, db_auction.title, manager,
+            )
+        except Exception:
+            logger.exception(
+                "NEW_LOT dispatch failed for subscriber %s on auction %s",
+                subscriber.id, db_auction.id,
+            )
 
     # Re-fetch with relationships eager-loaded so the response goes through
     # the same shape as the listing - kept these dicts drifting apart before

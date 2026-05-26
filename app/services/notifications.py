@@ -30,6 +30,13 @@ _EMAIL_OPT_OUT_FLAG: dict[NotificationType, str] = {
     NotificationType.AUCTION_SOLD:   "notify_sold",
     NotificationType.BID_PLACED:     "notify_bid_received",
     NotificationType.AUCTION_LOST:   "notify_lost",
+    # NEW_LOT has no dedicated per-type opt-out column: subscribing to a
+    # seller is itself the opt-in (the user can unsubscribe to silence
+    # the channel). Mapping to the master ``email_notifications`` flag
+    # means the email fires whenever the outer if-check would already
+    # have passed - effectively "no per-type opt-out, master toggle
+    # still applies".
+    NotificationType.NEW_LOT:        "email_notifications",
 }
 
 

@@ -101,6 +101,49 @@ async def test_subscribe_integrity_race_returns_400_not_500(
     assert "подписан" in second.json()["detail"].lower()
 
 
+async def test_new_lot_emails_subscribers(client, registered_user, second_user, capture_emails):
+    """A seller's subscribers receive an email when the seller posts a
+    new lot. The handler used to call ``create_notification`` directly,
+    which only wrote the DB row and bypassed the email + WS channels."""
+    seller_id = registered_user["user"]["id"]
+    # bob subscribes to alice.
+    sub = await client.post(
+        f"/api/sellers/{seller_id}/subscribe",
+        headers=second_user["headers"],
+    )
+    assert sub.status_code == 200, sub.text
+
+    # alice posts a new lot.
+    auction = await client.post(
+        "/api/auctions",
+        json={
+            "title": "Shiny new",
+            "description": "...",
+            "starting_price": 50.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )
+    assert auction.status_code == 200, auction.text
+
+    # capture_emails replaces the autouse no-op with a list-appending
+    # stub - one entry per email enqueued via _fire_and_forget_email.
+    new_lot_emails = [e for e in capture_emails if e[0] == "bob@example.com"]
+    assert len(new_lot_emails) == 1
+    assert "Новый лот" in new_lot_emails[0][1]
+    assert "Shiny new" in new_lot_emails[0][2]
+
+    # The in-app row is still written (existing /api/notifications path).
+    notifs = await client.get(
+        "/api/notifications",
+        headers=second_user["headers"],
+    )
+    assert notifs.status_code == 200
+    rows = notifs.json()
+    assert any(r["type"] == "new_lot" and "Shiny new" in r["message"] for r in rows)
+
+
 async def test_unsubscribe_removes_subscription(client, registered_user, second_user):
     seller_id = registered_user["user"]["id"]
     await client.post(
