@@ -1,11 +1,11 @@
-const token = localStorage.getItem('token');
+const token = window.getToken();
 
-function fmtMonthYear(iso) {
-  return new Date(iso).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-}
-function fmtDateShort(iso) {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+// fmtMonthYear / fmtDateShort come from common.js (window.fmtMonthYear /
+// window.fmtDateShort). The shared versions normalise naive-UTC server
+// timestamps via a trailing 'Z' before formatting, so a user in a non-UTC
+// timezone no longer sees the displayed day shifted by their offset for
+// dates near the midnight boundary - the old local copies skipped that
+// step and inherited the browser's localisation.
 function fmtTimer(sec) {
   if (!sec || sec <= 0) return null;
   const d = Math.floor(sec / 86400);
