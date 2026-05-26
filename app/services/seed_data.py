@@ -67,6 +67,27 @@ _SUBS_MAP = {
 }
 
 
+def _build_new_subs(
+    parent_map: dict[str, int],
+    existing_slugs: frozenset[str] = frozenset(),
+) -> list[Category]:
+    """Build child Category rows from _SUBS_MAP, filtering out anything
+    already in ``existing_slugs`` (the top-up branch passes the current
+    DB slug set; the fresh-install branch passes the empty default so
+    every row is created). Shared so both branches stay aligned when a
+    new sub-category is added to _SUBS_MAP."""
+    new_subs: list[Category] = []
+    for parent_slug, children in _SUBS_MAP.items():
+        pid = parent_map.get(parent_slug)
+        if not pid:
+            continue
+        for name, slug, icon in children:
+            if slug in existing_slugs:
+                continue
+            new_subs.append(Category(name=name, slug=slug, icon=icon, parent_id=pid))
+    return new_subs
+
+
 async def seed_categories():
     async with SessionLocal() as db:
         existing_count = (await db.execute(select(Category))).scalars().first()
@@ -78,27 +99,13 @@ async def seed_categories():
                 await db.refresh(p)
 
             parent_map = {p.slug: p.id for p in parents}
-            subs = []
-            for parent_slug, children in _SUBS_MAP.items():
-                pid = parent_map.get(parent_slug)
-                if not pid:
-                    continue
-                for name, slug, icon in children:
-                    subs.append(Category(name=name, slug=slug, icon=icon, parent_id=pid))
-            db.add_all(subs)
+            db.add_all(_build_new_subs(parent_map))
             await db.commit()
         else:
             existing = (await db.execute(select(Category))).scalars().all()
-            existing_slugs = {c.slug for c in existing}
+            existing_slugs = frozenset(c.slug for c in existing)
             parent_map = {c.slug: c.id for c in existing if c.parent_id is None}
-            new_subs = []
-            for parent_slug, children in _SUBS_MAP.items():
-                pid = parent_map.get(parent_slug)
-                if not pid:
-                    continue
-                for name, slug, icon in children:
-                    if slug not in existing_slugs:
-                        new_subs.append(Category(name=name, slug=slug, icon=icon, parent_id=pid))
+            new_subs = _build_new_subs(parent_map, existing_slugs)
             if new_subs:
                 db.add_all(new_subs)
                 await db.commit()
