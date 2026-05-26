@@ -560,11 +560,28 @@ async def delete_auction(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
 
-    if auction.is_active and bids_count > 0:
-        raise HTTPException(status_code=400, detail="Нельзя удалить активный лот со ставками")
+    # Bid.auction_id has no ON DELETE rule, and Review.auction_id is the
+    # same shape; deleting an auction with any referencing row falls
+    # into a FK violation at commit and surfaces as a 500. Reject
+    # outright when bids exist regardless of active/completed state -
+    # the prior check missed a completed lot with bids but NULL
+    # winner_id (a half-settled lot from an interrupted complete_auction
+    # tick), which previously crashed at the FK.
+    if bids_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя удалить лот, на который уже делали ставки",
+        )
 
-    if auction.is_completed and auction.winner_id:
-        raise HTTPException(status_code=400, detail="Нельзя удалить лот с победителем")
+    # No-bid completed lots are still a finalised historical record;
+    # rather than deciding what "deletable" means for those, block all
+    # completed lots so /delete is unambiguous - "you can only delete a
+    # lot that nobody touched yet".
+    if auction.is_completed:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя удалить завершённый лот",
+        )
 
     await db.delete(auction)
     await db.commit()
