@@ -10,6 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PUBLIC_BASE_URL
 from app.models import Notification, NotificationType, User
+from app.services.email import (
+    build_notification_email_html,
+    build_password_changed_email_html,
+    build_password_reset_email_html,
+    build_verification_email_html,
+)
+from app.services.email_outbox import enqueue_email
+from app.utils.security import create_email_verify_token, create_password_reset_token
 
 # Per-type opt-out: every NotificationType maps to the boolean column on
 # ``User`` whose ``False`` value silences the email channel for that type
@@ -23,14 +31,6 @@ _EMAIL_OPT_OUT_FLAG: dict[NotificationType, str] = {
     NotificationType.BID_PLACED:     "notify_bid_received",
     NotificationType.AUCTION_LOST:   "notify_lost",
 }
-from app.services.email import (
-    build_notification_email_html,
-    build_password_changed_email_html,
-    build_password_reset_email_html,
-    build_verification_email_html,
-)
-from app.services.email_outbox import enqueue_email
-from app.utils.security import create_email_verify_token, create_password_reset_token
 
 
 def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
