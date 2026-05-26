@@ -1,6 +1,10 @@
-const token = localStorage.getItem('token');
+const token = window.getToken();
 
-function logout() { localStorage.removeItem('token'); location.href = 'index.html'; }
+// logout() called from templates/profile.html sidebar button resolves to
+// window.logout (defined in common.js). No per-page cleanup needed here -
+// profile.html doesn't own any open WS connections; the notification bell
+// WS lives in common.js's initNotifBell closure and the browser will close
+// it on navigation.
 if (!token) { showToast('Требуется вход', 'Войдите, чтобы открыть профиль', 'warn'); setTimeout(() => location.href = 'index.html', 1200); }
 
 /* ---- Progress ---- */

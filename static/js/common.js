@@ -42,6 +42,16 @@
     return url.startsWith('http') ? url : window.API + url;
   };
 
+  // Single logout entry point. Per-page scripts that need to tear down their own
+  // resources (open WebSockets, intervals, in-memory caches) subscribe to the
+  // 'lotus:logout' event - keeps page-specific cleanup local without forcing
+  // each page to re-implement the token drop + redirect dance.
+  window.logout = function() {
+    try { window.dispatchEvent(new CustomEvent('lotus:logout')); } catch (_) {}
+    try { localStorage.removeItem('token'); } catch (_) {}
+    window.location.href = 'index.html';
+  };
+
   // Shorthand для `document.getElementById`. Удобство для per-page скриптов
   // (auction.js, profile.js, и т.д.) - раньше каждый объявлял локальный
   // `const $ = …`. Глобал из common.js работает потому что common.js

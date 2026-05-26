@@ -1772,18 +1772,19 @@ function buildPageList(current, total) {
             try { clearLotImage(); } catch {}
         }
 
-        function logout() {
-            // Закрываем все WebSocket соединения
+        // Tear down per-page resources before window.logout drops the token
+        // and redirects. The home page keeps a websockets pool keyed by
+        // auction-card id - without an explicit close on logout the sockets
+        // hang until the browser navigates and the server only finds out
+        // about the disconnect on the next ping timeout.
+        window.addEventListener('lotus:logout', () => {
             Object.values(websockets).forEach(ws => {
                 if (ws.pingInterval) clearInterval(ws.pingInterval);
                 ws.close();
             });
             websockets = {};
             reconnectAttempts = {};
-            
-            localStorage.removeItem('token');
-            location.reload();
-        }
+        });
 
         function showSection(e, section) {
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
