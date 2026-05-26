@@ -33,16 +33,16 @@ _EMAIL_OPT_OUT_FLAG: dict[NotificationType, str] = {
 }
 
 
-def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
-    """Backwards-compatible shim. Older callers all routed through
-    here; now this just enqueues onto the durable outbox so the
-    background worker handles delivery (with retry / dead-letter).
-    Kept as a single seam so tests that monkeypatch this name still
-    see every email the app schedules."""
-    enqueue_email(to_email, subject, html)
+async def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
+    """Single seam to the durable outbox. The name predates the
+    rewrite to a persistent queue and is kept so existing test
+    monkeypatches still hit every email the app schedules; the
+    INSERT itself is now awaited synchronously so a SIGKILL after
+    the HTTP response can't lose the row."""
+    await enqueue_email(to_email, subject, html)
 
 
-def send_verification_email(user: User) -> None:
+async def send_verification_email(user: User) -> None:
     """Post-register verification email. Goes through the durable
     outbox (``enqueue_email``): the background worker drains the
     table with retry/backoff and dead-lettering, so app crashes or
@@ -51,35 +51,35 @@ def send_verification_email(user: User) -> None:
     token = create_email_verify_token(user)
     link = f"{PUBLIC_BASE_URL}/verify-email.html?token={token}"
     html_content = build_verification_email_html(user.username, link)
-    _fire_and_forget_email(
+    await _fire_and_forget_email(
         user.email,
         "Подтвердите email - Лотус",
         html_content,
     )
 
 
-def send_password_reset_email(user: User) -> None:
-    """Fire-and-forget the password-reset link. The token's ``tv``
-    claim is read from the user's current ``token_version`` - a later
+async def send_password_reset_email(user: User) -> None:
+    """Outbox-backed password-reset link. The token's ``tv`` claim is
+    read from the user's current ``token_version`` - a later
     successful /password-reset/confirm bumps tv so this link (and any
     other in-flight reset link for the same account) auto-invalidate."""
     token = create_password_reset_token(user)
     link = f"{PUBLIC_BASE_URL}/password-reset.html?token={token}"
     html_content = build_password_reset_email_html(user.username, link)
-    _fire_and_forget_email(
+    await _fire_and_forget_email(
         user.email,
         "Сброс пароля - Лотус",
         html_content,
     )
 
 
-def send_password_changed_email(user: User) -> None:
+async def send_password_changed_email(user: User) -> None:
     """Notification email sent right after /password-reset/confirm
     succeeds. The legitimate user sees the trail even if the reset
     was triggered by someone who'd taken over their inbox - they
     can react before the attacker has time to dig in."""
     html_content = build_password_changed_email_html(user.username)
-    _fire_and_forget_email(
+    await _fire_and_forget_email(
         user.email,
         "Пароль изменён - Лотус",
         html_content,
@@ -160,4 +160,4 @@ async def notify_user(
             html_content = build_notification_email_html(
                 notification_type.value, title, message, auction_id, auction_title
             )
-            _fire_and_forget_email(user.email, title, html_content)
+            await _fire_and_forget_email(user.email, title, html_content)

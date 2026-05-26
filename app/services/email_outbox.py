@@ -69,13 +69,6 @@ _BACKOFF_MAX = timedelta(hours=6)
 _worker_task: asyncio.Task | None = None
 _stop_event: asyncio.Event | None = None
 
-# Strong-ref the in-flight INSERTs so the event-loop GC doesn't reap them
-# mid-await. Each ``enqueue_email`` adds the task here and clears it via the
-# done-callback. Declared above the function that uses it for readability;
-# Python's module-level name resolution makes the placement here equivalent
-# to the post-function declaration, but reading top-down works better.
-_insert_tasks: set[asyncio.Task] = set()
-
 
 def backoff_for_attempt(attempts: int) -> timedelta:
     """Wait before the *next* SMTP try after ``attempts`` failures.
@@ -84,36 +77,23 @@ def backoff_for_attempt(attempts: int) -> timedelta:
     return _BACKOFF_BY_ATTEMPT.get(attempts, _BACKOFF_MAX)
 
 
-def enqueue_email(
+async def enqueue_email(
     to_email: str,
     subject: str,
     html_body: str,
     *,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
 ) -> None:
-    """Schedule an email send. Opens a fresh DB session, INSERTs the
-    row, commits, returns immediately. Caller doesn't await SMTP - the
-    background worker handles it.
+    """Persist one outbox row. Caller awaits the INSERT before
+    returning its HTTP response, so the row is durable on disk
+    before the user sees a 200 / 202 - an SIGKILL between the
+    response and a deferred INSERT (the previous create_task design)
+    no longer loses transactional mail.
 
-    Fire-and-forget by design: we use ``asyncio.create_task`` to run
-    the INSERT off the request hot path. The task is added to a
-    module-level set so the GC doesn't reap it mid-flight, and removed
-    once it completes - same pattern the old fire-and-forget email
-    path used.
-    """
-    task = asyncio.create_task(
-        _insert_outbox_row(to_email, subject, html_body, max_attempts)
-    )
-    _insert_tasks.add(task)
-    task.add_done_callback(_insert_tasks.discard)
-
-
-async def _insert_outbox_row(
-    to_email: str,
-    subject: str,
-    html_body: str,
-    max_attempts: int,
-) -> None:
+    Failures are logged and swallowed: a register / password-reset
+    handler should not 500 just because the outbox table is briefly
+    unreachable. The user can retry; the bigger durability win was
+    making the *successful* path actually durable."""
     try:
         async with _db_module.SessionLocal() as db:
             db.add(

@@ -103,9 +103,10 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
     await db.refresh(db_user)
 
     # Kick off the verification email after the row is persistent so a
-    # later rollback can't leave us mailing a non-existent user; the
-    # send itself is fire-and-forget so /register doesn't block on SMTP.
-    send_verification_email(db_user)
+    # later rollback can't leave us mailing a non-existent user. The
+    # await covers only the outbox INSERT (sub-millisecond local DB
+    # call); actual SMTP delivery is handled by the background worker.
+    await send_verification_email(db_user)
 
     token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
@@ -158,7 +159,7 @@ async def resend_verification_email(
         raise HTTPException(
             status_code=400, detail="Email уже подтверждён"
         )
-    send_verification_email(current_user)
+    await send_verification_email(current_user)
     return {"message": "Письмо отправлено"}
 
 
@@ -255,7 +256,7 @@ async def password_reset_request(
             user.password_reset_sent_at = now
             await db.commit()
             await db.refresh(user)
-            send_password_reset_email(user)
+            await send_password_reset_email(user)
     remaining = deadline - asyncio.get_running_loop().time()
     if remaining > 0:
         await asyncio.sleep(remaining)
@@ -301,5 +302,5 @@ async def password_reset_confirm(
     await _invalidate_user_sessions(user)
     await db.commit()
 
-    send_password_changed_email(user)
+    await send_password_changed_email(user)
     return {"message": "Пароль успешно сброшен"}

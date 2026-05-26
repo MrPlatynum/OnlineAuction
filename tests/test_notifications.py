@@ -144,7 +144,7 @@ async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
 
     sent: list[tuple[str, str]] = []
 
-    def fake_send(to_email, subject, html):
+    async def fake_send(to_email, subject, html):
         sent.append((to_email, subject))
 
     monkeypatch.setattr(notif_module, "_fire_and_forget_email", fake_send)

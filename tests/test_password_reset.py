@@ -186,9 +186,11 @@ async def test_confirm_concurrent_same_token_only_one_wins(
     """Fire two concurrent /confirm calls with the same valid token. The
     user-row ``SELECT ... FOR UPDATE`` must serialise them so only the
     first commit wins; the second sees the bumped tv and gets a 400."""
+    async def _noop(*_a, **_kw):
+        return None
+
     monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_a, **_kw: None,
+        "app.services.notifications._fire_and_forget_email", _noop
     )
 
     from sqlalchemy import select

@@ -71,9 +71,10 @@ def _suppress_outbox_enqueue(monkeypatch):
     before invoking the worker."""
     from app.services import notifications as notif_mod
 
-    monkeypatch.setattr(
-        notif_mod, "_fire_and_forget_email", lambda *_a, **_kw: None
-    )
+    async def _noop(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _noop)
 
 
 @pytest_asyncio.fixture
@@ -86,11 +87,11 @@ def capture_emails(monkeypatch):
     from app.services import notifications as notif_mod
 
     calls: list[tuple[str, str, str]] = []
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: calls.append((to, subj, html)),
-    )
+
+    async def _capture(to, subj, html):
+        calls.append((to, subj, html))
+
+    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _capture)
     return calls
 
 
