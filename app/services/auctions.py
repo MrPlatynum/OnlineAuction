@@ -39,6 +39,36 @@ def seller_commission(gross_price: Decimal) -> Decimal:
     return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def _credit_seller(
+    db: AsyncSession,
+    seller: User,
+    gross: Decimal,
+    auction: Auction,
+    *,
+    sale_description: str,
+) -> None:
+    """Apply the seller side of a settled sale: a gross sale credit
+    followed by a separate commission debit. Two transaction rows
+    instead of one net row so the audit history reads naturally — the
+    seller sees the headline sale price and the platform fee as
+    distinct lines. Used by both the BIN and the bid settlement paths,
+    which differ only in ``sale_description`` (BIN says "по цене BIN",
+    bid says "лота")."""
+    seller.balance += gross
+    add_transaction(
+        db, seller, "auction_sale", gross,
+        sale_description, auction_id=auction.id,
+    )
+    commission = seller_commission(gross)
+    if commission > 0:
+        seller.balance -= commission
+        add_transaction(
+            db, seller, "commission", commission,
+            f"Комиссия платформы {PLATFORM_COMMISSION_PERCENT}%",
+            auction_id=auction.id,
+        )
+
+
 def settle_bin_purchase(
     db: AsyncSession,
     auction: Auction,
@@ -65,23 +95,53 @@ def settle_bin_purchase(
     auction.winner_id = buyer.id
     auction.end_time = utcnow()
     if seller:
-        # Gross credit first so the audit row shows the headline sale
-        # price the user expects to see — then deduct the platform fee
-        # as its own row. Net effect on balance is price − commission;
-        # splitting the rows keeps each transaction readable on its own.
-        seller.balance += price
-        add_transaction(
-            db, seller, "auction_sale", price,
-            f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
+        _credit_seller(
+            db, seller, price, auction,
+            sale_description=f"Продажа «{auction.title}» по цене BIN",
         )
-        commission = seller_commission(price)
-        if commission > 0:
-            seller.balance -= commission
-            add_transaction(
-                db, seller, "commission", commission,
-                f"Комиссия платформы {PLATFORM_COMMISSION_PERCENT}%",
-                auction_id=auction.id,
-            )
+
+
+def _build_completion_notifications(
+    *,
+    auction: Auction,
+    last_bid: Bid,
+    winner: User | None,
+    creator: User | None,
+    bidders: list[User],
+) -> list[tuple[User, NotificationType, str, str]]:
+    """Build the (recipient, type, title, body) tuples for every
+    notification fired off the end-of-auction settle path. Pure: no DB
+    work, no commits — caller is responsible for the actual dispatch
+    after the financial commit has gone through. Pulled out of
+    ``complete_auction`` to keep that function's flow readable; the
+    same shape is also easier to unit-test in isolation."""
+    pending: list[tuple[User, NotificationType, str, str]] = []
+    for user in bidders:
+        if user.id == last_bid.user_id:
+            pending.append((
+                user, NotificationType.AUCTION_WON,
+                "🎉 Поздравляем! Вы выиграли аукцион!",
+                f"Вы выиграли лот за {last_bid.amount:.2f} ₽. Средства списаны с вашего баланса.",
+            ))
+        else:
+            pending.append((
+                user, NotificationType.AUCTION_LOST,
+                "Аукцион завершён",
+                f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner.username}.",
+            ))
+    if creator and creator.id != last_bid.user_id:
+        commission = seller_commission(last_bid.amount)
+        net = last_bid.amount - commission
+        pending.append((
+            creator, NotificationType.AUCTION_SOLD,
+            "💰 Ваш лот продан!",
+            (
+                f"Лот продан за {last_bid.amount:.2f} ₽. "
+                f"На баланс зачислено {net:.2f} ₽ "
+                f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% — {commission:.2f} ₽)."
+            ),
+        ))
+    return pending
 
 
 async def fetch_auction_bidders(
@@ -193,50 +253,19 @@ async def complete_auction(auction_id: int, db: AsyncSession):
             )
 
         if creator:
-            # See settle_bin_purchase: gross sale credit, then a
-            # separate commission deduction so the audit history reads
-            # naturally for both the seller and any future support tool.
-            creator.balance += last_bid.amount
-            add_transaction(
-                db, creator, "auction_sale", last_bid.amount,
-                f"Продажа лота «{auction.title}»", auction_id=auction.id,
+            _credit_seller(
+                db, creator, last_bid.amount, auction,
+                sale_description=f"Продажа лота «{auction.title}»",
             )
-            commission = seller_commission(last_bid.amount)
-            if commission > 0:
-                creator.balance -= commission
-                add_transaction(
-                    db, creator, "commission", commission,
-                    f"Комиссия платформы {PLATFORM_COMMISSION_PERCENT}%",
-                    auction_id=auction.id,
-                )
 
-        users = await fetch_auction_bidders(db, auction_id)
-        for user in users:
-            if user.id == last_bid.user_id:
-                pending_notifications.append((
-                    user, NotificationType.AUCTION_WON,
-                    "🎉 Поздравляем! Вы выиграли аукцион!",
-                    f"Вы выиграли лот за {last_bid.amount:.2f} ₽. Средства списаны с вашего баланса.",
-                ))
-            else:
-                pending_notifications.append((
-                    user, NotificationType.AUCTION_LOST,
-                    "Аукцион завершён",
-                    f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner.username}.",
-                ))
-
-        if creator and creator.id != last_bid.user_id:
-            commission = seller_commission(last_bid.amount)
-            net = last_bid.amount - commission
-            pending_notifications.append((
-                creator, NotificationType.AUCTION_SOLD,
-                "💰 Ваш лот продан!",
-                (
-                    f"Лот продан за {last_bid.amount:.2f} ₽. "
-                    f"На баланс зачислено {net:.2f} ₽ "
-                    f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% — {commission:.2f} ₽)."
-                ),
-            ))
+        bidders = await fetch_auction_bidders(db, auction_id)
+        pending_notifications = _build_completion_notifications(
+            auction=auction,
+            last_bid=last_bid,
+            winner=winner,
+            creator=creator,
+            bidders=bidders,
+        )
 
     await db.commit()
 
