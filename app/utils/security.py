@@ -237,7 +237,7 @@ def decode_email_verify_token(token: str) -> tuple[int, str]:
     return user_id, email
 
 
-def decode_token(token: str):
+def decode_token(token: str) -> dict:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload

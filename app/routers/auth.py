@@ -240,7 +240,7 @@ async def password_reset_request(
     # ~30-50мс). Поднимаем минимальную длительность отклика так, чтобы
     # все три ветки укладывались в одинаковое окно — детектируемая
     # разница над шумом сети уходит.
-    deadline = asyncio.get_event_loop().time() + PASSWORD_RESET_REQUEST_FLOOR_SECONDS
+    deadline = asyncio.get_running_loop().time() + PASSWORD_RESET_REQUEST_FLOOR_SECONDS
     user = (
         await db.execute(select(User).where(User.email == data.email))
     ).scalar_one_or_none()
@@ -257,7 +257,7 @@ async def password_reset_request(
             await db.commit()
             await db.refresh(user)
             send_password_reset_email(user)
-    remaining = deadline - asyncio.get_event_loop().time()
+    remaining = deadline - asyncio.get_running_loop().time()
     if remaining > 0:
         await asyncio.sleep(remaining)
     return _GENERIC_REQUEST_RESPONSE
