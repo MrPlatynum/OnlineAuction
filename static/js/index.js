@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const el = document.getElementById('statCommission');
   if (!el) return;
   try {
-    const r = await fetch(`${API_URL}/api/platform`);
+    const r = await fetch(`${window.API}/api/platform`);
     if (!r.ok) return;
     const data = await r.json();
     if (typeof data.commission_percent === 'number') {
@@ -209,11 +209,8 @@ function setAuctionType(type) {
 
 
 async function loadCategories() {
-  const apiBase = (typeof API_URL !== 'undefined' ? API_URL : null)
-               || (typeof API !== 'undefined' ? API : null)
-               || window.location.origin;
   try {
-    const r = await fetch(`${apiBase}/api/categories`);
+    const r = await fetch(`${window.API}/api/categories`);
     if (!r.ok) return;
     const cats = await r.json();
 
@@ -610,10 +607,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-        // API / WS_BASE приходят из common.js (window.API, window.WS_BASE)
-        const API_URL = window.API;
+        // API / WS_BASE приходят из common.js (window.API, window.WS_BASE).
+        // Локальный alias WS_URL остаётся - короче читается в шаблонных строках.
         const WS_URL  = window.WS_BASE;
-        let token = localStorage.getItem('token');
+        let token = window.getToken();
         let currentUser = null;
         // Зеркалим currentUser на window, чтобы inline-обработчики в
         // шаблоне (например, кнопка «Выставить свой лот») могли
@@ -768,7 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
         async function uploadOneFile(file) {
             const fd = new FormData();
             fd.append('file', file, file.name || 'lot.jpg');
-            const r = await apiFetch(`${API_URL}/api/upload-image`, {
+            const r = await apiFetch(`${window.API}/api/upload-image`, {
                 method: 'POST',
                 body: fd
             });
@@ -860,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Инициализация
         async function init() {
             // всегда подтягиваем token из localStorage
-            token = localStorage.getItem('token');
+            token = window.getToken();
 
             // wired once: image upload + crop UI
             try { wireLotImageUI(); } catch {}
@@ -906,7 +903,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function loadCurrentUser() {
             // синхронизируем token с localStorage (важно при переходах между страницами)
-            token = localStorage.getItem('token');
+            token = window.getToken();
 
             // wired once: image upload + crop UI
             try { wireLotImageUI(); } catch {}
@@ -920,7 +917,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let response;
             try {
-                response = await apiFetch(`${API_URL}/api/me`, {
+                response = await apiFetch(`${window.API}/api/me`, {
                     method: 'GET'
                 });
             } catch (err) {
@@ -993,7 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentFilters.category)    params.append('category',     currentFilters.category);
                 if (currentFilters.auctionType) params.append('auction_type', currentFilters.auctionType);
                 
-                const response = await fetch(`${API_URL}/api/auctions?${params}`);
+                const response = await fetch(`${window.API}/api/auctions?${params}`);
                 const data = await response.json();
                 
                 totalPages = data.total_pages;
@@ -1191,7 +1188,7 @@ function buildPageList(current, total) {
             const now = Date.now();
             if (lastPriceRefresh[auctionId] && now - lastPriceRefresh[auctionId] < 5000) return;
             lastPriceRefresh[auctionId] = now;
-            fetch(`${API_URL}/api/auctions/${auctionId}`)
+            fetch(`${window.API}/api/auctions/${auctionId}`)
                 .then(r => r.ok ? r.json() : null)
                 .then(d => {
                     if (d && typeof d.current_price === 'number') {
@@ -1307,7 +1304,7 @@ function buildPageList(current, total) {
                 }
 
                 const imgSrc = auction.image_url
-                    ? (String(auction.image_url).startsWith('http') ? auction.image_url : `${API_URL}${auction.image_url}`)
+                    ? (String(auction.image_url).startsWith('http') ? auction.image_url : `${window.API}${auction.image_url}`)
                     : null;
 
                 const isEnded = timeRemaining === 0;
@@ -1316,9 +1313,7 @@ function buildPageList(current, total) {
                 const safeCreator = esc(creatorName);
                 const creatorAvatarUrl = auction.creator_avatar_url || null;
                 const creatorAvatarHtml = creatorName ? (() => {
-                  const src = creatorAvatarUrl
-                    ? (creatorAvatarUrl.startsWith('http') ? creatorAvatarUrl : `${API_URL}${creatorAvatarUrl}`)
-                    : null;
+                  const src = resolveAvatarUrl(creatorAvatarUrl);
                   return `<div class="mini-avatar">${src ? `<img src="${esc(src)}" alt="${safeCreator}">` : esc(creatorName[0].toUpperCase())}</div>`;
                 })() : '';
 
@@ -1329,7 +1324,7 @@ function buildPageList(current, total) {
                 const safeTitle = esc(auction.title);
 
                 const allImgUrls = (auction.image_urls && auction.image_urls.length)
-                    ? auction.image_urls.map(u => String(u).startsWith('http') ? u : `${API_URL}${u}`)
+                    ? auction.image_urls.map(u => String(u).startsWith('http') ? u : `${window.API}${u}`)
                     : (imgSrc ? [imgSrc] : []);
 
                 const hasMultiple = allImgUrls.length > 1;
@@ -1537,7 +1532,7 @@ function buildPageList(current, total) {
             const title = card?.dataset.title || 'этот лот';
             if (!confirm(`Удалить «${title}»?\n\nЭто действие нельзя отменить.`)) return;
             try {
-                const r = await apiFetch(`${API_URL}/api/auctions/${auctionId}`, {
+                const r = await apiFetch(`${window.API}/api/auctions/${auctionId}`, {
                     method: 'DELETE'
                 });
                 if (r.ok) {
@@ -1565,7 +1560,7 @@ function buildPageList(current, total) {
             }
 
             try {
-                const response = await apiFetch(`${API_URL}/api/bids`, {
+                const response = await apiFetch(`${window.API}/api/bids`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1809,7 +1804,7 @@ function buildPageList(current, total) {
             const password = document.getElementById('loginPassword').value;
 
             try {
-                const response = await fetch(`${API_URL}/api/login`, {
+                const response = await fetch(`${window.API}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -1819,7 +1814,7 @@ function buildPageList(current, total) {
                     const data = await response.json();
                     token = data.token;
                     localStorage.setItem('token', token);
-                    token = localStorage.getItem('token');
+                    token = window.getToken();
 location.reload();
                 } else {
                     const error = await response.json();
@@ -1842,7 +1837,7 @@ location.reload();
             const password = document.getElementById('registerPassword').value;
 
             try {
-                const response = await fetch(`${API_URL}/api/register`, {
+                const response = await fetch(`${window.API}/api/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, email, password })
@@ -1857,7 +1852,7 @@ location.reload();
                     try {
                         localStorage.setItem('flash_verify_email', email);
                     } catch (_) {}
-                    token = localStorage.getItem('token');
+                    token = window.getToken();
 location.reload();
                 } else {
                     const error = await response.json();
@@ -1941,7 +1936,7 @@ location.reload();
                 }
 
                 // 2) create auction
-                const response = await apiFetch(`${API_URL}/api/auctions`, {
+                const response = await apiFetch(`${window.API}/api/auctions`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, description, starting_price, duration_minutes, image_url, image_urls, category_id, auction_type, bin_price })

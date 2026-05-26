@@ -57,12 +57,7 @@
       }
       let detail = 'Не удалось сбросить пароль.';
       try {
-        const data = await r.json();
-        if (data && data.detail) {
-          detail = Array.isArray(data.detail)
-            ? data.detail.map((d) => d.msg || 'Ошибка валидации').join('; ')
-            : data.detail;
-        }
+        detail = window.formatError(await r.json(), detail);
       } catch (_) {}
       showError(detail);
     } catch (_) {
