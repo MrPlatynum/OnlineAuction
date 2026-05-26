@@ -63,8 +63,20 @@ async function render(data) {
   document.getElementById('crumbName').textContent = user.username;
 
   const isMe = token && (() => {
-    try { const p = JSON.parse(atob(token.split('.')[1])); return p.user_id === user.id; }
-    catch { return false; }
+    try {
+      // JWTs are URL-safe base64 (RFC 7515): ``-`` instead of ``+``,
+      // ``_`` instead of ``/``, and padding is allowed to be omitted.
+      // Browser ``atob`` only accepts standard base64, so translate
+      // the characters and pad the length to a multiple of 4. Without
+      // this an otherwise valid token with one of those characters
+      // throws InvalidCharacterError, the catch hides the failure and
+      // ``isMe`` silently falls back to false - the user sees the
+      // "Subscribe" button on their own profile page.
+      let b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const p = JSON.parse(atob(b64));
+      return p.user_id === user.id;
+    } catch { return false; }
   })();
   const activeLots    = (auctions || []).filter(a => a.is_active);
   const completedLots = (auctions || []).filter(a => !a.is_active).slice(0, 8);
