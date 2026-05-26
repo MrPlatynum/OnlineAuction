@@ -78,7 +78,18 @@ async def effective_committed_balance(
 ) -> Decimal:
     """Committed balance excluding any existing commit on the auction
     we're about to bid on - that commit is about to be replaced by the
-    new bid amount, so it shouldn't count against availability."""
+    new bid amount, so it shouldn't count against availability.
+
+    Caller invariant: must hold ``SELECT ... FOR UPDATE`` on the user
+    row (via ``lock_users_by_id``) *before* calling this. Without the
+    user-row lock, a concurrent ``complete_auction`` of another lot
+    where the same user leads could deduct from ``user.balance``
+    between our committed-balance read and the caller's availability
+    arithmetic, surfacing as a false-negative "недостаточно средств"
+    on a bid that would otherwise have fit. The committed query
+    itself is intentionally unlocked - it reads many auction rows at
+    once and locking them would deadlock against bid placement on
+    those same auctions."""
     committed = await get_committed_balance(db, user_id)
 
     last_bid = (
