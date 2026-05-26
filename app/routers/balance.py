@@ -113,7 +113,12 @@ async def get_transactions(
         "balance": money_to_float(current_user.balance),
         "total": total,
         "page": page,
-        "total_pages": max(1, (total + page_size - 1) // page_size),
+        # Match the convention used by bids.py / auctions.py: an
+        # empty result returns total_pages = 0, not 1. The previous
+        # max(1, ...) floor made the listing-page paginators
+        # inconsistent and forced the frontend to special-case the
+        # transactions ledger.
+        "total_pages": (total + page_size - 1) // page_size,
         "items": [
             {
                 "id": t.id,
