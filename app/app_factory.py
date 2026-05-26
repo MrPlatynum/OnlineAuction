@@ -68,6 +68,25 @@ _SECURITY_HEADERS = {
     "Referrer-Policy": "strict-origin-when-cross-origin",
     # Disable browser feature surface that the app doesn't use.
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    # Content-Security-Policy: defence-in-depth against a regression
+    # in the frontend's ``esc()``-everything discipline. Locks
+    # third-party script + form-post origins, blocks framing, and
+    # restricts asset sources. ``'unsafe-inline'`` on script-src is
+    # required because templates carry many ``onclick="..."``
+    # attributes - removing those would be a bigger refactor; the
+    # other CSP directives still meaningfully reduce blast radius if
+    # an XSS regression slips past the client-side escaping.
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' https: data:; "
+        "connect-src 'self' ws: wss:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    ),
 }
 
 
