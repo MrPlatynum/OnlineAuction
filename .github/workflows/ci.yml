@@ -67,4 +67,9 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://auction:auction_dev_password@localhost:5432/auction_test
           AUCTION_SECRET_KEY: ci-test-secret-key-not-for-prod
-        run: pytest -v
+        # ``--cov-fail-under`` gates on the same 85% the repo runs at
+        # locally with 5pp of headroom for jitter. pytest-cov is in
+        # requirements-dev.txt and pyproject.toml [tool.coverage.run]
+        # is already configured for the asyncio + greenlet workers -
+        # before this gate the configuration was unused on CI.
+        run: pytest -v --cov=app --cov-report=term --cov-fail-under=80
