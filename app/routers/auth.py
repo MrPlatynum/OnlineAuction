@@ -234,12 +234,11 @@ async def password_reset_request(
     """Public - accepts an email and *if it exists* mails a reset link.
     Always returns 200 with a generic message so the response shape
     can't be used to probe which addresses are registered."""
-    # Без выравнивания времени можно отличать три ветки по latency:
-    # unknown (только SELECT, ~5мс) / throttled (SELECT, ~5мс) /
-    # fresh existing (SELECT + UPDATE + COMMIT + REFRESH + enqueue,
-    # ~30-50мс). Поднимаем минимальную длительность отклика так, чтобы
-    # все три ветки укладывались в одинаковое окно - детектируемая
-    # разница над шумом сети уходит.
+    # Without time padding the three branches are distinguishable via
+    # response latency: unknown email (SELECT only, ~5ms) / throttled
+    # existing (SELECT only, ~5ms) / fresh existing (SELECT + UPDATE +
+    # COMMIT + REFRESH + enqueue, ~30-50ms). Floor every response to
+    # the same minimum so the gap drops below network noise.
     deadline = asyncio.get_running_loop().time() + PASSWORD_RESET_REQUEST_FLOOR_SECONDS
     user = (
         await db.execute(select(User).where(User.email == data.email))

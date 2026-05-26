@@ -594,7 +594,7 @@ let cropper = null;
 function uploadAvatar(input) {
   const file = input.files[0];
   if (!file) return;
-  input.value = ''; // сбрасываем чтобы можно было выбрать тот же файл снова
+  input.value = ''; // reset so the same file can be picked again
 
   const reader = new FileReader();
   reader.onload = e => openCropModal(e.target.result);
@@ -605,15 +605,15 @@ function openCropModal(src) {
   const img = $('cropImg');
   img.src = src;
 
-  // Уничтожаем предыдущий кроппер если был
+  // Destroy the previous cropper if any.
   if (cropper) { cropper.destroy(); cropper = null; }
 
   $('cropModal').classList.add('open');
 
-  // Инициализируем Cropper после того как изображение загрузится
+  // Initialise Cropper once the source image has loaded.
   img.onload = () => {
     cropper = new Cropper(img, {
-      aspectRatio: 1,          // квадрат - для аватара
+      aspectRatio: 1,          // square crop for the avatar
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.8,
@@ -626,7 +626,7 @@ function openCropModal(src) {
       toggleDragModeOnDblclick: false,
     });
   };
-  // Если картинка уже загружена (кеш)
+  // If the image is already in the cache, fire immediately.
   if (img.complete) img.onload();
 }
 
@@ -643,19 +643,19 @@ async function confirmCrop() {
   btn.textContent = 'Загрузка…';
 
   try {
-    // Получаем обрезанный canvas (256×256)
+    // Get the cropped canvas (256x256).
     const canvas = cropper.getCroppedCanvas({ width: 256, height: 256, imageSmoothingQuality: 'high' });
 
-    // Конвертируем в Blob
+    // Convert canvas to Blob.
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
 
-    // Показываем превью в аватаре сразу
+    // Show the preview in the sidebar avatar immediately.
     const previewSrc = canvas.toDataURL('image/jpeg', 0.9);
     applyAvatarPreview(previewSrc);
 
     closeCropModal();
 
-    // Загружаем на сервер
+    // Upload to the server.
     const formData = new FormData();
     formData.append('file', blob, 'avatar.jpg');
 
@@ -670,12 +670,12 @@ async function confirmCrop() {
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       showToast('Ошибка', err.detail || 'Не удалось загрузить аватар', 'bad');
-      // Откатываем превью
+      // Roll back the optimistic preview on error.
       removeAvatarImg();
     } else {
       const data = await r.json();
       const src = resolveAvatarUrl(data.avatar_url);
-      // Обновляем src на финальный
+      // Replace the preview src with the persisted server URL.
       const img = $('avatar').querySelector('img');
       if (img) img.src = src;
       syncSettingsAvatar(src);
@@ -711,10 +711,10 @@ async function deleteAvatar() {
       method: 'DELETE',
     });
     if (r.ok) {
-      // Убираем картинку из сайдбара
+      // Drop the sidebar avatar image.
       const img = $('avatar').querySelector('img');
       if (img) img.remove();
-      // Убираем из настроек
+      // Drop the settings-pane avatar image.
       const settingsAv = $('settingsAvatar');
       if (settingsAv) {
         const img2 = settingsAv.querySelector('img');
@@ -825,7 +825,7 @@ function setAmount(type, val) {
   } else {
     inp.value = val;
   }
-  // подсвечиваем пресет
+  // Highlight the active preset chip.
   const presetsId = type === 'deposit' ? 'depositPresets' : 'withdrawPresets';
   document.querySelectorAll(`#${presetsId} .amount-preset`).forEach(b => {
     const bVal = b.textContent.replace(/[^0-9]/g, '');
@@ -864,7 +864,7 @@ async function doDepositPanel() {
     result.textContent = `✓ Баланс пополнен на ${amount.toFixed(2)} ₽`;
     result.className = 'balance-form-result ok';
     setTimeout(() => { result.className = 'balance-form-result'; }, 3000);
-    // Обновляем историю
+    // Refresh the transaction history list.
     txPage = 1; await loadBalance(true);
   } catch(e) {
     result.textContent = e.message; result.className = 'balance-form-result err';
@@ -907,7 +907,7 @@ async function load() {
   const user = await r1.json();
 
   $('avatarLetter').textContent = (user.username[0] || '?').toUpperCase();
-  // Синхронизируем miniAvatar в настройках
+  // Sync the mini-avatar in the settings pane with the username.
   const settingsAv = $('settingsAvatar');
   if (settingsAv) settingsAv.textContent = (user.username[0] || '?').toUpperCase();
 
@@ -916,7 +916,7 @@ async function load() {
     const img = document.createElement('img');
     img.src = src; img.alt = user.username;
     $('avatar').prepend(img);
-    // В настройках
+    // Same in the settings pane.
     if (settingsAv) {
       settingsAv.textContent = '';
       const img2 = document.createElement('img');
@@ -937,7 +937,7 @@ async function load() {
   if ($('balBadge'))       $('balBadge').textContent = Number(user.balance || 0).toFixed(2) + ' ₽';
   document.title = `${user.username} - Лотус`;
 
-  // Nav-пилюля
+  // Nav-pill in the header.
   const navPill = $('navUserPill');
   const navAv   = $('navAvatarPill');
   if ($('navUserNamePill')) $('navUserNamePill').textContent = user.username;
@@ -1004,7 +1004,7 @@ load().catch(err => {
   }
 }).finally(() => {
   initPanelFromHash();
-  // Ждём пока canvas получит реальные размеры, затем рисуем
+  // Wait for the canvas to get its real layout size, then draw.
   const canvas = document.getElementById('chart');
   if (!canvas) return;
   const observer = new ResizeObserver(() => {
@@ -1014,7 +1014,7 @@ load().catch(err => {
     }
   });
   observer.observe(canvas.parentElement);
-  // Fallback - если панель уже видима
+  // Fallback - if the panel is already visible.
   setTimeout(() => { if (canvas.offsetWidth > 0) renderChart(); }, 100);
 });
 
@@ -1071,7 +1071,7 @@ async function doDeposit() {
     result.className = 'deposit-result ok'; result.style.display = 'block';
     $('depositAmount').value = '';
     document.querySelectorAll('.deposit-preset').forEach(b => b.classList.remove('selected'));
-    // Обновляем историю если панель открыта
+    // Refresh the transaction history list if the panel is open.
     if (document.getElementById('panel-balance')?.classList.contains('active')) {
       txPage = 1; loadBalance(true);
     }

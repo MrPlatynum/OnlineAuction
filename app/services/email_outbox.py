@@ -144,9 +144,10 @@ async def _process_one(row: EmailOutbox, db) -> None:
         row.last_error = repr(exc)
         if row.attempts >= row.max_attempts:
             row.status = "failed"
-            # Structured `extra` payload так, что JSON-логгер (LOG_FORMAT=json,
-            # см. #28) выдаёт парсимое событие для алертов ops:
-            # `event=outbox_dead_letter` ловится одним фильтром.
+            # Structured ``extra`` payload so the JSON logger
+            # (LOG_FORMAT=json, see app_factory) emits a parseable event
+            # for ops alerts - `event=outbox_dead_letter` is the single
+            # filter to grep.
             logger.error(
                 "Outbox row %s dead-lettered after %d attempts: %s",
                 row.id, row.attempts, exc,

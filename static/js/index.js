@@ -16,12 +16,12 @@ function setStatus(el, status) {
   }
 }
 
-function onSortChange() { /* применяется через кнопку Применить */ }
-function onCategoryChange() { /* применяется через selectCategory */ }
+function onSortChange() { /* applied via the Apply button */ }
+function onCategoryChange() { /* applied via selectCategory */ }
 
-// Записать текущие фильтры в URL (без перезагрузки страницы).
-// Параметры опускаются, если соответствуют дефолтному значению,
-// чтобы «чистая» главная давала чистый адрес index.html.
+// Write the current filters back to the URL without reloading the
+// page. Parameters at default values are omitted so a "clean" home
+// page yields a clean index.html URL.
 window.syncUrlFromFilters = function() {
   if (typeof currentFilters === 'undefined') return;
   const f = currentFilters;
@@ -38,21 +38,21 @@ window.syncUrlFromFilters = function() {
   const qs = p.toString();
   const newUrl = location.pathname + (qs ? '?' + qs : '') + location.hash;
   if (newUrl === location.pathname + location.search + location.hash) return;
-  // pushState (а не replaceState), чтобы Back/Forward работали как
-  // ожидает пользователь - каждый коммит фильтра = отдельная запись
-  // истории. popstate-обработчик ниже перезагружает страницу: проще
-  // и надёжнее чем дублировать всю логику UI-sync из init-IIFE.
+  // pushState (not replaceState) so Back/Forward behave the way users
+  // expect - each filter commit is a separate history entry. The
+  // popstate handler below reloads the page: simpler and more reliable
+  // than duplicating the entire UI-sync logic from the init IIFE.
   history.pushState({ filters: true }, '', newUrl);
 };
 
-// При навигации Back/Forward - перезагружаем страницу, чтобы инициализация
-// полностью отработала по новой URL. Альтернатива - вручную синхронизировать
-// все инпуты/чекбоксы/активные классы/breadcrumb - на ~80 строк кода больше
-// и легче расходится с init IIFE.
+// On Back/Forward navigation, reload the page so the init IIFE runs
+// against the new URL. The alternative - manually syncing every input,
+// checkbox, active class, and breadcrumb - is ~80 extra lines that
+// easily drift out of step with the init IIFE.
 window.addEventListener('popstate', () => {
-  // Защита от случая, когда наша же pushState внутри loadAuctions
-  // как-то прокатилась - реальный popstate всегда несёт state≠null от нас
-  // или null от первой записи. Перезагрузка идемпотентна в обоих случаях.
+  // Guard against our own pushState (inside loadAuctions) somehow
+  // firing popstate - real popstates carry state!=null from us or null
+  // from the first entry. A reload is idempotent in either case.
   location.reload();
 });
 
@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// Загрузка категорий с сервера
+// Fetch categories from the server.
 // ===== Search History =====
 // localStorage can throw on every access in private-browsing mode
 // (Safari) and when the user has disabled site data - search history
@@ -170,18 +170,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const wrap  = document.getElementById('searchWrap');
 
   if (input) {
-    // Показать историю при фокусе
+    // Show search history on focus.
     input.addEventListener('focus', () => {
       if (!input.value) showSearchHistory();
     });
-    // Скрыть при вводе (показываем только когда поле пустое)
+    // Hide while typing - history only shows when the field is empty.
     input.addEventListener('input', () => {
       if (input.value) hideSearchHistory();
       else showSearchHistory();
     });
   }
 
-  // Скрыть при клике вне
+  // Hide on outside click.
   document.addEventListener('click', e => {
     const nav = document.querySelector('.nav-search');
     if (nav && !nav.contains(e.target)) hideSearchHistory();
@@ -214,10 +214,10 @@ async function loadCategories() {
     if (!r.ok) return;
     const cats = await r.json();
 
-    // Заполняем боковую панель - дерево категорий
+    // Populate the sidebar - the category tree.
     const listEl = document.getElementById('fsCatList');
     if (listEl) {
-      // Убираем дубли если уже есть
+      // Remove duplicates if already rendered.
       listEl.querySelectorAll('.fs-cat-item:not([data-slug=""]),.fs-cat-subs').forEach(e => e.remove());
       cats.forEach(cat => {
         const btn = document.createElement('button');
@@ -246,9 +246,9 @@ async function loadCategories() {
       });
     }
 
-    // Восстановить визуальное состояние выбранной категории из URL.
-    // Без этого после reload чип «📂 …» отрисуется по slug, но активная
-    // кнопка в сайдбаре и breadcrumb не подсветятся.
+    // Restore the visual selected-category state from the URL.
+    // Without this, after reload the chip renders from the slug but the
+    // active sidebar button and breadcrumb stay unhighlighted.
     if (typeof currentFilters !== 'undefined' && currentFilters.category && listEl) {
       const slug = currentFilters.category;
       let parentSlug = null, parentName = null, name = slug;
@@ -275,9 +275,9 @@ async function loadCategories() {
         currentFilters.categoryParentName = parentName;
         currentFilters.categoryLabel = parentName ? `${parentName} → ${name}` : name;
       } else {
-        // Slug из URL не найден в каталоге (категория удалена / переименована).
-        // Сбрасываем фильтр, иначе сервер ответит пустым результатом, а чип
-        // будет залипать со slug'ом, не имеющим смысла для пользователя.
+        // The URL slug isn't in the catalog (category was removed or
+        // renamed). Drop the filter - otherwise the server returns an
+        // empty result and the chip sticks with a meaningless slug.
         currentFilters.category = '';
         currentFilters.categoryName = '';
         currentFilters.categoryParentSlug = null;
@@ -291,8 +291,8 @@ async function loadCategories() {
       if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
     }
 
-    // Двухшаговый пикер категорий в форме создания
-    window._catsData = cats; // кэшируем для sub-select
+    // Two-step category picker on the create-lot form.
+    window._catsData = cats; // cached for the sub-select.
     const parentSel = document.getElementById('auctionCategoryParent');
     const subSel    = document.getElementById('auctionCategory');
     if (parentSel && parentSel.options.length <= 1) {
@@ -317,7 +317,7 @@ async function loadCategories() {
         } else {
           subSel.style.display = 'none';
         }
-        // Если нет подкатегорий - sub = parent
+        // No subcategories - the picked sub is the parent itself.
         if (!cat || !cat.children || !cat.children.length) {
           subSel.value = parentSel.value || '';
         } else {
@@ -383,14 +383,14 @@ window.renderFilterTags = function() {
   if (currentFilters.category) {
     const parentSlug = currentFilters.categoryParentSlug;
     const parentName = currentFilters.categoryParentName;
-    // Имена приходят из loadCategories асинхронно (~150мс задержка после
-    // DOMContentLoaded). До этого либо если slug отсутствует в каталоге,
-    // имя пустое - показываем сам slug как fallback, иначе чип будет
-    // выглядеть пустым «📂 ».
+    // Names arrive from loadCategories asynchronously (~150ms after
+    // DOMContentLoaded). Until then, or if the slug isn't in the
+    // catalog, the name is empty - fall back to the slug itself so the
+    // chip doesn't look like a bare "📂".
     const name = currentFilters.categoryName || currentFilters.category;
     let label;
     if (parentSlug && parentName) {
-      // Подкатегория - "Одежда → Мужская", клик на "Одежда" переключает на родителя
+      // Subcategory - e.g. "Clothing > Men"; clicking the parent switches to it.
       label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${esc(parentName)}">${esc(parentName)}</span> <span style="opacity:.5;">›</span> ${esc(name)}`;
     } else {
       label = `📂 ${esc(name)}`;
@@ -425,7 +425,7 @@ window.clickCrumbParent = function() {
   const parentName = currentFilters.categoryParentName;
   if (!parentSlug) return;
 
-  // Найти кнопку родительской категории и кликнуть её
+  // Find the parent-category button and click it.
   const btn = document.querySelector(`.fs-cat-item[data-slug="${parentSlug}"]`);
   if (btn) {
     selectCategory(btn, parentSlug, null, parentName, null);
@@ -461,7 +461,7 @@ window.removeFilterTag = function(key) {
 window.resetFilters = function() {
   if (typeof currentFilters === 'undefined') return;
 
-  // Сбрасываем инпуты
+  // Reset inputs.
   ['searchInput','minPrice','maxPrice','creatorInput'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -469,16 +469,16 @@ window.resetFilters = function() {
   const bid = document.getElementById('filterBid');  if (bid)  bid.checked = false;
   const bin = document.getElementById('filterBin');  if (bin)  bin.checked = false;
 
-  // Сбрасываем категории
+  // Reset categories.
   document.querySelectorAll('.fs-cat-item,.fs-sub-item').forEach(b => b.classList.remove('active'));
   document.querySelector('.fs-cat-item[data-slug=""]')?.classList.add('active');
   document.querySelectorAll('.fs-cat-subs').forEach(s => s.style.display = 'none');
 
-  // Сбрасываем статус-табы
+  // Reset status tabs.
   document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
   document.querySelector('[data-status="active"]')?.classList.add('active');
 
-  // Сбрасываем объект фильтров
+  // Reset the filters object.
   currentFilters.search = '';
   currentFilters.minPrice = null;
   currentFilters.maxPrice = null;
@@ -499,7 +499,7 @@ window.resetFilters = function() {
 
 
 
-// Duration hint - показывает время окончания в реальном времени
+// Duration hint - shows the end time in real time.
 document.addEventListener('DOMContentLoaded', () => {
   const dur = document.getElementById('auctionDuration');
   const hint = document.getElementById('durationHint');
@@ -521,7 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   dur.addEventListener('input', updateHint);
-  // Также обновлять когда модалка открывается
+  // Also refresh when the modal opens.
   document.getElementById('createModal')?.addEventListener('transitionend', updateHint);
   updateHint();
 });
@@ -607,14 +607,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-        // API / WS_BASE приходят из common.js (window.API, window.WS_BASE).
-        // Локальный alias WS_URL остаётся - короче читается в шаблонных строках.
+        // API / WS_BASE come from common.js (window.API, window.WS_BASE).
+        // The local WS_URL alias stays - reads tighter in template strings.
         const WS_URL  = window.WS_BASE;
         let token = window.getToken();
         let currentUser = null;
-        // Зеркалим currentUser на window, чтобы inline-обработчики в
-        // шаблоне (например, кнопка «Выставить свой лот») могли
-        // отличить гостя от авторизованного. Используется как
+        // Mirror currentUser onto window so inline handlers in the
+        // template (e.g. the "List your lot" button) can tell a guest
+        // from a logged-in user. Used as
         // window.currentUser? showCreateModal() : showAuth().
         window.currentUser = null;
         let websockets = {};
@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pageSize: 20
         };
 
-        // Читаем параметры из URL при загрузке
+        // Read filter parameters from the URL on load.
         (function() {
             const p = new URLSearchParams(location.search);
             if (p.get('created_by')) {
@@ -650,11 +650,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const st = p.get('status');
             if (st === 'active' || st === 'completed' || st === 'all') {
                 currentFilters.status = st;
-                // переключить активную кнопку статуса
+                // Switch the active status button.
                 document.querySelectorAll('[data-status]').forEach(b => {
                     b.classList.toggle('active', b.dataset.status === st);
                 });
-                // обновить заголовок страницы под выбранный статус
+                // Update the page heading to match the active status.
                 const titleEl = document.getElementById('pageTitle');
                 if (titleEl) {
                     titleEl.textContent = st === 'completed' ? 'Завершённые аукционы'
@@ -662,8 +662,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                                              : 'Активные аукционы';
                 }
             }
-            // Категория - slug может прийти из хлебных крошек страницы лота.
-            // Названия категорий подгрузятся в loadCategories(), но фильтр работает по slug.
+            // Category - slug may arrive via the lot-page breadcrumb.
+            // Display names load asynchronously in loadCategories(), but
+            // the filter operates on the slug.
             if (p.get('category')) {
                 currentFilters.category = p.get('category');
             }
@@ -690,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentFilters.sortBy = sb;
                 const sel = document.getElementById('sortFilter');
                 if (sel) sel.value = sb;
-                // обновить декоративный dropdown - селект + лейбл
+                // Update the decorative dropdown - select + label.
                 document.querySelectorAll('.fs-dd-opt').forEach(o => {
                     const isSel = o.dataset.value === sb;
                     o.classList.toggle('is-selected', isSel);
@@ -704,23 +705,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const pg = parseInt(p.get('page') || '', 10);
             if (Number.isFinite(pg) && pg > 1) currentFilters.page = pg;
-            // Если в URL есть фильтры - пользователь пришёл из ссылки
-            // «Все лоты» / «Все завершённые». После первой загрузки лотов
-            // плавно прокручиваем к началу списка.
+            // If filters are present in the URL the user followed an
+            // "All lots" / "All completed" link. After the first lot
+            // load, smoothly scroll to the start of the listing.
             const hasUrlFilters = !!(
                 p.get('created_by') || p.get('status') || p.get('search') || p.get('category')
                 || p.get('min_price') || p.get('max_price') || p.get('auction_type')
                 || p.get('sort_by') || p.get('page')
             );
             window._scrollToLotsOnLoad = hasUrlFilters || !!p.get('scroll');
-            // URL - авторитетный источник фильтров: запретить позже
-            // loadFiltersFromStorage перезаписывать значения из localStorage,
-            // иначе расшаренная ссылка перестанет восстанавливаться один-в-один.
+            // The URL is the authoritative source for filters - block
+            // loadFiltersFromStorage from overwriting them later from
+            // localStorage, otherwise a shared link stops restoring 1:1.
             window._filtersFromUrl = hasUrlFilters;
         })();
 
         // ===== Multi-image upload =====
-        let lotSelectedFiles = []; // массив File объектов
+        let lotSelectedFiles = []; // array of File objects
 
         function renderMultiImgPreview() {
             const preview = document.getElementById('multiImgPreview');
@@ -854,9 +855,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let totalPages = 1;
 
-        // Инициализация
+        // Initialisation.
         async function init() {
-            // всегда подтягиваем token из localStorage
+            // Always pull the latest token from localStorage.
             token = window.getToken();
 
             // wired once: image upload + crop UI
@@ -864,12 +865,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             
 
-            // восстановить фильтры
+            // Restore filters.
             loadFiltersFromStorage();if (token) {
                 await loadCurrentUser();
             }
 
-            // Показать/скрыть блоки (без падений если элементов нет)
+            // Show/hide blocks (no-op if elements are missing).
             const userProfile = document.getElementById('userProfile');
             const guestProfile = document.getElementById('guestProfile');
             const createBtn = document.getElementById('createBtn');
@@ -897,18 +898,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     );
                 }
             } catch (_) {}
-// Инициализация новой панели фильтров (если есть)
+// Initialise the new filter panel (if present).
             if (typeof initFiltersUI === 'function') initFiltersUI();
         }
 
         async function loadCurrentUser() {
-            // синхронизируем token с localStorage (важно при переходах между страницами)
+            // Resync token with localStorage (important across page navigations).
             token = window.getToken();
 
             // wired once: image upload + crop UI
             try { wireLotImageUI(); } catch {}
 
-            // если токена нет - гость
+            // No token - treat as guest.
             if (!token) {
                 currentUser = null;
                 window.currentUser = null;
@@ -921,13 +922,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'GET'
                 });
             } catch (err) {
-                // сеть/сервер недоступен - НЕ разлогиниваем
+                // Network/server unreachable - do NOT log the user out.
                 console.warn('loadCurrentUser: network error', err);
                 return null;
             }
 
             if (response.status === 401 || response.status === 403) {
-                // токен реально невалидный → удаляем
+                // Token genuinely invalid -> drop it.
                 localStorage.removeItem('token');
                 token = null;
                 currentUser = null;
@@ -943,7 +944,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUser = await response.json();
             window.currentUser = currentUser;
 
-            // безопасно обновляем UI, если элементы существуют
+            // Safely refresh the UI, only if the elements exist.
             const userNameEl = document.getElementById('userName');
             const balEl = document.getElementById('userBalanceSmall');
             const avEl = document.getElementById('userAvatarSmall');
@@ -964,16 +965,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function loadAuctions() {
             const container = document.getElementById('auctionsContainer');
-            // Любой запрос - это и есть «зафиксированные фильтры»: синхронизируем
-            // URL и активные чипы фильтров, чтобы оба индикатора шли в ногу.
+            // Any request counts as "committed filters" - sync URL
+            // and the active filter chips so both stay aligned.
             if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
             if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
 
-            // 1. Fade-out - гарантированно ждём конца анимации
+            // 1. Fade-out - wait for the animation to finish.
             if (container) {
                 container.classList.remove('fade-in');
                 container.classList.add('fade-out');
-                await new Promise(r => setTimeout(r, 190)); // ждём конец fade-out (180ms)
+                await new Promise(r => setTimeout(r, 190)); // wait for fade-out end (180ms)
             }
 
             try {
@@ -997,7 +998,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatePagination(data.page, data.total_pages, data.total);
                 updateResultsInfo(data.total, data.page, data.total_pages);
 
-                // 2. Обновляем DOM пока контейнер невидим
+                // 2. Update the DOM while the container is invisible.
                 displayAuctions(data.items);
 
                 // 3. Fade-in
@@ -1005,8 +1006,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     container.classList.remove('fade-out');
                     container.classList.add('fade-in');
                 }
-                // Одноразовый скролл к ленте лотов, если пришли по ссылке
-                // с фильтром (например, «Все лоты» из user.html).
+                // One-shot scroll to the lots listing when the user
+                // arrives via a filtered link (e.g. "All lots" from
+                // user.html).
                 if (window._scrollToLotsOnLoad) {
                     window._scrollToLotsOnLoad = false;
                     setTimeout(scrollToAuctionsTop, 50);
@@ -1098,29 +1100,31 @@ function buildPageList(current, total) {
             window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
         }
 
-        // Магнитный снэп: когда пользователь после прокрутки hero останавливается
-        // в «промежуточной» зоне (верх ленты лотов ещё ниже навбара, но уже близко),
-        // плавно докатываем к началу лотов. Подражает поведению кнопки «Смотреть лоты»,
-        // только запускается само, без клика. Срабатывает после ~150 мс простоя в скролле.
+        // Magnetic snap: after scrolling past the hero, if the user comes
+        // to rest in the intermediate zone (top of the listing below the
+        // navbar but already close), smoothly roll forward to the start of
+        // the listing. Mimics the "See lots" button without a click; fires
+        // after ~150 ms of scroll idle.
         (function setupAuctionsSnap() {
-            // Уважать пользовательский запрос на минимум анимаций
+            // Respect the user's reduced-motion preference.
             if (typeof matchMedia === 'function'
                 && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
             let timer = null;
             let isAutoScrolling = false;
-            // Активна ли зона снэпа: верх «.page-header» (или фоллбек на ленту лотов)
-            // находится в коридоре [navH+12, navH+12+SNAP_ZONE_PX] от верха viewport.
-            // Меньше значение - позже срабатывает, ближе к самому началу лотов.
+            // Snap zone active: the top of .page-header (or the lot
+            // listing as fallback) sits inside [navH+12, navH+12+SNAP_ZONE_PX]
+            // from the viewport top. A smaller value triggers later, closer
+            // to the listing's exact start.
             const SNAP_ZONE_PX = 120;
             const DEBOUNCE_MS = 150;
             const COOLDOWN_MS = 700;
 
             function maybeSnap() {
                 if (isAutoScrolling) return;
-                // не вмешиваемся при открытой модалке (auth / create / sort dropdown и пр.)
+                // Don't interfere when a modal is open (auth / create / sort dropdown, etc.).
                 if (document.body.classList.contains('modal-open')) return;
-                // если фокус в поле ввода (поиск, фильтр) - пользователь печатает, не трогаем
+                // If focus is in a text input (search, filter), the user is typing - leave it alone.
                 const ae = document.activeElement;
                 if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
 
@@ -1174,17 +1178,17 @@ function buildPageList(current, total) {
             });
         });
 
-        // Observer, поднимающий WS на видимые карточки и закрывающий на
-        // ушедшие из viewport. Один экземпляр на страницу, заново
-        // привязываемся к новым [data-auction-id] после каждой перерисовки.
+        // Observer that opens a WS for visible cards and closes it when
+        // they leave the viewport. One instance per page; rebind to fresh
+        // [data-auction-id] nodes after every re-render.
         let auctionWsObserver = null;
         const lastPriceRefresh = {};
         function refreshAuctionPrice(auctionId) {
-            // Если карточка только что попала в viewport, пока она была
-            // скрыта, цена могла измениться (новая ставка / buy-now).
-            // WS подпишется только на будущие сообщения, текущее состояние
-            // нужно подтянуть отдельным REST-запросом. Throttle 5 с,
-            // чтобы быстрый скролл не спамил сервер на один и тот же лот.
+            // When a card just enters the viewport, the price may have
+            // moved while it was hidden (a new bid / buy-now). The WS only
+            // subscribes to future events - the current state needs a
+            // separate REST poke. Throttled to 5s so fast scroll doesn't
+            // spam the server for the same lot.
             const now = Date.now();
             if (lastPriceRefresh[auctionId] && now - lastPriceRefresh[auctionId] < 5000) return;
             lastPriceRefresh[auctionId] = now;
@@ -1223,17 +1227,17 @@ function buildPageList(current, total) {
             });
         }
 
-        // Безопасное закрытие WebSocket с учётом состояния. Если ws ещё
-        // в CONNECTING (readyState=0), браузер логирует «closed before
-        // connection established» - это безобидно, но шумно. Дожидаемся
-        // onopen и закрываем уже установленное соединение.
+        // Safe WebSocket close that respects readyState. If the socket
+        // is still CONNECTING (readyState=0) the browser logs "closed before
+        // connection established" - harmless but noisy. Wait for onopen
+        // and close the established connection.
         function safeCloseWs(ws) {
             if (!ws) return;
             ws.intentionallyClosed = true;
             if (ws.pingInterval) clearInterval(ws.pingInterval);
-            // При быстром скролле наблюдатель может попросить закрыть
-            // сокет, который ещё не успел соединиться - сетевая ошибка
-            // в такой момент не должна копить счётчик реконнектов.
+            // Fast scroll can ask us to close a socket that hasn't yet
+            // connected - a network error at that moment must not bump
+            // the reconnect counter.
             const id = ws._auctionId;
             if (id != null) reconnectAttempts[id] = 0;
             try {
@@ -1247,9 +1251,9 @@ function buildPageList(current, total) {
             } catch (_) {}
         }
 
-        // Закрываем все активные WS-подключения и таймеры перед сменой
-        // содержимого списка. Без этого старые соединения копятся: сервер
-        // быстро упирается в лимит коннектов с IP и отдаёт 1008.
+        // Close every live WS connection and timer before swapping the
+        // listing contents. Otherwise old sockets pile up, the server hits
+        // its per-IP connection cap, and new opens get 1008.
         function clearAuctionConnections() {
             Object.entries(websockets).forEach(([id, ws]) => {
                 safeCloseWs(ws);
@@ -1377,16 +1381,16 @@ function buildPageList(current, total) {
                 `;
             }).join('');
 
-            // Таймеры - на все лоты сразу: дёшево, идёт чисто по DOM.
+            // Timers go on every lot immediately - cheap, pure DOM walk.
             auctions.forEach(auction => {
                 startTimer(auction.id, auction.time_remaining);
             });
 
-            // WS открываем только для тех лотов, чьи карточки в видимой
-            // области. Без этого 25-50 одновременных подключений с одного
-            // IP пробивают лимит сервера и часть карточек получает 1008
-            // Policy Violation. IntersectionObserver сам поднимает /
-            // закрывает соединение при скролле - естественный rate limit.
+            // Open a WS only for lots whose card is visible. Without
+            // this, 25-50 simultaneous connections from one IP exceed the
+            // server cap and some cards get 1008 Policy Violation. The
+            // IntersectionObserver opens / closes sockets during scroll -
+            // a natural rate limit.
             if (token) attachAuctionWsObserver();
         }
 
@@ -1402,7 +1406,7 @@ function buildPageList(current, total) {
         }
 
         function startTimer(auctionId, initialTime) {
-            // Если аукцион уже завершён - просто выставляем текст и НЕ запускаем интервал
+            // If the auction is already finished, just set the text and don't start an interval.
             const timerElementNow = document.querySelector(`[data-timer="${auctionId}"]`);
             const init = Number(initialTime);
 
@@ -1429,12 +1433,12 @@ function buildPageList(current, total) {
                     delete timers[auctionId];
                     const timerEl = document.querySelector(`[data-timer="${auctionId}"]`);
                     if (timerEl) timerEl.textContent = 'Завершён';
-                    // НЕ перезагружаем страницу/список каждую секунду
+                    // Do NOT reload the page / listing every second.
                 }
             }, 1000);
         }
 
-        // УЛУЧШЕНИЕ: WebSocket с экспоненциальной задержкой переподключения
+        // WebSocket with exponential reconnect backoff.
         function connectWebSocket(auctionId) {
             if (websockets[auctionId]) return;
             
@@ -1446,9 +1450,9 @@ function buildPageList(current, total) {
             }
             
             ws.onopen = () => {
-                reconnectAttempts[auctionId] = 0; // Сброс счетчика при успешном подключении
+                reconnectAttempts[auctionId] = 0; // Reset on successful connect.
                 
-                // Ping каждые 25 секунд
+                // Ping every 25 seconds.
                 ws.pingInterval = setInterval(() => {
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send('ping');
@@ -1470,35 +1474,35 @@ function buildPageList(current, total) {
                     clearInterval(ws.pingInterval);
                 }
 
-                // Не реконнектиться при намеренном закрытии (смена страницы,
-                // фильтр) и при отказе сервера по политике (1008 - лимит
-                // подключений с IP, 1011 - внутренняя ошибка). Иначе
-                // получится reconnect-шторм против лимита коннектов.
+                // Don't reconnect on intentional close (page change,
+                // filter) or on server-side policy refusal (1008 - per-IP
+                // connection limit, 1011 - internal error). Otherwise a
+                // reconnect storm hammers the same limit.
                 if (ws.intentionallyClosed) return;
                 if (event && (event.code === 1000 || event.code === 1008 || event.code === 1011)) {
                     return;
                 }
 
-                // Экспоненциальная задержка с half-jitter: при разовом
-                // падении сервера сотня вкладок не штормит обратно
-                // одной секундой - равномерно размазывается по [base/2, base].
+                // Exponential backoff with half-jitter: on a one-off
+                // server drop a hundred tabs don't all retry within one
+                // second - they spread over [base/2, base].
                 if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
                 const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
                 const delay = base / 2 + Math.random() * (base / 2);
                 reconnectAttempts[auctionId]++;
                 setTimeout(() => {
                     const card = document.querySelector(`[data-auction-id="${auctionId}"]`);
-                    if (card) { // Переподключаемся только если карточка еще на странице
+                    if (card) { // Reconnect only if the card is still on the page.
                         connectWebSocket(auctionId);
                     }
                 }, delay);
             };
 
             ws.onerror = () => {
-                // WS error по сути дублирует событие onclose: браузер
-                // эмитит "error" непосредственно перед "close" на любом
-                // ненормальном разрыве (включая отказ сервера 1008 и
-                // наше же намеренное закрытие во время CONNECTING).
+                // WS error effectively duplicates onclose: the browser
+                // emits "error" right before "close" on any abnormal
+                // break (including 1008 server refusal and our own
+                // intentional close during CONNECTING).
                 if (ws.intentionallyClosed) return;
                 if (reconnectAttempts[auctionId] >= 3) {
                     console.warn(`WS auction ${auctionId}: repeated failures`);
@@ -1514,10 +1518,10 @@ function buildPageList(current, total) {
             const priceEl = card.querySelector('.auction-price');
             if (!priceEl) return;
             const next = Number(newPrice).toFixed(2) + ' ₽';
-            // Если цена не изменилась - ничего не трогаем, анимация-флэш
-            // только для реальных обновлений. Иначе при refresh-on-view
-            // (REST-запросе при первом появлении карточки в viewport)
-            // карточка моргала бы зря.
+            // If the price didn't change, do nothing - the flash
+            // animation only fires on real updates. Otherwise the
+            // refresh-on-view (REST poke when the card first enters the
+            // viewport) would blink the card for no reason.
             if (priceEl.textContent === next) return;
             priceEl.textContent = next;
             priceEl.classList.remove('price-flash');
@@ -1584,7 +1588,7 @@ function buildPageList(current, total) {
         let filtersInitialized = false;
         
         function initFiltersUI() {
-            // Защита от повторной инициализации
+            // Guard against double-initialisation.
             if (filtersInitialized) return;
             
             const searchEl = document.getElementById('searchInput');
@@ -1618,7 +1622,7 @@ function buildPageList(current, total) {
                 });
             }
 
-            // toggleAdvanced теперь обрабатывается глобальным обработчиком ниже
+            // toggleAdvanced is now handled by the global handler below.
             
             if (applyBtn) applyBtn.addEventListener('click', applyFilters);
 
@@ -1707,7 +1711,7 @@ function buildPageList(current, total) {
             sidebar.addEventListener('click', updateBadge, true);
         }
 
-        // initFiltersUI и первичный рендер будут вызваны из wire() ниже
+        // initFiltersUI and the first render are called from wire() below.
 
 
 
@@ -1719,7 +1723,7 @@ function buildPageList(current, total) {
             };
         }
 
-        // Модальные окна
+        // Modal dialogs.
         function showAuth() {
             document.getElementById('authModal').classList.add('active');
         }
@@ -1746,7 +1750,7 @@ function buildPageList(current, total) {
 
         function showCreateModal() {
             document.getElementById('createModal').classList.add('active');
-            // Сбрасываем тип и загружаем категории если ещё не загружены
+            // Reset auction type and load categories if not yet loaded.
             if (typeof setAuctionType === 'function') setAuctionType('bid');
             if (typeof loadCategories === 'function') loadCategories();
             // Wire the live "К получению" hints under both price inputs.
@@ -1877,7 +1881,7 @@ location.reload();
             const auction_type = window.currentAuctionType || 'bid';
             const categoryEl    = document.getElementById('auctionCategory');
             const categoryParEl = document.getElementById('auctionCategoryParent');
-            // Берём подкатегорию если выбрана, иначе родительскую
+            // Pick the subcategory if selected, otherwise the parent.
             const catVal = (categoryEl && categoryEl.value && categoryEl.style.display !== 'none')
               ? categoryEl.value
               : (categoryParEl ? categoryParEl.value : '');
@@ -1967,7 +1971,7 @@ location.reload();
             }
         });
 
-        // Очистка при закрытии страницы
+        // Cleanup on page unload.
         window.addEventListener('beforeunload', () => {
             Object.values(websockets).forEach(ws => {
                 if (ws.pingInterval) clearInterval(ws.pingInterval);
@@ -1976,7 +1980,7 @@ location.reload();
             Object.values(timers).forEach(timer => clearInterval(timer));
         });
 
-        // Запуск
+        // Boot.
         init();
     
 

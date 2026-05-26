@@ -217,10 +217,10 @@ function renderPage() {
 
 function switchTab(tab) {
   currentTab = tab;
-  // Перерисовываем только табы и контент
+  // Re-render only the tabs and the active content panel.
   document.querySelector('.tabs').outerHTML = renderTabs();
   document.getElementById('tabContent').innerHTML = renderList();
-  // querySelector не работает после outerHTML, нужно перерисовать через innerHTML
+  // querySelector breaks after outerHTML - must re-render via innerHTML.
   renderPage();
 }
 
@@ -241,7 +241,7 @@ async function init() {
     return;
   }
 
-  // Скелетон пока грузим
+  // Skeleton while loading.
   main.innerHTML = `
     <div class="page-header">
       <div>

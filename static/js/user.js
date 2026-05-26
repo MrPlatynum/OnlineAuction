@@ -191,7 +191,7 @@ async function render(data) {
   `;
 
   if (rstats.total > 0) renderReviews();
-  // Deep-link: #reviews - плавно скроллит к секции отзывов
+  // Deep-link: #reviews smoothly scrolls to the reviews section.
   if (location.hash === '#reviews') {
     setTimeout(() => document.getElementById('section-reviews')?.scrollIntoView({ behavior: 'smooth' }), 200);
   }

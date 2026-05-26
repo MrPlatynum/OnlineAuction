@@ -52,10 +52,9 @@
     window.location.href = 'index.html';
   };
 
-  // Shorthand для `document.getElementById`. Удобство для per-page скриптов
-  // (auction.js, profile.js, и т.д.) - раньше каждый объявлял локальный
-  // `const $ = …`. Глобал из common.js работает потому что common.js
-  // загружается раньше всех per-page assets.
+  // Shorthand for `document.getElementById` - per-page scripts used to
+  // each declare their own `const $ = ...`. Exposed on window because
+  // common.js loads before every per-page bundle.
   window.$ = (id) => document.getElementById(id);
 
   window.esc = function(s) {
@@ -102,7 +101,8 @@
     const headers = { ...(opts.headers || {}) };
     const tk = getToken();
     if (tk) headers['Authorization'] = 'Bearer ' + tk;
-    // Timeout (default 15s) через AbortController - чтобы не висеть бесконечно
+    // Timeout (default 15s) via AbortController - keeps the request from
+    // hanging indefinitely on a stalled connection.
     const ctrl = new AbortController();
     const timeoutMs = opts.timeout ?? 15000;
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -113,10 +113,9 @@
       .finally(() => clearTimeout(timer));
   };
 
-  // FastAPI/Pydantic возвращает 422 с массивом detail[]: каждый элемент
-  // вида {loc: ["body","field"], msg: "...", type: "..."}. Поле обычной
-  // ошибки (4xx с одним detail-стринг) - просто string. Дать одно
-  // понятное сообщение для пользователя.
+  // FastAPI/Pydantic returns 422 with a detail array - each item shaped
+  // {loc: ["body","field"], msg: "...", type: "..."}. The plain-4xx case
+  // returns detail as a string. Boil both down to one user-facing line.
   const FIELD_RU = {
     title: 'Название',
     description: 'Описание',
@@ -164,8 +163,9 @@
       return detail.map(_humanizePydanticItem).join('; ') || (fallback || 'Ошибка валидации');
     }
     if (typeof detail === 'string') return detail;
-    // Изредка попадается detail-объект (например ручные HTTPException с
-    // dict вместо строки) или просто err.message без detail. Не молчим.
+    // Rare case: detail is an object (hand-rolled HTTPException with a
+    // dict body) or there's no detail at all and only err.message is set.
+    // Don't fall silent.
     if (detail && typeof detail === 'object') {
       if (typeof detail.msg === 'string') return detail.msg;
       try { return JSON.stringify(detail); } catch { /* fallthrough */ }
@@ -174,7 +174,7 @@
     return fallback || 'Ошибка';
   };
 
-  // Перенаправляет любой блок-контейнер в состояние «не удалось загрузить» с кнопкой повтора
+  // Switch any block container into a "load failed" state with a retry button.
   window.renderLoadError = function(container, msg, onRetry) {
     if (!container) return;
     const id = 'lotusRetryBtn_' + Math.random().toString(36).slice(2, 8);
@@ -191,7 +191,7 @@
     }
   };
 
-  // Заглушка для будущих разделов
+  // Placeholder for sections that aren't built yet.
   window.comingSoon = function(name) {
     window.showToast('Скоро', name ? `Раздел «${name}» в разработке` : 'Раздел в разработке', 'info');
   };
@@ -287,7 +287,7 @@
   };
 
   // ================================================================
-  // Notification bell - авто-инициализация при наличии #notifBtn
+  // Notification bell - auto-init when #notifBtn is present on the page.
   // ================================================================
   function initNotifBell() {
     const btn      = document.getElementById('notifBtn');
@@ -455,11 +455,11 @@
         }
       };
       wsNotif.onclose = (e) => {
-        // Серверные коды отказа - auth-failure (4001), forbidden (4003),
-        // policy violation (1008, в т.ч. tv-bump после change-password) и
-        // штатное закрытие (1000): любое из этого означает, что повторный
-        // коннект тем же токеном тоже отвергнут. Без guard'а клиент
-        // hammer'ит сервер раз в 1.5с навсегда.
+        // Server-side refusal codes: auth-failure (4001), forbidden (4003),
+        // policy violation (1008, includes tv-bump after change-password),
+        // clean shutdown (1000). Any of them means a reconnect with the
+        // same token will also be rejected - without this guard the client
+        // would hammer the server every 1.5s forever.
         if (e && (e.code === 1000 || e.code === 1008 || e.code === 4001 || e.code === 4003)) {
           return;
         }
