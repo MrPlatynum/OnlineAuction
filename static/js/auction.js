@@ -535,10 +535,10 @@
     } catch {}
     if (token) {
       try {
-        const r=await fetch(`${API}/api/sellers/${id}/subscription`,{headers:{'Authorization':'Bearer '+token}});
+        const r=await apiFetch(`${API}/api/sellers/${id}/subscription`);
         if (r.ok) {
           const d=await r.json(); isSubscribed=d.subscribed; syncEl('sellerSubs',d.subscribers_count); updateSubBtn();
-          const me=await fetch(`${API}/api/me`,{headers:{'Authorization':'Bearer '+token}});
+          const me=await apiFetch(`${API}/api/me`);
           if (me.ok){const meData=await me.json();if(meData.id!==id){$('subBtn').style.display='flex';$('reviewForm').style.display='block';}}
         }
       } catch {}
@@ -784,9 +784,9 @@
       return;
     }
     try {
-      const r = await fetch(`${API}/api/reviews`, {
+      const r = await apiFetch(`${API}/api/reviews`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           seller_id: sellerId, auction_id: +auctionId || null,
           rating: currentRating, comment,

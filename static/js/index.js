@@ -768,9 +768,8 @@ document.addEventListener('DOMContentLoaded', () => {
         async function uploadOneFile(file) {
             const fd = new FormData();
             fd.append('file', file, file.name || 'lot.jpg');
-            const r = await fetch(`${API_URL}/api/upload-image`, {
+            const r = await apiFetch(`${API_URL}/api/upload-image`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
                 body: fd
             });
             if (!r.ok) {
@@ -921,9 +920,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let response;
             try {
-                response = await fetch(`${API_URL}/api/me`, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                response = await apiFetch(`${API_URL}/api/me`, {
+                    method: 'GET'
                 });
             } catch (err) {
                 // сеть/сервер недоступен — НЕ разлогиниваем
@@ -1539,9 +1537,8 @@ function buildPageList(current, total) {
             const title = card?.dataset.title || 'этот лот';
             if (!confirm(`Удалить «${title}»?\n\nЭто действие нельзя отменить.`)) return;
             try {
-                const r = await fetch(`${API_URL}/api/auctions/${auctionId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': 'Bearer ' + token }
+                const r = await apiFetch(`${API_URL}/api/auctions/${auctionId}`, {
+                    method: 'DELETE'
                 });
                 if (r.ok) {
                     if (card) {
@@ -1568,11 +1565,10 @@ function buildPageList(current, total) {
             }
 
             try {
-                const response = await fetch(`${API_URL}/api/bids`, {
+                const response = await apiFetch(`${API_URL}/api/bids`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ auction_id: auctionId, amount })
                 });
@@ -1945,9 +1941,9 @@ location.reload();
                 }
 
                 // 2) create auction
-                const response = await fetch(`${API_URL}/api/auctions`, {
+                const response = await apiFetch(`${API_URL}/api/auctions`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, description, starting_price, duration_minutes, image_url, image_urls, category_id, auction_type, bin_price })
                 });
 

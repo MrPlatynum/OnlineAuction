@@ -139,8 +139,8 @@ async function changePassword() {
   if (!nw || nw.length < 6) { if($('pwNewErr')) $('pwNewErr').textContent = 'Минимум 6 символов'; return; }
   if (nw !== cfm) { if($('pwConfirmErr')) $('pwConfirmErr').textContent = 'Пароли не совпадают'; return; }
   try {
-    const r = await fetch(`${API}/api/change-password`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/change-password`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ current_password: cur, new_password: nw })
     });
     const d = await r.json();
@@ -168,8 +168,8 @@ function loadNotifSettings(user) {
 async function saveNotifications() {
   const btn = $('saveNotifBtn'); if(btn) { btn.disabled = true; btn.textContent = 'Сохранение…'; }
   try {
-    const r = await fetch(`${API}/api/notification-settings`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/notification-settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email_notifications: $('s_email')?.checked,
         notify_outbid:       $('s_outbid')?.checked,
@@ -207,7 +207,7 @@ async function loadNotifPanel() {
   if (!el) return;
   el.innerHTML = '<div class="notif-panel-empty">Загрузка…</div>';
   try {
-    const r = await fetch(API + '/api/notifications', { headers: { Authorization: 'Bearer ' + token } });
+    const r = await apiFetch(API + '/api/notifications');
     if (!r.ok) return;
     const data = await r.json();
     const items = data.notifications || data || [];
@@ -254,11 +254,11 @@ async function loadNotifPanel() {
 
 async function markNotifRead(id, el) {
   el?.classList.remove('unread');
-  try { await fetch(`${API}/api/notifications/${id}/read`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch {}
+  try { await apiFetch(`${API}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
 }
 async function markAllReadPanel() {
   try {
-    await fetch(API + '/api/notifications/mark-all-read', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    await apiFetch(API + '/api/notifications/mark-all-read', { method: 'POST' });
     document.querySelectorAll('.notif-card.unread').forEach(c => c.classList.remove('unread'));
     const badge = $('sbNotifBadge'); if (badge) badge.style.display = 'none';
   } catch {}
@@ -497,7 +497,7 @@ function renderList(tab) {
 /* ---- Subscriptions ---- */
 async function loadSubscriptions() {
   try {
-    const r = await fetch(API + '/api/my/subscriptions', { headers: { Authorization: 'Bearer ' + token } });
+    const r = await apiFetch(API + '/api/my/subscriptions');
     if (!r.ok) return;
     subsCache = await r.json();
   } catch {}
@@ -560,7 +560,7 @@ function renderSubs() {
 }
 async function unsubscribeFrom(sellerId, btn) {
   try {
-    const r = await fetch(`${API}/api/sellers/${sellerId}/subscribe`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    const r = await apiFetch(`${API}/api/sellers/${sellerId}/subscribe`, { method: 'DELETE' });
     if (r.ok) { subsCache = subsCache.filter(s => s.seller_id !== sellerId); renderSubs(); }
   } catch {}
 }
@@ -658,9 +658,8 @@ async function confirmCrop() {
     const avatarEl = $('avatar');
     avatarEl.style.opacity = '0.6';
 
-    const r = await fetch(`${API}/api/upload-avatar`, {
+    const r = await apiFetch(`${API}/api/upload-avatar`, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + token },
       body: formData,
     });
 
@@ -704,9 +703,8 @@ function removeAvatarImg() {
 
 async function deleteAvatar() {
   try {
-    const r = await fetch(`${API}/api/upload-avatar`, {
+    const r = await apiFetch(`${API}/api/upload-avatar`, {
       method: 'DELETE',
-      headers: { Authorization: 'Bearer ' + token },
     });
     if (r.ok) {
       // Убираем картинку из сайдбара
@@ -763,9 +761,7 @@ function updateBalanceDisplay(val) {
 async function loadBalance(reset = true) {
   if (reset) { txPage = 1; }
   try {
-    const r = await fetch(`${API}/api/transactions?page=${txPage}&page_size=15`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
+    const r = await apiFetch(`${API}/api/transactions?page=${txPage}&page_size=15`);
     if (!r.ok) return;
     const data = await r.json();
 
@@ -852,8 +848,8 @@ async function doDepositPanel() {
   }
   btn.disabled = true; btn.textContent = 'Отправка…';
   try {
-    const r = await fetch(`${API}/api/deposit`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/deposit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
     const d = await r.json();
@@ -882,8 +878,8 @@ async function doWithdraw() {
   }
   btn.disabled = true; btn.textContent = 'Отправка…';
   try {
-    const r = await fetch(`${API}/api/withdraw`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/withdraw`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
     const d = await r.json();
@@ -902,7 +898,7 @@ async function doWithdraw() {
 
 /* ---- Init ---- */
 async function load() {
-  const r1 = await fetch(API + '/api/me', { headers: { Authorization: 'Bearer ' + token }});
+  const r1 = await apiFetch(API + '/api/me');
   if (!r1.ok) { localStorage.removeItem('token'); location.href = 'index.html'; return; }
   const user = await r1.json();
 
@@ -963,7 +959,7 @@ async function load() {
   loadNotifSettings(user);
   initTheme();
 
-  const r2 = await fetch(API + '/api/my/participation', { headers: { Authorization: 'Bearer ' + token }});
+  const r2 = await apiFetch(API + '/api/my/participation');
   if (!r2.ok) return;
   const data = await r2.json();
 
@@ -986,7 +982,7 @@ async function load() {
   loadSubscriptions();
 
   try {
-    const rn = await fetch(API + '/api/notifications/unread-count', { headers: { Authorization: 'Bearer ' + token } });
+    const rn = await apiFetch(API + '/api/notifications/unread-count');
     if (rn.ok) {
       const nd = await rn.json();
       const cnt = nd.count || 0;
@@ -1052,9 +1048,9 @@ async function doDeposit() {
   }
   btn.disabled = true; btn.textContent = 'Отправка…'; result.style.display = 'none';
   try {
-    const r = await fetch(API + '/api/deposit', {
+    const r = await apiFetch(API + '/api/deposit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
     if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.detail || 'Ошибка сервера'); }
