@@ -303,18 +303,35 @@ async def complete_auction(auction_id: int, db: AsyncSession):
 
     await db.commit()
 
-    for user, notif_type, title, message in pending_notifications:
-        await notify_user(
-            db, user, notif_type, title, message,
-            auction.id, auction.title, manager,
-        )
-
+    # Broadcast the "auction ended" frame before the per-recipient fan-out:
+    # it doesn't touch the DB and benefits every subscribed client (whether
+    # they bid or not). If a later notify_user raises, the broadcast has
+    # already gone out, so the listing card stops counting down even if
+    # individual notifications drop.
     await manager.broadcast({
         "type": "auction_ended",
         "auction_id": auction_id,
         "winner_id": auction.winner_id,
         "final_price": float(auction.current_price),
     }, auction_id)
+
+    # Notifications are best-effort once the financial side is committed.
+    # A single failed recipient (deleted user, transient DB drop on the
+    # commit inside create_notification, WS send error) used to abort the
+    # whole loop and leave later bidders un-notified - and propagate up
+    # to _wait_and_complete's except Exception, which rolled back the
+    # already-committed money side's session for no benefit.
+    for user, notif_type, title, message in pending_notifications:
+        try:
+            await notify_user(
+                db, user, notif_type, title, message,
+                auction.id, auction.title, manager,
+            )
+        except Exception:
+            logger.exception(
+                "Notification dispatch failed for user %s on auction %s",
+                user.id, auction_id,
+            )
 
 
 # Wire the scheduler's "settle this id" / "ending-soon" hooks to our
