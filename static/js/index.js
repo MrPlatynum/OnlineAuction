@@ -1272,6 +1272,10 @@ function buildPageList(current, total) {
             Object.values(timers).forEach(t => clearInterval(t));
             Object.keys(timers).forEach(k => delete timers[k]);
             Object.keys(reconnectAttempts).forEach(k => delete reconnectAttempts[k]);
+            // Drop the per-auction refresh-throttle entries too: long
+            // browsing sessions otherwise grow this map by every id ever
+            // observed. Cheap per entry but unbounded in principle.
+            Object.keys(lastPriceRefresh).forEach(k => delete lastPriceRefresh[k]);
         }
 
         function displayAuctions(auctions) {
@@ -1355,8 +1359,8 @@ function buildPageList(current, total) {
                 return `
                     <div class="auction-card" data-auction-id="${auction.id}"
                        data-title="${safeTitle}"
-                       data-price="${isBinType ? '⚡ ' : ''}${auction.current_price.toFixed(2)} ₽"
-                       data-start="от ${auction.starting_price.toFixed(2)} ₽"
+                       data-price="${isBinType ? '⚡ ' : ''}${Number(auction.current_price ?? 0).toFixed(2)} ₽"
+                       data-start="от ${Number(auction.starting_price ?? 0).toFixed(2)} ₽"
                        data-bids="${bidsCount !== '' ? '💬 ' + bidsCount : ''}"
                        data-creator="${creatorName ? '@' + safeCreator : ''}"
                        data-category="${catLabel}"
@@ -1381,7 +1385,7 @@ function buildPageList(current, total) {
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
                                 <div class="auction-title">${safeTitle}</div>
                             </a>
-                            <div class="auction-price">${auction.current_price.toFixed(2)} ₽</div>
+                            <div class="auction-price">${Number(auction.current_price ?? 0).toFixed(2)} ₽</div>
                             ${!isEnded
                                 ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
                                 : `<div class="auction-start">Завершён · от ${auction.starting_price.toFixed(2)} ₽</div>`}

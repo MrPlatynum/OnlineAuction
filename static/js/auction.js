@@ -538,7 +538,13 @@
       const r=await fetch(`${API}/api/users/${encodeURIComponent(username)}`);
       if (r.ok) {
         const d=await r.json();
-        syncEl('sellerMeta',`С нами с ${new Date(d.user?.created_at+'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`);
+        // Guard ``created_at`` against a null value: ``new Date('nullZ')``
+        // returns Invalid Date and ``toLocaleDateString`` then renders the
+        // literal string "Invalid Date" inside the seller card.
+        const createdAt = d.user?.created_at;
+        syncEl('sellerMeta', createdAt
+          ? `С нами с ${new Date(createdAt + 'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`
+          : 'С нами недавно');
         syncEl('sellerLots',d.stats?.created_count??'-');
         if (d.user?.avatar_url&&!$('sellerAvatar').querySelector('img')) {
           const img=document.createElement('img');img.src=resolveAvatarUrl(d.user.avatar_url);img.alt=username;$('sellerAvatar').appendChild(img);

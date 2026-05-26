@@ -39,7 +39,12 @@
   // tweak doesn't have to chase them all.
   window.resolveAvatarUrl = function(url) {
     if (!url) return null;
-    return url.startsWith('http') ? url : window.API + url;
+    // Require the full ``://`` so a value like ``"httpfoo"`` or a
+    // malformed scheme can't slip past as "looks absolute". An attacker
+    // can't pick avatar URLs today (server-set on upload), but the
+    // predicate is the kind of thing that bites the second a path
+    // changes upstream.
+    return /^https?:\/\//i.test(url) ? url : window.API + url;
   };
 
   // Single logout entry point. Per-page scripts that need to tear down their own
