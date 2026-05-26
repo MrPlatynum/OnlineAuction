@@ -201,15 +201,32 @@ async def change_password(
 ):
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
-    current_user.hashed_password = hash_password(data.new_password)
+    # Take a row-level lock on the user before mutating credentials. A
+    # concurrent /ws/notifications handshake reads the user row to
+    # validate the JWT's tv claim against the persisted token_version;
+    # without this lock the handshake's read can land between our
+    # pre-bump read (via get_current_user) and the commit below, so
+    # the new socket sees the old tv, accepts a stolen JWT, and
+    # survives the credential rotation. ``populate_existing`` refreshes
+    # the existing ORM copy so subsequent attribute writes target the
+    # locked row.
+    locked = (
+        await db.execute(
+            select(User)
+            .where(User.id == current_user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    locked.hashed_password = hash_password(data.new_password)
     # Bump tv + close in-flight WS in one step. The caller still has
     # *this* request's token in their browser - return a fresh one so
     # they don't get kicked out of the very session they used to
     # change the password.
-    await _invalidate_user_sessions(current_user)
+    await _invalidate_user_sessions(locked)
     await db.commit()
 
-    new_token = create_user_access_token(current_user)
+    new_token = create_user_access_token(locked)
     return {"message": "Пароль успешно изменён", "token": new_token}
 
 
