@@ -11,17 +11,23 @@ from app.schemas.review import ReviewCreate
 from app.schemas.user import (
     ChangePasswordRequest,
     NotificationSettings,
+    PasswordResetConfirmBody,
+    PasswordResetRequestBody,
     UserCreate,
     UserLogin,
     UserResponse,
+    VerifyEmailRequest,
 )
 
 __all__ = [
     "ChangePasswordRequest",
     "NotificationSettings",
+    "PasswordResetConfirmBody",
+    "PasswordResetRequestBody",
     "UserCreate",
     "UserLogin",
     "UserResponse",
+    "VerifyEmailRequest",
     "NotificationResponse",
     "AuctionCreate",
     "AuctionResponse",

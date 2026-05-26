@@ -10,7 +10,6 @@ import asyncio
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +18,12 @@ from app.database import get_db
 from app.models import User
 from app.schemas import (
     ChangePasswordRequest,
+    PasswordResetConfirmBody,
+    PasswordResetRequestBody,
     UserCreate,
     UserLogin,
     UserResponse,
+    VerifyEmailRequest,
 )
 from app.services.notifications import (
     send_password_changed_email,
@@ -107,10 +109,6 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
 
     token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
-
-
-class VerifyEmailRequest(BaseModel):
-    token: str
 
 
 @router.post("/verify-email")
@@ -212,15 +210,6 @@ async def change_password(
 
     new_token = create_user_access_token(current_user)
     return {"message": "Пароль успешно изменён", "token": new_token}
-
-
-class PasswordResetRequestBody(BaseModel):
-    email: EmailStr
-
-
-class PasswordResetConfirmBody(BaseModel):
-    token: str
-    new_password: str = Field(min_length=8, max_length=128)
 
 
 # Generic responses kept identical regardless of whether the address

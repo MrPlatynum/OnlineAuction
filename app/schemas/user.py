@@ -49,3 +49,16 @@ class NotificationSettings(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class PasswordResetRequestBody(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirmBody(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)
