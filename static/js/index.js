@@ -1203,23 +1203,33 @@ function buildPageList(current, total) {
         }
 
         function attachAuctionWsObserver() {
-            if (!auctionWsObserver) {
-                auctionWsObserver = new IntersectionObserver((entries) => {
-                    entries.forEach((entry) => {
-                        const id = +entry.target.dataset.auctionId;
-                        if (!id) return;
-                        if (entry.isIntersecting) {
-                            refreshAuctionPrice(id);
-                            if (token && !websockets[id]) connectWebSocket(id);
-                        } else {
-                            const ws = websockets[id];
-                            if (!ws) return;
-                            safeCloseWs(ws);
-                            delete websockets[id];
-                        }
-                    });
-                }, { rootMargin: '200px' });
+            // displayAuctions wipes ``auctionsContainer.innerHTML`` and
+            // re-renders on every pagination / filter change. Without
+            // disconnecting the observer first, it keeps observing the
+            // detached card nodes from the prior render and holds their
+            // DOM references alive; after ~20 page changes that's
+            // hundreds of detached nodes pinned in memory. Tear it down
+            // and re-create so the observer's internal target set
+            // tracks only the live cards.
+            if (auctionWsObserver) {
+                auctionWsObserver.disconnect();
+                auctionWsObserver = null;
             }
+            auctionWsObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const id = +entry.target.dataset.auctionId;
+                    if (!id) return;
+                    if (entry.isIntersecting) {
+                        refreshAuctionPrice(id);
+                        if (token && !websockets[id]) connectWebSocket(id);
+                    } else {
+                        const ws = websockets[id];
+                        if (!ws) return;
+                        safeCloseWs(ws);
+                        delete websockets[id];
+                    }
+                });
+            }, { rootMargin: '200px' });
             const container = document.getElementById('auctionsContainer');
             if (!container) return;
             container.querySelectorAll('[data-auction-id]').forEach((el) => {
@@ -1501,10 +1511,23 @@ function buildPageList(current, total) {
                     return;
                 }
 
+                // Hard cap on reconnect attempts. A persistent abnormal
+                // close (1006: server unreachable, proxy down) would
+                // otherwise spin the backoff loop forever as long as
+                // the card stays in the viewport - the 30s ceiling
+                // bounds the rate but not the total. Stop at 8 attempts
+                // (~3min of cumulative backoff) and let the user
+                // refresh; the card's price still polls via
+                // refreshAuctionPrice on next intersection.
+                if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
+                if (reconnectAttempts[auctionId] >= 8) {
+                    console.warn(`[auction ${auctionId}] giving up on WS reconnect after 8 attempts`);
+                    return;
+                }
+
                 // Exponential backoff with half-jitter: on a one-off
                 // server drop a hundred tabs don't all retry within one
                 // second - they spread over [base/2, base].
-                if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
                 const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
                 const delay = base / 2 + Math.random() * (base / 2);
                 reconnectAttempts[auctionId]++;

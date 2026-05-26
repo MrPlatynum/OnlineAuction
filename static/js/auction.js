@@ -330,13 +330,27 @@
   }
 
   async function loadBids() {
+    // Burst of new_bid WS frames during a hot auction fires several
+    // loadBids() calls in quick succession. Without per-call
+    // cancellation the responses can resolve out of order and the
+    // last-to-paint wins, even if it's not the freshest server state.
+    // Cancel any in-flight request first; the abort surfaces as a
+    // DOMException the catch swallows, so the only request that
+    // reaches renderBids is the one that wasn't superseded.
+    if (loadBids._ctl) loadBids._ctl.abort();
+    const ctl = new AbortController();
+    loadBids._ctl = ctl;
     try {
-      const r=await fetch(`${API}/api/auctions/${encodeURIComponent(auctionId)}/bids?page=1&page_size=20`);
+      const r=await fetch(`${API}/api/auctions/${encodeURIComponent(auctionId)}/bids?page=1&page_size=20`,{signal:ctl.signal});
       if (!r.ok) throw new Error();
       const d=await r.json();
+      if (loadBids._ctl !== ctl) return; // a newer call superseded us
       renderBids(d.items||[]);
       if (d.total!==undefined) { syncEl('bidsCount',d.total); syncEl('bidsCount2',d.total); }
-    } catch { $('bidsList').innerHTML='<div class="bids-empty" style="color:var(--red)">Не удалось загрузить ставки</div>'; }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      $('bidsList').innerHTML='<div class="bids-empty" style="color:var(--red)">Не удалось загрузить ставки</div>';
+    }
   }
 
   async function placeBid() {
