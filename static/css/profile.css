@@ -1,5 +1,5 @@
 /* ================================================================
-   Лотус — Profile page (page-specific)
+   Лотус - Profile page (page-specific)
    Общие стили (токены, навбар, кнопки, уведомления, модалки, футер)
    находятся в /static/css/common.css.
    ================================================================ */
@@ -10,7 +10,7 @@
 }
 
 /* ================================================================
-   PAGE LAYOUT — 2-column macOS-style
+   PAGE LAYOUT - 2-column macOS-style
    ================================================================ */
 .page {
   display: flex; flex-direction: row; align-items: flex-start;
@@ -144,7 +144,7 @@
 }
 
 /* ================================================================
-   STATS ROW — overview panel
+   STATS ROW - overview panel
    ================================================================ */
 .stats-row {
   display: grid; grid-template-columns: repeat(4, 1fr);
@@ -446,7 +446,7 @@
 .crop-actions .btn { flex: 1; height: 40px; }
 
 /* ================================================================
-   DEPOSIT MODAL — styles follow
+   DEPOSIT MODAL - styles follow
    ================================================================ */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 400;

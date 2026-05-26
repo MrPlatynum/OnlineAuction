@@ -1,11 +1,11 @@
-const token = localStorage.getItem('token');
+const token = window.getToken();
 
-function fmtMonthYear(iso) {
-  return new Date(iso).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-}
-function fmtDateShort(iso) {
-  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+// fmtMonthYear / fmtDateShort come from common.js (window.fmtMonthYear /
+// window.fmtDateShort). The shared versions normalise naive-UTC server
+// timestamps via a trailing 'Z' before formatting, so a user in a non-UTC
+// timezone no longer sees the displayed day shifted by their offset for
+// dates near the midnight boundary - the old local copies skipped that
+// step and inherited the browser's localisation.
 function fmtTimer(sec) {
   if (!sec || sec <= 0) return null;
   const d = Math.floor(sec / 86400);
@@ -59,7 +59,7 @@ async function init() {
 async function render(data) {
   const { user, auctions, stats } = data;
   sellerId = user.id;
-  document.title = `${user.username} — Лотус`;
+  document.title = `${user.username} - Лотус`;
   document.getElementById('crumbName').textContent = user.username;
 
   const isMe = token && (() => {
@@ -70,9 +70,7 @@ async function render(data) {
   const completedLots = (auctions || []).filter(a => !a.is_active).slice(0, 8);
   const totalDecided  = stats.won_count + stats.lost_count;
   const winRate       = totalDecided > 0 ? Math.round(stats.won_count / totalDecided * 100) : null;
-  const avatarBig = user.avatar_url
-    ? (user.avatar_url.startsWith('http') ? user.avatar_url : API + user.avatar_url)
-    : null;
+  const avatarBig = resolveAvatarUrl(user.avatar_url);
 
   let subHtml = '';
   if (!isMe && token) {
@@ -123,7 +121,7 @@ async function render(data) {
       </div>
     </div>
 
-    <!-- ===== RATING SPOTLIGHT (полная ширина) ===== -->
+    <!-- ===== RATING SPOTLIGHT (full width) ===== -->
     ${rstats.total > 0 ? `
     <div class="rating-spotlight">
       <div class="rs-score">
@@ -138,7 +136,7 @@ async function render(data) {
     </div>
     ` : ''}
 
-    <!-- ===== SECTION: Активные лоты ===== -->
+    <!-- ===== SECTION: Active lots ===== -->
     <div class="profile-section" id="section-lots">
       <div class="profile-section-head">
         <div class="profile-section-title">
@@ -155,7 +153,7 @@ async function render(data) {
     </div>
 
     ${completedLots.length > 0 ? `
-    <!-- ===== SECTION: Завершённые ===== -->
+    <!-- ===== SECTION: Completed ===== -->
     <div class="profile-section" id="section-completed">
       <div class="profile-section-head">
         <div class="profile-section-title">
@@ -168,7 +166,7 @@ async function render(data) {
     </div>
     ` : ''}
 
-    <!-- ===== SECTION: Отзывы ===== -->
+    <!-- ===== SECTION: Reviews ===== -->
     <div class="profile-section" id="section-reviews">
       <div class="profile-section-head">
         <div class="profile-section-title">
@@ -193,7 +191,7 @@ async function render(data) {
   `;
 
   if (rstats.total > 0) renderReviews();
-  // Deep-link: #reviews — плавно скроллит к секции отзывов
+  // Deep-link: #reviews smoothly scrolls to the reviews section.
   if (location.hash === '#reviews') {
     setTimeout(() => document.getElementById('section-reviews')?.scrollIntoView({ behavior: 'smooth' }), 200);
   }
@@ -272,9 +270,7 @@ function renderReviews() {
   el.innerHTML = filtered.map(rev => {
     const tone = rev.rating >= 4 ? 'positive' : rev.rating <= 2 ? 'negative' : 'neutral';
     const numCls = rev.rating >= 4 ? '' : rev.rating <= 2 ? 'low' : 'mid';
-    const avaSrc = rev.reviewer_avatar_url
-      ? (rev.reviewer_avatar_url.startsWith('http') ? rev.reviewer_avatar_url : API + rev.reviewer_avatar_url)
-      : null;
+    const avaSrc = resolveAvatarUrl(rev.reviewer_avatar_url);
     const avaHtml = avaSrc
       ? `<img src="${esc(avaSrc)}" alt="">`
       : esc((rev.reviewer_username || '?')[0].toUpperCase());

@@ -16,7 +16,7 @@
     return currentUserId !== null && leaderUserId !== null && currentUserId === leaderUserId;
   }
 
-  // showToast - общий из common.js (window.showToast)
+  // showToast - shared via common.js (window.showToast).
 
   function fmtTime(sec) {
     if (!Number.isFinite(sec)||sec<=0) return '0м 00с';
@@ -31,7 +31,7 @@
     const el = $('currentPrice');
     if (!el) return;
     el.classList.remove('flash');
-    void el.offsetWidth;       /* перезапуск CSS-анимации */
+    void el.offsetWidth;       /* restart the CSS animation */
     el.classList.add('flash');
   }
 
@@ -44,7 +44,7 @@
         if (!r.ok) return;
         _categoriesCache = await r.json();
       }
-      // Ищем путь до категории в дереве
+      // Find the category path through the tree.
       const path = findCategoryPath(_categoriesCache, catId);
       if (!path.length) return;
 
@@ -52,7 +52,7 @@
       const titleEl = $('crumbTitle');
       if (!wrap || !titleEl) return;
 
-      // Очищаем всё внутри nav-crumb и пересобираем
+      // Clear nav-crumb and rebuild from scratch.
       wrap.innerHTML = '';
 
       const root = document.createElement('a');
@@ -71,7 +71,7 @@
         wrap.appendChild(a);
       });
 
-      // Добавляем обратно слот для заголовка лота
+      // Re-attach the slot for the lot title.
       const sep = document.createElement('span');
       sep.className = 'nav-crumb-sep';
       sep.textContent = '›';
@@ -79,7 +79,7 @@
       const cur = document.createElement('span');
       cur.className = 'nav-crumb-current';
       cur.id = 'crumbTitle';
-      cur.textContent = titleEl.textContent;  // сохраняем текущее значение
+      cur.textContent = titleEl.textContent;  // preserve the current title
       wrap.appendChild(cur);
     } catch (e) {
       console.warn('[breadcrumbs] failed:', e);
@@ -147,7 +147,7 @@
     $('avatar').textContent=(user.username?.[0]||'?').toUpperCase();
     if (user.avatar_url) {
       const img=document.createElement('img');
-      img.src=user.avatar_url.startsWith('http')?user.avatar_url:`${API}${user.avatar_url}`;
+      img.src=resolveAvatarUrl(user.avatar_url);
       img.alt=user.username; $('avatar').appendChild(img);
     }
     $('userName').textContent=user.username||'-';
@@ -174,7 +174,7 @@
 
     document.title=`${a.title} - Лотус`;
     syncEl('title',a.title||'Лот'); syncEl('crumbTitle',a.title||'Лот');
-    // Описание: если пусто, показываем muted-плейсхолдер
+    // Description: render a muted placeholder when empty.
     const descEl = $('description');
     if (descEl) {
       const txt = (a.description || '').trim();
@@ -231,7 +231,7 @@
         $('binDivider').style.display='none';
         $('priceStartRow').style.display='none';
         const ph=$('price-hero'); if(ph) ph.style.display='none';
-        // Скрываем блок текущей ставки - показываем только цену BIN
+        // Hide the current-bid block - BIN lots only show the fixed price.
         const priceHero=document.querySelector('.price-hero');
         if(priceHero) priceHero.style.display='none';
         syncEl('bidCardTitle','');
@@ -251,7 +251,7 @@
       $('sellerAvatar').textContent=a.creator_username[0].toUpperCase();
       if (a.creator_avatar_url) {
         const img=document.createElement('img');
-        img.src=a.creator_avatar_url.startsWith('http')?a.creator_avatar_url:`${API}${a.creator_avatar_url}`;
+        img.src=resolveAvatarUrl(a.creator_avatar_url);
         img.alt=a.creator_username; $('sellerAvatar').appendChild(img);
       }
       syncEl('sellerLink','@'+a.creator_username);
@@ -266,10 +266,10 @@
       cb.textContent=a.category_name;
       cb.style.display='inline-flex';
     }
-    // Breadcrumbs (Аукционы › Категория › Подкатегория › Лот)
+    // Breadcrumbs: Auctions > Category > Subcategory > Lot.
     if (a.category_id) loadBreadcrumbs(a.category_id);
 
-    // Lot byline (под заголовком в шапке)
+    // Lot byline under the header title.
     const byline=$('lotByline');
     if (byline && a.creator_username) {
       const parts=[];
@@ -278,7 +278,7 @@
       byline.innerHTML = parts.join('<span class="sep">·</span>');
     }
 
-    // Quick-bid buttons видны только для авторизованных активных торгов
+    // Quick-bid buttons are only visible to logged-in users on active bid lots.
     const quick=$('bidQuick');
     if (quick) {
       quick.style.display = (token && a.is_active && a.auction_type !== 'bin') ? 'flex' : 'none';
@@ -311,20 +311,20 @@
     syncEl('bidsCount',items.length); syncEl('bidsCount2',items.length);
   }
 
-  // Quick-bid: добавляет к минимальной ставке (текущая+0.01) указанную сумму
+  // Quick-bid: adds the chip amount on top of the current price.
   function bumpBid(amount) {
-    // Прибавляем к текущей цене, а не к минимально допустимой
-    // (current + 0.01). Иначе на лоте с круглой стартовой ценой
-    // («55») кнопка «+5» давала «60.01» - некрасиво и неудобно.
-    // При current = 55 кнопка «+5» теперь даёт ровно 60, что
-    // всё равно строго больше текущей цены - сервер примет.
+    // Add to the current price, not the minimum admissible bid
+    // (current + 0.01). On a lot with a round starting price (e.g. 55),
+    // a +5 button would otherwise produce 60.01 - ugly and inconvenient.
+    // With current = 55 the +5 button now produces exactly 60, which is
+    // still strictly greater than the current price - the server accepts it.
     const base = currentPriceValue !== null ? currentPriceValue : 0;
     const target = Math.round((base + amount) * 100) / 100;
     const inp = $('bidAmount');
     if (inp) {
       inp.value = target.toFixed(2);
       inp.focus();
-      // лёгкий визуальный «пинок» поля
+      // Light visual nudge on the bid input.
       inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash');
     }
   }
@@ -373,9 +373,9 @@
           syncEl('currentPrice',p); syncEl('currentPrice2',p);
           flashPrice();
         }
-        // Anti-sniping: ставка в последние 2 мин продлила лот. Сервер
-        // присылает новое time_remaining - синхронизируем таймер обратного
-        // отсчёта и показываем уведомление пользователю.
+        // Anti-sniping: a bid in the closing window extended the lot.
+        // The server sends the new time_remaining - sync the countdown
+        // and surface a toast for the user.
         if (data.extended_until && Number.isFinite(data.time_remaining)) {
           remainingSec = data.time_remaining;
           const t = fmtTime(remainingSec);
@@ -386,11 +386,11 @@
             'warn'
           );
         }
-        // Пришёл чужой new_bid → старое значение leaderUserId уже неактуально.
-        // loadBids() пересчитает его, но это ~50мс по сети; до тех пор
-        // оптимистично сбрасываем, чтобы хинт «вы лидируете» не показывался
-        // дольше, чем надо. refreshBidControls вызовется в renderBids после
-        // ответа REST.
+        // A foreign new_bid arrived -> the cached leaderUserId is stale.
+        // loadBids() will reconcile it, but that round-trip is ~50ms;
+        // optimistically clear so the "you're leading" hint doesn't linger.
+        // refreshBidControls runs inside renderBids once the REST response
+        // lands.
         leaderUserId = null;
         refreshBidControls();
         loadBids();
@@ -407,16 +407,16 @@
     };
     ws.onclose=(e)=>{
       if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}
-      // Policy / auth / internal codes - не реконнектимся, иначе будет
-      // hammer 1.5с в случае серверного отказа (например при превышении
-      // лимита соединений с одного IP).
+      // Policy / auth / internal codes - don't reconnect, otherwise the
+      // client would hammer the server every 1.5s on persistent refusal
+      // (e.g. per-IP connection limit hit).
       if (e && (e.code === 1000 || e.code === 1008 || e.code === 1011)) {
         wsClosedByPolicy = true;
         return;
       }
-      // Exponential backoff с half-jitter - половина случайно, половина по
-      // экспоненте, чтобы N клиентов после общего разрыва не штормили
-      // одним фронтом. Капаем на 30 с.
+      // Exponential backoff with half-jitter: half random, half exponential
+      // so N clients after a server-wide drop don't hammer in one wave.
+      // Capped at 30s.
       const attempt = ++wsReconnectAttempts;
       const base = Math.min(30000, 500 * (2 ** Math.min(attempt, 6)));
       const delay = base / 2 + Math.random() * (base / 2);
@@ -430,7 +430,7 @@
   });
   $('bidAmount').addEventListener('keydown',e=>{ if(e.key==='Enter') placeBid(); });
 
-  // Кастомный stepper рядом с полем ставки - шаг 1 ₽
+  // Custom stepper next to the bid field - step is 1 RUB.
   document.querySelectorAll('.bid-num-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const inp = $('bidAmount');
@@ -500,7 +500,7 @@
 
   async function loadSeller(id,username) {
     sellerId=id; sellerUsername=username;
-    // Ссылка на все отзывы продавца
+    // Link to all reviews for this seller.
     const allLink=$('allReviewsLink');
     if(allLink){allLink.href=`user.html?username=${encodeURIComponent(username)}`;allLink.style.display='inline';}
     // Three independent fetches: seller profile, seller reviews,
@@ -516,7 +516,7 @@
         syncEl('sellerMeta',`С нами с ${new Date(d.user?.created_at+'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`);
         syncEl('sellerLots',d.stats?.created_count??'-');
         if (d.user?.avatar_url&&!$('sellerAvatar').querySelector('img')) {
-          const img=document.createElement('img');img.src=d.user.avatar_url.startsWith('http')?d.user.avatar_url:`${API}${d.user.avatar_url}`;img.alt=username;$('sellerAvatar').appendChild(img);
+          const img=document.createElement('img');img.src=resolveAvatarUrl(d.user.avatar_url);img.alt=username;$('sellerAvatar').appendChild(img);
         }
       }
     } catch {}
@@ -527,7 +527,7 @@
         const avg=d.stats.avg,total=d.stats.total;
         syncEl('sellerReviews',total);
         if(total>0){syncEl('sellerRatingVal',avg.toFixed(1));syncEl('sellerRatingCount',`(${total} отзыв${total===1?'':total>4?'ов':'а'})`);renderStars($('sellerStars'),avg);}
-        // Показываем ВСЕ отзывы о продавце (не только об этом лоте)
+        // Show ALL reviews for this seller (not only the ones for this lot).
         renderReviews(d);
         $('reviewsSummary').style.display = total > 0 ? 'flex' : 'none';
         $('reviewsSection').style.display = 'block';
@@ -535,10 +535,10 @@
     } catch {}
     if (token) {
       try {
-        const r=await fetch(`${API}/api/sellers/${id}/subscription`,{headers:{'Authorization':'Bearer '+token}});
+        const r=await apiFetch(`${API}/api/sellers/${id}/subscription`);
         if (r.ok) {
           const d=await r.json(); isSubscribed=d.subscribed; syncEl('sellerSubs',d.subscribers_count); updateSubBtn();
-          const me=await fetch(`${API}/api/me`,{headers:{'Authorization':'Bearer '+token}});
+          const me=await apiFetch(`${API}/api/me`);
           if (me.ok){const meData=await me.json();if(meData.id!==id){$('subBtn').style.display='flex';$('reviewForm').style.display='block';}}
         }
       } catch {}
@@ -591,10 +591,10 @@
     }
   }
 
-  // Состояние отзывов / фильтра - два независимых стейта:
-  //   1) thisLotOnly - toggle (чекбокс), фильтр по auction_id
-  //   2) lotReviewFilter - exclusive (звезда), фильтр по rating
-  // Оба применяются последовательно.
+  // Review filter state - two independent dimensions:
+  //   1) thisLotOnly - toggle (checkbox), filters by auction_id
+  //   2) lotReviewFilter - exclusive (star pill), filters by rating
+  // Both are applied in sequence.
   let lotReviews = [];
   let lotReviewFilter = 'all';   // 'all' | 1..5
   let thisLotOnly = false;
@@ -608,7 +608,7 @@
     syncEl('reviewsTabCount', total);
     renderStars($('revBigStars'), avg, 15);
 
-    // Бары распределения
+    // Distribution bars.
     const barsEl = $('revBars');
     if (barsEl) barsEl.innerHTML = [5,4,3,2,1].map(n => {
       const cnt = dist[n] || 0, pct = total ? Math.round(cnt/total*100) : 0;
@@ -620,11 +620,11 @@
       </div>`;
     }).join('');
 
-    // Показываем фильтр-блок если есть отзывы
+    // Show the filter block only when at least one review exists.
     const filterEl = $('revFilter');
     if (filterEl) filterEl.style.display = total > 0 ? 'flex' : 'none';
 
-    // Счётчик «Об этом лоте» (фиксированный - не зависит от других фильтров)
+    // "This lot only" counter - fixed, doesn't depend on other filters.
     const thisLotCount = lotReviews.filter(r => r.auction_id === +auctionId).length;
     syncEl('revPillThisLotCount', thisLotCount);
     const thisPill = $('revPillThisLot');
@@ -634,7 +634,7 @@
     renderReviewsList();
   }
 
-  // Считает счётчики у звёздных пилюль с учётом активного «thisLotOnly»
+  // Recompute star-pill counters under the active "thisLotOnly" filter.
   function refreshStarPillCounts() {
     const base = thisLotOnly
       ? lotReviews.filter(r => r.auction_id === +auctionId)
@@ -653,7 +653,7 @@
     thisLotOnly = !thisLotOnly;
     const pill = $('revPillThisLot');
     if (pill) pill.classList.toggle('active', thisLotOnly);
-    // Если активный звёзд-фильтр станет пустым - сбрасываем на «Все»
+    // If the active star filter ends up empty, reset to "All".
     refreshStarPillCounts();
     if (lotReviewFilter !== 'all') {
       const activePill = document.querySelector(`.rev-pill[data-rating="${lotReviewFilter}"]`);
@@ -669,7 +669,7 @@
   function renderReviewsList() {
     const listEl = $('reviewList');
     if (!listEl) return;
-    // Применяем оба фильтра последовательно
+    // Apply both filters in sequence.
     let items = lotReviews;
     if (thisLotOnly)              items = items.filter(r => r.auction_id === +auctionId);
     if (lotReviewFilter !== 'all') items = items.filter(r => r.rating === lotReviewFilter);
@@ -688,7 +688,7 @@
       return;
     }
 
-    // Сортируем: отзывы об ЭТОМ лоте в начале, остальные следом по дате
+    // Sort: reviews for THIS lot first, the rest by date descending.
     const sorted = [...items].sort((a, b) => {
       const aThis = a.auction_id === +auctionId ? 1 : 0;
       const bThis = b.auction_id === +auctionId ? 1 : 0;
@@ -701,9 +701,7 @@
       const utc = rev.created_at.endsWith('Z') ? rev.created_at : rev.created_at + 'Z';
       const date = new Date(utc).toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' });
       const stars = [1,2,3,4,5].map(i => `<span class="review-star${i <= rev.rating ? ' on' : ''}">★</span>`).join('');
-      const avatarSrc = rev.reviewer_avatar_url
-        ? (rev.reviewer_avatar_url.startsWith('http') ? rev.reviewer_avatar_url : `${API}${rev.reviewer_avatar_url}`)
-        : null;
+      const avatarSrc = resolveAvatarUrl(rev.reviewer_avatar_url);
       const avatarHtml = avatarSrc
         ? `<img src="${esc(avatarSrc)}" alt="${esc(rev.reviewer_username)}">`
         : (rev.reviewer_username || '?')[0].toUpperCase();
@@ -731,7 +729,7 @@
 
   function filterReviewsByRating(rating, btn) {
     lotReviewFilter = rating;
-    // Снимаем active только со звёздных пилюль (data-rating), не трогая toggle «Об этом лоте»
+    // Clear active only on star pills (data-rating), leave the "This lot only" toggle alone.
     document.querySelectorAll('.rev-pill[data-rating]').forEach(p => p.classList.remove('active'));
     if (btn) btn.classList.add('active');
     renderReviewsList();
@@ -744,7 +742,7 @@
     document.querySelectorAll('.tab-panel').forEach(p => {
       p.classList.toggle('active', p.id === 'tab-' + tab);
     });
-    // обновляем хэш для deep-link
+    // Update the hash for deep linking.
     if (location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
   }
 
@@ -786,9 +784,9 @@
       return;
     }
     try {
-      const r = await fetch(`${API}/api/reviews`, {
+      const r = await apiFetch(`${API}/api/reviews`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           seller_id: sellerId, auction_id: +auctionId || null,
           rating: currentRating, comment,
@@ -819,7 +817,7 @@
       showToast('Отзыв', 'Отзыв удалён', 'ok');
       const rev = await fetch(`${API}/api/sellers/${sellerId}/reviews`);
       if (rev.ok) renderReviews(await rev.json());
-    } catch { /* silent - toast уже не нужен после удаления */ }
+    } catch { /* silent - the toast is moot once the lot is gone */ }
   }
 
   // ---- Edit Lot ----
@@ -893,7 +891,7 @@
             }
           }
         }
-      } catch { /* silent - категории не критичны для открытия модалки */ }
+      } catch { /* silent - categories aren't critical for opening the modal */ }
     }
 
     editImageUrls = (a.image_urls && a.image_urls.length)
@@ -1060,7 +1058,7 @@
   }
   function lotSlide(dir) { lotGoTo(lotCurrentSlide + dir); }
 
-  // ===== Lightbox: открытие фото лота на полный экран с zoom/pan =====
+  // ===== Lightbox: full-screen lot photo viewer with zoom/pan =====
   const lb = {
     idx: 0, urls: [],
     zoom: 1, panX: 0, panY: 0,
@@ -1122,35 +1120,35 @@
     lbApplyTransform();
   }
 
-  // Клик по слайду открывает lightbox с текущим видимым фото.
-  // Все слайды лежат друг на друге (position:absolute), и target
-  // указал бы на верхний по DOM, а не на визуально активный -
-  // поэтому берём индекс не из e.target, а из lotCurrentSlide.
+  // Slide click opens the lightbox at the currently visible photo.
+  // All slides stack via position:absolute, so e.target would point at
+  // the top DOM slide instead of the visually active one - read the
+  // index from lotCurrentSlide instead.
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.lot-image-wrap')) return;
     if (e.target.closest('.lot-nav, .lot-dots, .lot-counter')) return;
     if (!e.target.closest('.lot-slide')) return;
     openLightbox(lotCurrentSlide);
   });
-  // Клик по сцене вне картинки и контролов - навигация: левая
-  // половина = prev, правая = next. Чтобы случайный промах по
-  // визуальной стрелке не казался «глухим» нажатием.
+  // Click on the stage outside the picture and controls navigates:
+  // left half = prev, right half = next. Avoids the "dead click"
+  // feeling when the user just misses the visual arrow.
   document.addEventListener('click', (e) => {
     if ($('lotLightbox')?.hidden) return;
     if (!lb.urls || lb.urls.length < 2) return;
-    if (lb.zoom > 1) return; // в режиме зума клик может быть частью drag
+    if (lb.zoom > 1) return; // while zoomed in, a click might be part of a drag
     const stage = e.target.closest('#lbStage');
     if (!stage) return;
-    // Игнорируем сам img - нужно чтобы wheel/drag работали без сюрпризов
+    // Ignore the img itself - wheel/drag need to keep working without surprises.
     if (e.target.closest('.lb-img')) return;
-    // Игнорируем клик по кнопкам и контролам
+    // Ignore clicks on buttons and controls.
     if (e.target.closest('.lb-btn, .lb-controls, .lb-counter, .lb-nav')) return;
     const rect = stage.getBoundingClientRect();
     const xRel = e.clientX - rect.left;
     if (xRel < rect.width / 2) lbSlide(-1);
     else lbSlide(1);
   });
-  // Клавиатура: Esc, стрелки, +/-, 0 (reset)
+  // Keyboard: Esc, arrows, +/-, 0 (reset).
   document.addEventListener('keydown', (e) => {
     if ($('lotLightbox')?.hidden) return;
     if (e.key === 'Escape') closeLightbox();
@@ -1160,14 +1158,14 @@
     else if (e.key === '-' || e.key === '_') lbZoom(-0.25);
     else if (e.key === '0') lbResetZoom();
   });
-  // Колесо мыши = zoom
+  // Mouse wheel = zoom.
   document.addEventListener('wheel', (e) => {
     if ($('lotLightbox')?.hidden) return;
     if (!e.target.closest('#lotLightbox')) return;
     e.preventDefault();
     lbZoom(e.deltaY < 0 ? ZOOM_STEP_WHEEL : -ZOOM_STEP_WHEEL);
   }, { passive: false });
-  // Перетаскивание при zoom > 1
+  // Drag-to-pan when zoom > 1.
   document.addEventListener('mousedown', (e) => {
     if ($('lotLightbox')?.hidden || lb.zoom === 1) return;
     if (!e.target.closest('.lb-img')) return;
@@ -1198,7 +1196,7 @@
     toggleThisLotOnly, updateReviewCounter,
   });
 
-  // Deep-link: auction.html?id=...#reviews открывает таб «Отзывы» сразу
+  // Deep-link: auction.html?id=...#reviews opens the Reviews tab on load.
   if (location.hash === '#reviews' || location.hash === '#desc') {
     switchLotTab(location.hash.slice(1));
   }

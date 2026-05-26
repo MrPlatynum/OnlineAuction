@@ -3,7 +3,7 @@
 Backs the per-email 60-second throttle on /api/password-reset/request:
 record the last send time and reject another /request from the same
 account inside that window even if it comes from a different IP. The
-column is nullable — accounts that never requested a reset stay NULL
+column is nullable - accounts that never requested a reset stay NULL
 and pass the throttle on first request.
 
 Revision ID: f2b3c4d5e6f7

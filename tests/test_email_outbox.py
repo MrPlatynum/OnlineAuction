@@ -101,7 +101,7 @@ async def test_tick_reschedules_after_failure(monkeypatch):
 
 
 async def test_tick_skips_rows_whose_next_attempt_is_future(monkeypatch):
-    """A row scheduled for the future must not be picked up — the
+    """A row scheduled for the future must not be picked up - the
     ``next_attempt_at <= now()`` filter is what makes the backoff
     effective."""
     monkeypatch.setattr(

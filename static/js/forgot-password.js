@@ -32,12 +32,7 @@
       } else {
         let detail = 'Не удалось отправить запрос.';
         try {
-          const data = await r.json();
-          if (data && data.detail) {
-            detail = Array.isArray(data.detail)
-              ? data.detail.map((d) => d.msg || 'Ошибка валидации').join('; ')
-              : data.detail;
-          }
+          detail = window.formatError(await r.json(), detail);
         } catch (_) {}
         msg.className = 'pw-reset-msg err';
         msg.textContent = detail;

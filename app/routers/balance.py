@@ -46,7 +46,7 @@ async def deposit(
     if new_balance > MAX_USER_BALANCE:
         raise HTTPException(
             status_code=400,
-            detail=f"Максимальный баланс — {MAX_USER_BALANCE:.2f} ₽",
+            detail=f"Максимальный баланс - {MAX_USER_BALANCE:.2f} ₽",
         )
     current_user.balance = new_balance
     add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
@@ -67,7 +67,7 @@ async def withdraw(
 ):
     amount = to_decimal(data.amount)
     await lock_users_by_id(db, current_user.id)
-    # Subtract what's locked up as the current leader of active auctions —
+    # Subtract what's locked up as the current leader of active auctions -
     # otherwise a user could withdraw their balance while top-bidding on
     # lots, leaving us unable to debit them at completion time.
     committed = await get_committed_balance(db, current_user.id)

@@ -9,11 +9,11 @@ Why this exists: a dropped /password-reset email locks a user out of
 their account, so "best effort" delivery via in-memory tasks isn't
 good enough. The outbox persists the message before the HTTP handler
 returns, so an SMTP outage / app crash / restart no longer loses
-mail — the worker picks it up on the next tick.
+mail - the worker picks it up on the next tick.
 
 Single-worker isn't required, but a background loop *per process*
 is fine: ``SELECT ... FOR UPDATE SKIP LOCKED`` makes multi-worker
-safe by design. The auction scheduler has the opposite property —
+safe by design. The auction scheduler has the opposite property -
 multi-worker there would need an advisory lock.
 """
 
@@ -47,7 +47,7 @@ def _worker_enabled() -> bool:
 WORKER_TICK_SECONDS = 30
 
 # Per-tick batch ceiling. Keeps a single backlog burst from holding
-# one tick open for minutes — the next tick will pick up the rest.
+# one tick open for minutes - the next tick will pick up the rest.
 WORKER_BATCH_SIZE = 10
 
 # Retry budget for new rows. Five attempts spread by the schedule
@@ -69,11 +69,18 @@ _BACKOFF_MAX = timedelta(hours=6)
 _worker_task: asyncio.Task | None = None
 _stop_event: asyncio.Event | None = None
 
+# Strong-ref the in-flight INSERTs so the event-loop GC doesn't reap them
+# mid-await. Each ``enqueue_email`` adds the task here and clears it via the
+# done-callback. Declared above the function that uses it for readability;
+# Python's module-level name resolution makes the placement here equivalent
+# to the post-function declaration, but reading top-down works better.
+_insert_tasks: set[asyncio.Task] = set()
+
 
 def backoff_for_attempt(attempts: int) -> timedelta:
     """Wait before the *next* SMTP try after ``attempts`` failures.
     Returns the largest entry for anything beyond the table so a
-    bigger max_attempts won't crash the worker — it just plateaus."""
+    bigger max_attempts won't crash the worker - it just plateaus."""
     return _BACKOFF_BY_ATTEMPT.get(attempts, _BACKOFF_MAX)
 
 
@@ -85,13 +92,13 @@ def enqueue_email(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
 ) -> None:
     """Schedule an email send. Opens a fresh DB session, INSERTs the
-    row, commits, returns immediately. Caller doesn't await SMTP — the
+    row, commits, returns immediately. Caller doesn't await SMTP - the
     background worker handles it.
 
     Fire-and-forget by design: we use ``asyncio.create_task`` to run
     the INSERT off the request hot path. The task is added to a
     module-level set so the GC doesn't reap it mid-flight, and removed
-    once it completes — same pattern the old fire-and-forget email
+    once it completes - same pattern the old fire-and-forget email
     path used.
     """
     task = asyncio.create_task(
@@ -99,9 +106,6 @@ def enqueue_email(
     )
     _insert_tasks.add(task)
     task.add_done_callback(_insert_tasks.discard)
-
-
-_insert_tasks: set[asyncio.Task] = set()
 
 
 async def _insert_outbox_row(
@@ -140,9 +144,10 @@ async def _process_one(row: EmailOutbox, db) -> None:
         row.last_error = repr(exc)
         if row.attempts >= row.max_attempts:
             row.status = "failed"
-            # Structured `extra` payload так, что JSON-логгер (LOG_FORMAT=json,
-            # см. #28) выдаёт парсимое событие для алертов ops:
-            # `event=outbox_dead_letter` ловится одним фильтром.
+            # Structured ``extra`` payload so the JSON logger
+            # (LOG_FORMAT=json, see app_factory) emits a parseable event
+            # for ops alerts - `event=outbox_dead_letter` is the single
+            # filter to grep.
             logger.error(
                 "Outbox row %s dead-lettered after %d attempts: %s",
                 row.id, row.attempts, exc,
@@ -173,7 +178,7 @@ async def _run_one_tick() -> int:
     processed = 0
     async with _db_module.SessionLocal() as db:
         # FOR UPDATE SKIP LOCKED makes this loop safe under any
-        # number of concurrent workers — each tick claims rows it
+        # number of concurrent workers - each tick claims rows it
         # processes and others skip them. ORDER BY created_at gives
         # FIFO delivery, which matches user expectations (the
         # verification email should arrive before the change-notice
@@ -198,7 +203,7 @@ async def _run_one_tick() -> int:
 
 async def _worker_loop(stop_event: asyncio.Event) -> None:
     """Run ``_run_one_tick`` on a fixed cadence until ``stop_event``
-    fires. Errors inside one tick don't kill the loop — they're
+    fires. Errors inside one tick don't kill the loop - they're
     logged and the next tick still runs.
 
     ``asyncio.wait`` is preferred over a bare ``asyncio.sleep`` so
@@ -221,7 +226,7 @@ async def _worker_loop(stop_event: asyncio.Event) -> None:
 
 
 def start_outbox_worker() -> None:
-    """Start the background worker. No-op if it's already running —
+    """Start the background worker. No-op if it's already running -
     avoids duplicate workers when ``create_app`` is called more than
     once in a test process. Also no-op when the worker is disabled
     via ``AUCTION_OUTBOX_WORKER_ENABLED=false`` (tests)."""

@@ -60,7 +60,7 @@ async def test_get_nonexistent_auction_returns_404(client):
 
 
 async def test_javascript_image_url_rejected(client, registered_user):
-    """``image_url=javascript:...`` must 422 — server-side defence
+    """``image_url=javascript:...`` must 422 - server-side defence
     against stored-XSS via lot images, on top of client-side escape."""
     r = await client.post(
         "/api/auctions",
@@ -137,7 +137,7 @@ async def test_update_auction_not_found(client, registered_user):
 
 
 async def test_update_auction_rejects_inactive_lot(client, registered_user):
-    """Once a lot is settled, no further field edits are permitted —
+    """Once a lot is settled, no further field edits are permitted -
     otherwise the seller could rewrite history of a sold item."""
     auction = await _seed_active_auction(client, registered_user["headers"])
     async with _db_module.SessionLocal() as db:
@@ -179,7 +179,7 @@ async def test_update_auction_extend_minutes_allowed_with_bids(
     client, registered_user, second_user
 ):
     """Extending the deadline is the one edit safe to allow after a bid
-    landed — a longer auction never harms an existing bidder."""
+    landed - a longer auction never harms an existing bidder."""
     auction = await _seed_active_auction(client, registered_user["headers"])
     bid = await client.post(
         "/api/bids",
@@ -217,7 +217,7 @@ async def test_list_auctions_paginated(client, registered_user):
 async def test_bin_lot_seeds_current_price_from_bin_price(client, registered_user):
     """A BIN listing is a fixed-price sale: starting_price is meaningless.
     Whatever the form submits as starting_price, the server must seed
-    current_price from bin_price — otherwise the listing card shows one
+    current_price from bin_price - otherwise the listing card shows one
     number ($100) and /buy-now charges another ($300)."""
     listing = (await client.post(
         "/api/auctions",
@@ -238,7 +238,7 @@ async def test_bin_lot_seeds_current_price_from_bin_price(client, registered_use
 
 
 async def test_update_bin_price_syncs_current_price(client, registered_user):
-    """PATCH bin_price on a BIN listing must drag current_price along —
+    """PATCH bin_price on a BIN listing must drag current_price along -
     otherwise the listing card still shows the old number while
     /buy-now charges the new one (and `auction.current_price` is the
     figure the listing renders)."""
@@ -274,7 +274,7 @@ async def test_buy_now_past_end_time_defers_to_scheduler(
 ):
     """A /buy-now arriving after end_time but before the scheduler tick
     must reject (400) without mutating auction state. complete_auction
-    is the single path that finalises a lot — flipping is_active or
+    is the single path that finalises a lot - flipping is_active or
     is_completed from the handler short-circuits its later tick. BIN
     lots reject bids (fixed-price), so the test exercises the empty-lot
     case where the scheduler should still close the listing cleanly."""
@@ -321,7 +321,7 @@ async def test_late_bid_past_end_time_defers_to_scheduler(
     """A /api/bids arriving after end_time but before the scheduler tick
     must reject (400) without mutating auction state. Previously the
     handler set is_active=False here, which then made complete_auction's
-    own is_active guard skip the lot — stranding the leading bidder
+    own is_active guard skip the lot - stranding the leading bidder
     with no payout."""
     create = await client.post(
         "/api/auctions",
@@ -494,7 +494,7 @@ async def test_list_filter_by_created_by_unknown_user_returns_empty(client):
 
 async def test_list_filter_by_category_includes_children(client, registered_user):
     # "electronics" is a seeded parent slug, "phones" is one of its
-    # children — see app/services/seed_data.py. A filter on the parent
+    # children - see app/services/seed_data.py. A filter on the parent
     # must include lots placed under its children.
     cats = (await client.get("/api/categories")).json()
     parent = next(c for c in cats if c["slug"] == "electronics")

@@ -57,7 +57,7 @@ async def test_valid_jpeg_accepted(client, registered_user):
 
 
 async def test_payload_disguised_as_image_rejected(client, registered_user):
-    """Random bytes with ``image/jpeg`` Content-Type — historically
+    """Random bytes with ``image/jpeg`` Content-Type - historically
     this passed the header-only check. The magic-byte verify must
     reject it as 'not a valid image'."""
     payload = b"#!/bin/sh\necho pwned\n" + b"\x00" * 256
@@ -69,7 +69,7 @@ async def test_payload_disguised_as_image_rejected(client, registered_user):
 
 
 async def test_content_type_mismatch_rejected(client, registered_user):
-    """Real PNG bytes sent with ``image/jpeg`` Content-Type — the
+    """Real PNG bytes sent with ``image/jpeg`` Content-Type - the
     server should refuse rather than silently accept the lie."""
     files = {"file": ("trick.jpg", _png_bytes(), "image/jpeg")}
     r = await client.post(
@@ -108,7 +108,7 @@ async def test_upload_image_authed_succeeds(client, registered_user):
 
 async def test_decompression_bomb_rejected(client, registered_user, monkeypatch):
     """A valid PNG header with declared dimensions above
-    Image.MAX_IMAGE_PIXELS must be refused instead of decoded — the
+    Image.MAX_IMAGE_PIXELS must be refused instead of decoded - the
     historical default would let a 50 KB upload pin a worker on a
     multi-GB decode buffer."""
     from PIL import Image

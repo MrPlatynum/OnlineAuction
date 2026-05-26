@@ -1,6 +1,6 @@
 """SMTP send + HTML body builders for every transactional email.
 
-Templates are pure f-strings — no Jinja, no per-render IO — so the
+Templates are pure f-strings - no Jinja, no per-render IO - so the
 outbox worker can render and ship a body without touching disk. Every
 user-controlled field is escaped through ``html.escape`` before
 interpolation; a lot title like ``<img src=x onerror=...>`` would
@@ -27,7 +27,7 @@ from app.config import (
 logger = logging.getLogger(__name__)
 
 
-# Brand palette — kept aligned with static/css/common.css (--accent /
+# Brand palette - kept aligned with static/css/common.css (--accent /
 # --bg-1) so a recipient skimming the inbox sees the same colour cue
 # they get on the site. Hex literals are inlined into the HTML template
 # because most mail clients strip CSS variables.
@@ -40,7 +40,7 @@ BRAND_MUTED = "#a1a1aa"
 
 
 # Per-type presentation: human-readable Russian label + accent colour
-# for the badge. The badge accent overlays the brand orange — keeping
+# for the badge. The badge accent overlays the brand orange - keeping
 # it semantic (red for "you lost", green for "you won") helps mail
 # triage at a glance without abandoning the brand identity.
 _TYPE_PRESENTATION = {
@@ -57,7 +57,7 @@ _TYPE_PRESENTATION = {
 async def send_email_notification(to_email: str, subject: str, html_content: str) -> None:
     """Send one email synchronously over SMTP.
 
-    Surfaces ``aiosmtplib`` exceptions to the caller — the outbox
+    Surfaces ``aiosmtplib`` exceptions to the caller - the outbox
     worker relies on that to decide between "mark sent" and "schedule
     retry". The previous swallow-and-log behaviour was right for
     fire-and-forget tasks (nobody could act on the failure anyway);
@@ -93,7 +93,7 @@ def build_notification_email_html(
 ) -> str:
     # Escape every user-controllable field before it's spliced into the
     # HTML template. ``title`` / ``message`` / ``auction_title`` flow
-    # from auction titles, usernames and bid notification copy — any of
+    # from auction titles, usernames and bid notification copy - any of
     # which can contain ``<`` / ``>`` / ``"`` from the user. Without
     # escaping, a lot title like ``<img src=x onerror=...>`` would
     # render as live HTML in the recipient's mail client.
@@ -101,7 +101,7 @@ def build_notification_email_html(
     message = html.escape(message or "")
     auction_title = html.escape(auction_title) if auction_title else None
     # PUBLIC_BASE_URL is operator-set, but it's still env-supplied and
-    # spliced unquoted into an href — escape defensively so a misconfig
+    # spliced unquoted into an href - escape defensively so a misconfig
     # like ``PUBLIC_BASE_URL='" onclick="..."'`` can't break out of the
     # attribute. Cheap insurance for a single concat.
     base_url = html.escape(PUBLIC_BASE_URL, quote=True)
@@ -150,7 +150,7 @@ def build_password_reset_email_html(username: str, reset_link: str) -> str:
         title=f"Сброс пароля для {safe_username}",
         message=(
             f"Привет, {safe_username}. Кто-то запросил сброс пароля для "
-            "этой учётной записи — надеемся, что это были вы. Ссылка "
+            "этой учётной записи - надеемся, что это были вы. Ссылка "
             "действует 1 час. Если это были не вы, проигнорируйте письмо: "
             "пароль останется прежним, и старая ссылка перестанет работать "
             "после первого сброса."
@@ -163,7 +163,7 @@ def build_password_reset_email_html(username: str, reset_link: str) -> str:
 
 def build_password_changed_email_html(username: str) -> str:
     """Notification body sent after a successful /password-reset/confirm.
-    No CTA — just a "your password was changed" notice so the legitimate
+    No CTA - just a "your password was changed" notice so the legitimate
     user notices if their account was reset without their knowledge."""
     safe_username = html.escape(username or "")
     base_url = html.escape(PUBLIC_BASE_URL, quote=True)
@@ -174,7 +174,7 @@ def build_password_changed_email_html(username: str) -> str:
         title=f"Пароль изменён, {safe_username}",
         message=(
             "Пароль для этой учётной записи только что был успешно "
-            "сброшен. Если это были не вы — напишите нам немедленно: "
+            "сброшен. Если это были не вы - напишите нам немедленно: "
             "кто-то получил доступ к вашему email-ящику и сменил пароль, "
             "нужно отозвать сессии и проверить активность."
         ),
@@ -198,7 +198,7 @@ def build_verification_email_html(username: str, verify_link: str) -> str:
         title=f"Здравствуйте, {safe_username}!",
         message=(
             "Чтобы делать ставки и выставлять лоты на Лотус, подтвердите "
-            "этот email. Ссылка действует 24 часа — после истечения "
+            "этот email. Ссылка действует 24 часа - после истечения "
             "запросите новую в настройках профиля."
         ),
         body_card="",
@@ -218,7 +218,7 @@ def _render_email(
     base_url: str,
 ) -> str:
     year = datetime.now().year
-    # Mail clients vary wildly in how they handle modern CSS — Outlook
+    # Mail clients vary wildly in how they handle modern CSS - Outlook
     # desktop still rejects flexbox, Gmail strips <style> in some quoted
     # threads. The template sticks to: block layout, inline-friendly
     # styles, hex colours (no CSS variables), simple gradients only in

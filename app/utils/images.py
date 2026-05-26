@@ -1,7 +1,7 @@
 """Image upload validation and sanitisation.
 
 The uploads endpoint can't trust the client's ``Content-Type`` header
-or the file extension — both are attacker-controlled. We re-decode the
+or the file extension - both are attacker-controlled. We re-decode the
 bytes through Pillow, verify they're a real JPEG/PNG/WEBP, drop EXIF
 metadata, and re-encode to a normalised buffer that's safe to write
 to disk.
@@ -39,13 +39,13 @@ def validate_and_normalise_image(image_bytes: bytes) -> tuple[bytes, str, str]:
         with Image.open(io.BytesIO(image_bytes)) as probe:
             probe.verify()
     except Image.DecompressionBombError:
-        # Pixel count exceeds Image.MAX_IMAGE_PIXELS — decompression-bomb
+        # Pixel count exceeds Image.MAX_IMAGE_PIXELS - decompression-bomb
         # vector, refuse before allocating the decode buffer.
         raise HTTPException(status_code=400, detail="Image is too large to decode") from None
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
         raise HTTPException(status_code=400, detail="File is not a valid image") from None
 
-    # ``verify()`` consumes the stream — re-open for the actual encode.
+    # ``verify()`` consumes the stream - re-open for the actual encode.
     try:
         img = Image.open(io.BytesIO(image_bytes))
     except Image.DecompressionBombError:

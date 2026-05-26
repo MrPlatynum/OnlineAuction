@@ -1,5 +1,5 @@
 /* ================================================================
-   Лотус Design System — v3 (Top-nav, production layout)
+   Лотус Design System - v3 (Top-nav, production layout)
    ================================================================ */
 :root {
   --bg:          #09090b;
@@ -28,7 +28,7 @@
   --r-lg:  16px;
 }
 
-/* Светлая тема */
+/* Light theme */
 [data-theme="light"] {
   --bg:    #f4f4f5;
   --bg-2:  #ffffff;
@@ -62,7 +62,7 @@ body {
    TOP NAVBAR
    ================================================================ */
 /* ================================================================
-   NAVBAR — единая шапка
+   NAVBAR - единая шапка
    ================================================================ */
 .navbar {
   position: sticky; top: 0; z-index: 200;
@@ -167,7 +167,7 @@ body {
   cursor: pointer; font-size: 16px;
 }
 
-/* Центральный поиск */
+/* Centered search */
 .nav-search {
   flex: 1;
   max-width: 520px;
@@ -180,7 +180,7 @@ body {
 }
 
 /* ================================================================
-   PAGE LAYOUT — sidebar + content
+   PAGE LAYOUT - sidebar + content
    ================================================================ */
 .page-layout {
   max-width: var(--max-w);
@@ -321,7 +321,7 @@ body {
 }
 
 /* ================================================================
-   TOOLBAR — single line filters
+   TOOLBAR - single line filters
    ================================================================ */
 /* ================================================================
    FILTERS TOOLBAR
@@ -333,7 +333,7 @@ body {
   margin-bottom: 24px;
 }
 
-/* Строка 1: поиск + статусы + счётчик */
+/* Row 1: search + status tabs + counter */
 .filters-row {
   display: flex;
   align-items: center;
@@ -341,7 +341,7 @@ body {
   flex-wrap: nowrap;
 }
 
-/* Поиск */
+/* Search */
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
   background: var(--bg-3);
@@ -371,7 +371,7 @@ body {
 }
 .search-clear:hover { color: var(--text-1); }
 
-/* Статус-табы */
+/* Status tabs */
 .status-tabs {
   display: flex;
   background: var(--bg-2);
@@ -399,14 +399,14 @@ body {
   box-shadow: 0 1px 4px rgba(0,0,0,.35);
 }
 
-/* Счётчик */
+/* Counter */
 .toolbar-count {
   font-size: 11px; color: var(--text-3);
   margin-left: auto; white-space: nowrap; flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
-/* Строка 2: вторичные фильтры */
+/* Row 2: secondary filters */
 .filters-secondary {
   display: flex;
   align-items: center;
@@ -414,7 +414,7 @@ body {
   flex-wrap: wrap;
 }
 
-/* Лейбл-группа (сортировка, цена, автор) */
+/* Label group (sort, price, creator) */
 .filter-group {
   display: flex; align-items: center; gap: 0;
   background: var(--bg-2);
@@ -437,7 +437,7 @@ body {
   letter-spacing: .3px; text-transform: uppercase;
 }
 
-/* Sort select внутри filter-group */
+/* Sort select inside filter-group */
 .sort-select {
   height: 100%; padding: 0 28px 0 10px;
   background: var(--bg-2);
@@ -453,7 +453,7 @@ body {
 }
 .sort-select:hover { color: var(--text-1); }
 
-/* Price inputs внутри filter-group */
+/* Price inputs inside filter-group */
 .price-input {
   width: 68px; height: 100%; padding: 0 8px;
   background: var(--bg-2); border: none;
@@ -462,7 +462,7 @@ body {
 .price-input::placeholder { color: var(--text-3); }
 .price-sep { font-size: 11px; color: var(--text-3); padding: 0 2px; }
 
-/* Creator input внутри filter-group */
+/* Creator input inside filter-group */
 .creator-input {
   width: 110px; height: 100%; padding: 0 10px;
   background: var(--bg-2); border: none;
@@ -470,7 +470,7 @@ body {
 }
 .creator-input::placeholder { color: var(--text-3); }
 
-/* Кнопка сброса */
+/* Reset button */
 .reset-btn {
   display: flex; align-items: center; gap: 5px;
   height: 34px; padding: 0 12px;
@@ -484,7 +484,7 @@ body {
 .reset-btn:hover { color: var(--text-1); border-color: var(--border-hi); }
 
 /* ================================================================
-   AUCTION CARD — Avito style
+   AUCTION CARD - Avito style
    ================================================================ */
 .auctions-grid {
   display: grid;
@@ -547,18 +547,18 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Ссылка-обёртка для картинки */
+/* Wrapper link around the image */
 .auction-image-link {
   display: block; text-decoration: none; flex-shrink: 0;
   transition: opacity .15s;
 }
 .auction-image-link:hover { opacity: .92; }
 
-/* Ссылка на название */
+/* Title link */
 .auction-title-link { text-decoration: none; color: inherit; display: block; }
 .auction-title-link:hover .auction-title { color: var(--accent); }
 
-/* Картинка */
+/* Image */
 .auction-image {
   width: 100%;
   aspect-ratio: 4/3;
@@ -569,7 +569,7 @@ body {
 }
 .auction-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
-/* Карусельные слайды */
+/* Carousel slides */
 .card-slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .25s; }
 .card-slide.active { opacity: 1; }
 .card-nav {
@@ -590,7 +590,7 @@ body {
 .card-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(255,255,255,.4); transition: background .2s; }
 .card-dot.active { background: #fff; }
 
-/* Плейсхолдер */
+/* Placeholder */
 .card-placeholder {
   width: 100%; height: 100%;
   display: flex; flex-direction: column;
@@ -599,7 +599,7 @@ body {
 .card-placeholder-icon { font-size: 32px; opacity: .12; }
 .card-placeholder-label { font-size: 10px; font-weight: 600; color: var(--text-3); letter-spacing: .8px; text-transform: uppercase; }
 
-/* Счётчик фото (правый нижний угол) */
+/* Photo counter (bottom-right corner) */
 .card-photo-count {
   position: absolute; bottom: 8px; right: 8px; z-index: 4;
   padding: 2px 6px; border-radius: 4px;
@@ -608,7 +608,7 @@ body {
   display: flex; align-items: center; gap: 3px;
 }
 
-/* Бейдж — поверх картинки */
+/* Badge overlaid on the image */
 .auction-badge {
   position: absolute; top: 8px; left: 8px; z-index: 4;
   padding: 2px 7px; border-radius: 4px;
@@ -620,10 +620,10 @@ body {
 .badge-ended  { background: rgba(0,0,0,0.6); color: var(--text-3); border: 1px solid rgba(255,255,255,.08); }
 @keyframes pulse-badge { 0%,100%{opacity:1} 50%{opacity:.5} }
 
-/* Таймер — теперь в auction-body */
+/* Timer - now lives inside auction-body */
 .card-timer { font-variant-numeric: tabular-nums; }
 
-/* Кнопка удаления */
+/* Delete button */
 .card-delete-btn {
   position: absolute; top: 8px; right: 8px; z-index: 6;
   width: 26px; height: 26px; border-radius: 6px;
@@ -635,7 +635,7 @@ body {
 .auction-card:hover .card-delete-btn { opacity: 1; }
 .card-delete-btn:hover { background: var(--red); }
 
-/* Текстовый блок */
+/* Text block */
 .auction-body {
   padding: 10px 12px 12px;
   display: flex; flex-direction: column; gap: 2px;
@@ -735,7 +735,7 @@ body {
 .empty-actions { display: flex; gap: 8px; margin-top: 16px; }
 
 /* ================================================================
-   PAGINATION — numbered buttons + jump input
+   PAGINATION - numbered buttons + jump input
    ================================================================ */
 .pagination {
   display: flex; justify-content: center; align-items: center;
@@ -1082,7 +1082,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 .multi-img-add:hover { border-color: var(--accent); color: var(--accent); }
 
-/* Плавное обновление сетки */
+/* Smooth grid update */
 @keyframes grid-fade-in  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes grid-fade-out { from { opacity: 1; } to { opacity: 0; } }
 
@@ -1107,7 +1107,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
    ================================================================ */
 .fab {
   position: fixed; bottom: 24px; right: 24px;
-  display: none; /* показывается через JS только авторизованным */
+  display: none; /* JS shows it only for logged-in users */
   align-items: center; gap: 8px;
   padding: 0 20px; height: 44px;
   background: var(--accent);
@@ -1130,7 +1130,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 /* ================================================================
    RESPONSIVE
    ================================================================ */
-/* "Filters" trigger button — desktop hides it (sidebar is always
+/* "Filters" trigger button - desktop hides it (sidebar is always
    visible there), mobile shows it as the only entry into the filter
    drawer. Lives in the page-header, after the title block. */
 .filter-toggle {
@@ -1153,7 +1153,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 .filter-toggle.has-active .badge { display: inline-flex; }
 
-/* Drawer close-button + handle — only visible inside the mobile
+/* Drawer close-button + handle - only visible inside the mobile
    drawer. The handle sits in a sticky header at the top of the
    scrollable sidebar so the user can dismiss without scrolling. */
 .filter-sidebar .fs-drawer-head {
@@ -1176,7 +1176,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 .filter-sidebar .fs-drawer-close:hover { background: var(--bg-3); color: var(--text-1); }
 
-/* Backdrop behind the open drawer — taps anywhere on it dismiss. */
+/* Backdrop behind the open drawer - taps anywhere on it dismiss. */
 .filter-backdrop {
   position: fixed; inset: 0; z-index: 99;
   background: rgba(0,0,0,.55);
@@ -1228,7 +1228,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
   .auctions-grid { grid-template-columns: 1fr; }
 }
 
-/* iOS body-scroll-lock companion class — JS adds it on <body> when
+/* iOS body-scroll-lock companion class - JS adds it on <body> when
    the drawer opens so the page beneath doesn't scroll while the user
    pans inside the filters. */
 body.no-scroll { overflow: hidden; touch-action: none; }
@@ -1289,9 +1289,9 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 @keyframes badge-pop { from { transform: scale(0); } to { transform: scale(1); } }
 
-/* Dropdown — позиционирование задано в common.css (position: fixed
+/* Dropdown - позиционирование задано в common.css (position: fixed
    с привязкой к viewport, чтобы выпадашка следовала за скроллом).
-   Здесь ничего не переопределяем — раньше тут стоял position: absolute,
+   Здесь ничего не переопределяем - раньше тут стоял position: absolute,
    из-за чего при прокрутке вниз dropdown уезжал к верху документа за
    границу экрана. */
 
@@ -1358,7 +1358,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 .notif-empty-icon { font-size: 32px; margin-bottom: 8px; opacity: .4; }
 
 /* ================================================================
-   HERO — landing-style header above the auctions grid
+   HERO - landing-style header above the auctions grid
    ================================================================ */
 .hero {
   position: relative;
@@ -1374,10 +1374,10 @@ body.no-scroll { overflow: hidden; touch-action: none; }
   pointer-events: none;
 }
 /* Раньше hero-blob был двумя div'ами с filter: blur(80px) и infinite
-   animation — GPU пересчитывал большой гауссов blur каждый кадр.
+   animation - GPU пересчитывал большой гауссов blur каждый кадр.
    Заменено на один слой с двумя radial-gradient: браузер растеризует
    фон один раз и держит как кэшированный слой. Лёгкая анимация
-   transform — это дешёвая операция на композитном слое, blur вообще
+   transform - это дешёвая операция на композитном слое, blur вообще
    не используется. */
 .hero-glow {
   position: absolute;
@@ -1541,7 +1541,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   PAGE TITLE — bigger to match hero
+   PAGE TITLE - bigger to match hero
    ================================================================ */
 .page-title {
   font-size: 26px;
@@ -1655,7 +1655,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   REDUCED MOTION — respect user preference
+   REDUCED MOTION - respect user preference
    ================================================================ */
 @media (prefers-reduced-motion: reduce) {
   .hero-glow, .hero-pulse::after,
@@ -1665,7 +1665,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   FILTER SIDEBAR — visual polish (gradient, shadow, custom controls).
+   FILTER SIDEBAR - visual polish (gradient, shadow, custom controls).
    The basic layout (sticky, width, scroll) lives in the FILTER SIDEBAR
    block earlier in the file; this section adds the visual treatment
    and the per-control components (stab, check, num stepper).
@@ -1712,7 +1712,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
   background: linear-gradient(90deg, var(--border) 0%, transparent 100%);
 }
 
-/* ===== Status tabs — pill list ===== */
+/* ===== Status tabs - pill list ===== */
 .fs-status-tabs { gap: 3px; }
 .fs-stab {
   position: relative;
@@ -1940,7 +1940,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
   color: var(--text-1);
 }
 
-/* ===== Text input (creator) — match new heights ===== */
+/* ===== Text input (creator) - match new heights ===== */
 .fs-input {
   height: 34px;
   padding: 0 12px;
@@ -1967,7 +1967,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   FILTER SIDEBAR — custom dropdown (sort)
+   FILTER SIDEBAR - custom dropdown (sort)
    ================================================================ */
 .fs-dropdown {
   position: relative;
@@ -2131,7 +2131,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   FILTER CHIPS — pill-style chips shown above the auctions grid
+   FILTER CHIPS - pill-style chips shown above the auctions grid
    to summarise currently-applied filters. (Old `.filter-tag` rules
    were deleted; this is the single source for the chip styling.)
    ================================================================ */
@@ -2219,7 +2219,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 .filter-tag-clear:hover svg { transform: rotate(-8deg); }
 
 /* ================================================================
-   FEATURED STRIP — "Ending soon" carousel
+   FEATURED STRIP - "Ending soon" carousel
    ================================================================ */
 .featured-strip {
   max-width: 100%;
@@ -2250,7 +2250,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 /* Раньше тут была анимация filter: drop-shadow (аналог blur, GPU
    пересчитывает поле растушёвки каждый кадр). На странице с
    множеством "горящих" лотов это давало основной CPU/GPU расход.
-   Теперь только transform — GPU дешёво двигает кэшированный слой. */
+   Теперь только transform - GPU дешёво двигает кэшированный слой. */
 @keyframes flame-flicker {
   0%,100% { transform: scale(1) rotate(-3deg); }
   50%     { transform: scale(1.08) rotate(3deg); }
@@ -2351,7 +2351,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
   font-variant-numeric: tabular-nums;
   letter-spacing: .2px;
   /* Раньше тут был backdrop-filter: blur(8px). В сочетании с
-     infinite-анимациями (timer-pulse, pulse-dot-fast) внутри —
+     infinite-анимациями (timer-pulse, pulse-dot-fast) внутри -
      браузер пересчитывал blur каждый кадр для каждой карточки
      featured-strip, и это давало основную нагрузку на CPU/GPU
      главной страницы. Фон уже почти непрозрачный, blur не нужен. */
@@ -2368,7 +2368,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 .featured-timer.critical {
   background: rgba(239,68,68,.95);
   color: #fff;
-  /* Анимация timer-pulse убрана — точка справа уже подсказывает
+  /* Анимация timer-pulse убрана - точка справа уже подсказывает
      состояние, а пульсация всего бейджа заставляла перерисовывать
      карточку каждый кадр. */
 }
@@ -2378,7 +2378,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 /* Раньше тут пульсировал box-shadow (растровая операция, считается
    per-frame и тоже довольно дорогая на множестве карточек). Заменено
-   на opacity — GPU только меняет альфу уже отрисованного слоя. */
+   на opacity - GPU только меняет альфу уже отрисованного слоя. */
 @keyframes timer-pulse {
   0%,100% { opacity: 1; }
   50%     { opacity: .65; }
@@ -2393,12 +2393,12 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 /* Раньше .featured-pulse пульсировала transform: scale + opacity на
    каждой carded.critical/urgent карточке. Сама анимация дешёвая, но
-   массово запускалась поверх backdrop-filter — это и было дорого.
+   массово запускалась поверх backdrop-filter - это и было дорого.
    Точка-индикатор остаётся статичной, цвет фона таймера достаточно
    красноречив. */
 .featured-timer.critical .featured-pulse,
 .featured-timer.urgent .featured-pulse {
-  /* без анимации */
+  /* no animation */
 }
 @keyframes pulse-dot-fast {
   0%,100% { opacity: 1; transform: scale(1); }
@@ -2459,7 +2459,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   BRAND LOGO — custom SVG lotus mask on gold gradient
+   BRAND LOGO - custom SVG lotus mask on gold gradient
    ================================================================ */
 .nav-logo-icon {
   position: relative;
@@ -2477,7 +2477,7 @@ body.no-scroll { overflow: hidden; touch-action: none; }
 }
 
 /* ================================================================
-   AUCTION CARD — live pulse next to timer (replaces "В эфире" badge)
+   AUCTION CARD - live pulse next to timer (replaces "В эфире" badge)
    ================================================================ */
 .auction-timer-row {
   display: inline-flex;

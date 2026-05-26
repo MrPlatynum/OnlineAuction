@@ -1,7 +1,7 @@
 """Read-only category tree.
 
 Categories are seeded by ``services.seed_data.seed_categories`` on
-every startup — the API just surfaces the resulting parent/child tree
+every startup - the API just surfaces the resulting parent/child tree
 so the create-lot form and the listing filter can render it.
 """
 

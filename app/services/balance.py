@@ -77,7 +77,7 @@ async def effective_committed_balance(
     current_price: Decimal,
 ) -> Decimal:
     """Committed balance excluding any existing commit on the auction
-    we're about to bid on — that commit is about to be replaced by the
+    we're about to bid on - that commit is about to be replaced by the
     new bid amount, so it shouldn't count against availability."""
     committed = await get_committed_balance(db, user_id)
 

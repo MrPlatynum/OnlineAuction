@@ -38,7 +38,7 @@ class Auction(Base):
     category = relationship("Category", back_populates="auctions")
     # Two FKs land on users (created_by + winner_id), so the foreign_keys
     # kwarg is required to disambiguate which column this relationship
-    # follows. Only used by the listing endpoints' selectinload — the
+    # follows. Only used by the listing endpoints' selectinload - the
     # raw FK column ``created_by`` stays the canonical write path.
     creator = relationship("User", foreign_keys=[created_by])
     images = relationship(

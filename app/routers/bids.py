@@ -27,6 +27,34 @@ from app.utils.time import utcnow
 router = APIRouter(prefix="/api", tags=["bids"])
 
 
+def _build_bid_broadcast(
+    db_bid: Bid, auction: Auction, bidder_username: str, *, extended: bool
+) -> dict:
+    """Shape the WS payload announced to every /ws/auction/{id} subscriber
+    when a new bid lands. Pulled out of the request handler so the
+    bid-placement flow reads top-down without a 20-line dict literal in
+    the middle, and so the schema is easier to keep aligned with the
+    JS-side ``connectWS`` handler in static/js/auction.js. ``bidder_username``
+    is passed in rather than read off ``db_bid.user`` because the bid row
+    was just inserted - its ``user`` relationship isn't eager-loaded."""
+    payload: dict = {
+        "type": "new_bid",
+        "bid": {
+            "id": db_bid.id,
+            "amount": float(db_bid.amount),
+            "username": bidder_username,
+            "timestamp": db_bid.timestamp.isoformat(),
+        },
+        "current_price": float(auction.current_price),
+    }
+    if extended:
+        payload["extended_until"] = auction.end_time.isoformat()
+        payload["time_remaining"] = int(
+            (auction.end_time - utcnow()).total_seconds()
+        )
+    return payload
+
+
 @router.get("/auctions/{auction_id}/bids", response_model=PaginatedBidsResponse)
 async def get_auction_bids(
     auction_id: int,
@@ -200,21 +228,9 @@ async def place_bid(
             auction.id, auction.title, manager,
         )
 
-    broadcast_payload = {
-        "type": "new_bid",
-        "bid": {
-            "id": db_bid.id,
-            "amount": float(db_bid.amount),
-            "username": current_user.username,
-            "timestamp": db_bid.timestamp.isoformat(),
-        },
-        "current_price": float(auction.current_price),
-    }
-    if extended:
-        broadcast_payload["extended_until"] = auction.end_time.isoformat()
-        broadcast_payload["time_remaining"] = int(
-            (auction.end_time - utcnow()).total_seconds()
-        )
+    broadcast_payload = _build_bid_broadcast(
+        db_bid, auction, current_user.username, extended=extended,
+    )
     await manager.broadcast(broadcast_payload, bid.auction_id)
 
     return {

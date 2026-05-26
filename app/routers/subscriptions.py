@@ -18,6 +18,18 @@ from app.utils.security import get_current_user
 router = APIRouter(prefix="/api", tags=["subscriptions"])
 
 
+async def _subscriber_count(db: AsyncSession, seller_id: int) -> int:
+    """Total subscribers for ``seller_id``. Shared between the three
+    endpoints (toggle, status probe, unsubscribe) that each respond with
+    the updated count after their mutation - keeps the COUNT(*) query in
+    one place so the future Subscription model change touches one site."""
+    return await db.scalar(
+        select(func.count())
+        .select_from(Subscription)
+        .where(Subscription.seller_id == seller_id)
+    )
+
+
 @router.get("/my/subscriptions")
 async def get_my_subscriptions(
     current_user: User = Depends(get_current_user),
@@ -109,11 +121,7 @@ async def get_subscription(
             )
         )
     ).scalar_one_or_none()
-    count = await db.scalar(
-        select(func.count())
-        .select_from(Subscription)
-        .where(Subscription.seller_id == seller_id)
-    )
+    count = await _subscriber_count(db, seller_id)
     return {"subscribed": sub is not None, "subscribers_count": count}
 
 
@@ -126,7 +134,7 @@ async def subscribe(
     if seller_id == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя подписаться на себя")
     # Pre-check existence instead of letting the FK violation bubble as
-    # 500 — a non-existent seller_id is a client mistake (stale link),
+    # 500 - a non-existent seller_id is a client mistake (stale link),
     # not an internal error.
     seller = (
         await db.execute(select(User.id).where(User.id == seller_id))
@@ -145,11 +153,7 @@ async def subscribe(
         raise HTTPException(status_code=400, detail="Уже подписаны")
     db.add(Subscription(subscriber_id=current_user.id, seller_id=seller_id))
     await db.commit()
-    count = await db.scalar(
-        select(func.count())
-        .select_from(Subscription)
-        .where(Subscription.seller_id == seller_id)
-    )
+    count = await _subscriber_count(db, seller_id)
     return {"subscribed": True, "subscribers_count": count}
 
 
@@ -171,9 +175,5 @@ async def unsubscribe(
         raise HTTPException(status_code=400, detail="Вы не подписаны")
     await db.delete(sub)
     await db.commit()
-    count = await db.scalar(
-        select(func.count())
-        .select_from(Subscription)
-        .where(Subscription.seller_id == seller_id)
-    )
+    count = await _subscriber_count(db, seller_id)
     return {"subscribed": False, "subscribers_count": count}

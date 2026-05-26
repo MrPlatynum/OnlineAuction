@@ -3,7 +3,7 @@
 Tracks anonymous per-auction sockets (``auction_connections``) and
 authenticated per-user sockets (``user_connections``). The shared
 ``_fan_out`` loop is the only path that writes to the wire and
-prunes dead sockets in-place — without that pruning the buckets
+prunes dead sockets in-place - without that pruning the buckets
 grow forever as tabs close without a clean shutdown handshake.
 """
 
@@ -54,7 +54,7 @@ class ConnectionManager:
     async def _fan_out(self, registry: dict[int, list[WebSocket]], key: int, message: dict):
         """Send ``message`` to every socket under ``key``, dropping any
         connection whose ``send_json`` raises. Without the cleanup the
-        bucket grows forever as clients silently drop off — every
+        bucket grows forever as clients silently drop off - every
         future broadcast then iterates dead sockets and re-raises."""
         bucket = registry.get(key)
         if not bucket:

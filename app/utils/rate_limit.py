@@ -1,12 +1,12 @@
 """SlowAPI rate-limiter wired by IP.
 
-Only sensitive endpoints carry an explicit ``@limiter.limit(...)`` —
+Only sensitive endpoints carry an explicit ``@limiter.limit(...)`` -
 everything else stays unmetered. The limiter can be turned off via
 ``AUCTION_RATE_LIMIT_ENABLED=false`` so the test suite (which fires
 many requests at 127.0.0.1 inside one minute) doesn't trip itself.
 
 Behind a reverse proxy the request.client.host is always the proxy's
-own address — so without trusting a forwarded header every request
+own address - so without trusting a forwarded header every request
 would share one bucket. ``AUCTION_TRUST_PROXY=true`` enables reading
 the leftmost ``X-Forwarded-For`` entry, which is the standard "real
 client" address set by nginx / Caddy / Cloudfront. Only enable when

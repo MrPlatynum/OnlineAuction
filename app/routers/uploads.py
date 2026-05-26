@@ -1,7 +1,7 @@
 """Image upload endpoints for lot photos and user avatars.
 
 Every uploaded byte stream goes through
-``utils.images.validate_and_normalise_image`` first — Pillow ``verify``
+``utils.images.validate_and_normalise_image`` first - Pillow ``verify``
 rejects payloads that don't match a real image header, then a re-open +
 save strips EXIF / ICC and re-encodes. The CPU-bound part runs on a
 worker thread so a multi-megabyte file doesn't stall the event loop;
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api", tags=["uploads"])
 
 def _safely_remove(path: str) -> None:
     """Best-effort delete of an old upload file. Logs on failure
-    instead of swallowing — a stale file blocks nothing functional, but
+    instead of swallowing - a stale file blocks nothing functional, but
     silent failures hide a misconfigured UPLOAD_DIR."""
     if not os.path.exists(path):
         return
@@ -40,6 +40,19 @@ def _safely_remove(path: str) -> None:
         os.remove(path)
     except OSError as exc:
         logger.warning("Could not remove old upload %s: %s", path, exc)
+
+
+def _remove_avatar_file(avatar_url: str | None) -> None:
+    """Best-effort cleanup of a previous avatar before writing a new
+    one. Walks the leaf name through ``PurePosixPath(...).name`` so a
+    tampered DB value like ``"/static/uploads/../../etc/passwd"`` can't
+    escape ``UPLOAD_DIR`` (the leaf component is never ``..``).
+    Defensive: the column is server-set today, but cheap insurance."""
+    if not avatar_url:
+        return
+    leaf = PurePosixPath(avatar_url).name
+    if leaf and leaf != "..":
+        _safely_remove(os.path.join(UPLOAD_DIR, leaf))
 
 
 async def _read_under_limit(file: UploadFile, max_bytes: int) -> bytes:
@@ -65,7 +78,7 @@ async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
         validate_and_normalise_image, raw
     )
     if content_type != file.content_type:
-        # Magic bytes don't match the Content-Type the client claimed —
+        # Magic bytes don't match the Content-Type the client claimed -
         # almost always means a payload disguised as an image.
         raise HTTPException(status_code=400, detail="Тип содержимого изображения не совпадает")
     return sanitised, ext
@@ -96,13 +109,7 @@ async def upload_avatar(
 ):
     sanitised, ext = await _accept_image(file)
 
-    if current_user.avatar_url:
-        # PurePosixPath(...).name returns only the leaf component, never
-        # ``..`` — so a tampered avatar_url like "/static/uploads/../../etc/passwd"
-        # can't escape UPLOAD_DIR. Server writes the column today, but cheap insurance.
-        old_filename = PurePosixPath(current_user.avatar_url).name
-        if old_filename and old_filename != "..":
-            _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
+    _remove_avatar_file(current_user.avatar_url)
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
@@ -121,12 +128,7 @@ async def delete_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     if current_user.avatar_url:
-        # PurePosixPath(...).name returns only the leaf component, never
-        # ``..`` — so a tampered avatar_url like "/static/uploads/../../etc/passwd"
-        # can't escape UPLOAD_DIR. Server writes the column today, but cheap insurance.
-        old_filename = PurePosixPath(current_user.avatar_url).name
-        if old_filename and old_filename != "..":
-            _safely_remove(os.path.join(UPLOAD_DIR, old_filename))
+        _remove_avatar_file(current_user.avatar_url)
         current_user.avatar_url = None
         await db.commit()
     return {"ok": True}

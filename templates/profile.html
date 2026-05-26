@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <title>Профиль — Лотус</title>
+  <title>Профиль - Лотус</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -39,7 +39,7 @@
       <div class="nav-user" id="navUserPill" style="display:none;" onclick="showPanel('settings')">
         <div class="nav-avatar" id="navAvatarPill">?</div>
         <div>
-          <div class="nav-user-name" id="navUserNamePill">—</div>
+          <div class="nav-user-name" id="navUserNamePill">-</div>
           <div class="nav-balance"><span id="navBalancePill">0</span> ₽</div>
         </div>
       </div>
@@ -74,7 +74,7 @@
       </div>
       <input type="file" id="avatarInput" accept="image/jpeg,image/png,image/webp" style="display:none;" onchange="uploadAvatar(this)">
       <div class="sb-name" id="name">Загрузка…</div>
-      <div class="sb-email" id="email">—</div>
+      <div class="sb-email" id="email">-</div>
     </div>
     <span id="bal" style="display:none;">0.00</span>
 
@@ -85,7 +85,7 @@
     </button>
     <button class="sb-item" data-panel="balance" onclick="showPanel('balance')">
       <span class="sb-item-icon">💳</span> Баланс
-      <span class="sb-item-badge" id="balBadge" style="background:var(--bg-4);color:var(--text-2);font-size:10px;font-weight:700;">—</span>
+      <span class="sb-item-badge" id="balBadge" style="background:var(--bg-4);color:var(--text-2);font-size:10px;font-weight:700;">-</span>
     </button>
 
     <div class="sb-section-label">Аукционы</div>
@@ -131,14 +131,14 @@
   <!-- ===== RIGHT MAIN ===== -->
   <div class="profile-right">
 
-    <!-- ПАНЕЛЬ: Баланс -->
+    <!-- PANEL: Balance -->
     <div class="profile-panel" id="panel-balance">
       <div class="panel-head">
         <div class="panel-title">Баланс</div>
         <div class="panel-subtitle">Пополнение, вывод и история операций</div>
       </div>
 
-      <!-- Текущий баланс -->
+      <!-- Current balance -->
       <div class="balance-hero">
         <div class="balance-hero-left">
           <div class="balance-hero-label">Текущий баланс</div>
@@ -151,10 +151,10 @@
         </div>
       </div>
 
-      <!-- Формы -->
+      <!-- Forms -->
       <div class="balance-forms">
 
-        <!-- Пополнение -->
+        <!-- Deposit -->
         <div class="balance-form-card">
           <div class="balance-form-title">💳 Пополнение</div>
           <div class="balance-form-desc">Средства поступят мгновенно</div>
@@ -173,7 +173,7 @@
           <div class="balance-form-result" id="depositResult"></div>
         </div>
 
-        <!-- Вывод -->
+        <!-- Withdrawal -->
         <div class="balance-form-card">
           <div class="balance-form-title">🏦 Вывод средств</div>
           <div class="balance-form-desc">Обработка до 3 рабочих дней</div>
@@ -194,7 +194,7 @@
 
       </div>
 
-      <!-- История -->
+      <!-- History -->
       <div class="card">
         <div class="card-head">
           <div class="card-title">История операций</div>
@@ -205,7 +205,7 @@
       </div>
     </div>
 
-    <!-- ПАНЕЛЬ: Статистика -->
+    <!-- PANEL: Statistics -->
     <div class="profile-panel" id="panel-overview">
       <div class="panel-head">
         <div class="panel-title">Статистика</div>
@@ -250,7 +250,7 @@
 
     </div>
 
-    <!-- ПАНЕЛЬ: Мои ставки -->
+    <!-- PANEL: My bids -->
     <div class="profile-panel" id="panel-my-bids">
       <div class="panel-head">
         <div class="panel-title">Мои ставки</div>
@@ -272,7 +272,7 @@
       </div>
     </div>
 
-    <!-- ПАНЕЛЬ: Мои лоты -->
+    <!-- PANEL: My lots -->
     <div class="profile-panel" id="panel-created">
       <div class="panel-head">
         <div class="panel-title">Мои лоты</div>
@@ -290,7 +290,7 @@
       </div>
     </div>
 
-    <!-- ПАНЕЛЬ: Подписки -->
+    <!-- PANEL: Subscriptions -->
     <div class="profile-panel" id="panel-subs">
       <div class="panel-head">
         <div class="panel-title">Подписки</div>
@@ -299,7 +299,7 @@
       <div class="sub-list" id="listSubs"><div class="part-empty"><div class="part-empty-icon">🔔</div>Загрузка…</div></div>
     </div>
 
-    <!-- ПАНЕЛЬ: Уведомления -->
+    <!-- PANEL: Notifications -->
     <div class="profile-panel" id="panel-notifications">
       <div class="notif-panel-header">
         <div>
@@ -312,7 +312,7 @@
       </div>
     </div>
 
-    <!-- ПАНЕЛЬ: Значки -->
+    <!-- PANEL: Badges -->
     <div class="profile-panel" id="panel-badges">
       <div class="panel-head">
         <div class="panel-title">Мои значки</div>
@@ -323,7 +323,7 @@
       </div>
     </div>
 
-    <!-- ПАНЕЛЬ: Настройки -->
+    <!-- PANEL: Settings -->
     <div class="profile-panel" id="panel-settings">
       <div class="panel-head">
         <div class="panel-title">Настройки</div>
@@ -338,22 +338,22 @@
         <button class="settings-tab"        data-stab="danger"         onclick="showSettingsTab('danger')" style="color:var(--red);">Опасная зона</button>
       </div>
 
-      <!-- Аккаунт -->
+      <!-- Account -->
       <div class="settings-sub-panel active" id="stab-account">
         <div class="card">
           <div class="card-title" style="margin-bottom:16px;">Профиль</div>
-          <div class="profile-info-row"><span class="profile-info-label">Имя пользователя</span><span class="profile-info-value" id="infoUsername">—</span></div>
+          <div class="profile-info-row"><span class="profile-info-label">Имя пользователя</span><span class="profile-info-value" id="infoUsername">-</span></div>
           <div class="profile-info-row">
             <span class="profile-info-label">Email</span>
             <span class="profile-info-value" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
-              <span id="infoEmail">—</span>
+              <span id="infoEmail">-</span>
               <span id="emailVerifiedBadge" style="display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(34,197,94,0.12);color:#22c55e;text-transform:uppercase;letter-spacing:0.5px;">Подтверждён</span>
               <span id="emailUnverifiedBadge" style="display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;background:rgba(245,158,11,0.12);color:#f59e0b;text-transform:uppercase;letter-spacing:0.5px;">Не подтверждён</span>
               <button class="btn btn-secondary btn-sm" id="resendVerifyBtn" style="display:none;" onclick="resendVerification()">Отправить повторно</button>
             </span>
           </div>
-          <div class="profile-info-row"><span class="profile-info-label">Баланс</span><span class="profile-info-value" id="infoBalance" style="color:var(--green)">—</span></div>
-          <div class="profile-info-row"><span class="profile-info-label">Дата регистрации</span><span class="profile-info-value" id="infoCreatedAt">—</span></div>
+          <div class="profile-info-row"><span class="profile-info-label">Баланс</span><span class="profile-info-value" id="infoBalance" style="color:var(--green)">-</span></div>
+          <div class="profile-info-row"><span class="profile-info-label">Дата регистрации</span><span class="profile-info-value" id="infoCreatedAt">-</span></div>
         </div>
         <div class="card" style="margin-top:0;">
           <div class="card-title" style="margin-bottom:16px;">Аватар</div>
@@ -367,7 +367,7 @@
         </div>
       </div>
 
-      <!-- Безопасность -->
+      <!-- Security -->
       <div class="settings-sub-panel" id="stab-security">
         <div class="card">
           <div class="card-title" style="margin-bottom:16px;">Смена пароля</div>
@@ -400,7 +400,7 @@
         </div>
       </div>
 
-      <!-- Уведомления -->
+      <!-- Notifications -->
       <div class="settings-sub-panel" id="stab-notif-settings">
         <div class="card">
           <div class="card-title" style="margin-bottom:16px;">Email-рассылка</div>
@@ -431,7 +431,7 @@
         </div>
       </div>
 
-      <!-- Внешний вид -->
+      <!-- Appearance -->
       <div class="settings-sub-panel" id="stab-appearance">
         <div class="card">
           <div class="card-title" style="margin-bottom:16px;">Цветовая схема</div>
@@ -443,7 +443,7 @@
         </div>
       </div>
 
-      <!-- Опасная зона -->
+      <!-- Danger zone -->
       <div class="settings-sub-panel" id="stab-danger">
         <div class="danger-zone">
           <div class="danger-title">⚠️ Удаление аккаунта</div>

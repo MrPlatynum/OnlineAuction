@@ -15,11 +15,11 @@ async function initAuth() {
     avEl.textContent = (me.username||'?')[0].toUpperCase();
     if (me.avatar_url) {
       const img = document.createElement('img');
-      img.src = me.avatar_url.startsWith('http') ? me.avatar_url : `${API}${me.avatar_url}`;
+      img.src = resolveAvatarUrl(me.avatar_url);
       img.alt = me.username;
       avEl.appendChild(img);
     }
-    document.getElementById('userName').textContent    = me.username || '—';
+    document.getElementById('userName').textContent    = me.username || '-';
     document.getElementById('userBalance').textContent = Number(me.balance||0).toFixed(2);
     return me;
   } catch { return null; }
@@ -153,7 +153,7 @@ function renderList() {
   if (!items.length) {
     const msgs = {
       active:  ['🎯', 'Нет активных ставок', 'Найдите интересный лот и сделайте первую ставку'],
-      won:     ['🏆', 'Побед пока нет', 'Участвуйте в аукционах — удача будет на вашей стороне'],
+      won:     ['🏆', 'Побед пока нет', 'Участвуйте в аукционах - удача будет на вашей стороне'],
       lost:    ['😤', 'Проигрышей нет', 'Отличный результат!'],
       created: ['📦', 'Вы ещё не создали лотов', 'Создайте свой первый лот прямо сейчас'],
     };
@@ -217,10 +217,10 @@ function renderPage() {
 
 function switchTab(tab) {
   currentTab = tab;
-  // Перерисовываем только табы и контент
+  // Re-render only the tabs and the active content panel.
   document.querySelector('.tabs').outerHTML = renderTabs();
   document.getElementById('tabContent').innerHTML = renderList();
-  // querySelector не работает после outerHTML, нужно перерисовать через innerHTML
+  // querySelector breaks after outerHTML - must re-render via innerHTML.
   renderPage();
 }
 
@@ -241,7 +241,7 @@ async function init() {
     return;
   }
 
-  // Скелетон пока грузим
+  // Skeleton while loading.
   main.innerHTML = `
     <div class="page-header">
       <div>

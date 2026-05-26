@@ -35,7 +35,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Best-effort revert. A row inserted under the new whitelist with
     # type='commission' would prevent the constraint from being re-
-    # added — wipe those first so downgrade doesn't 500. In practice
+    # added - wipe those first so downgrade doesn't 500. In practice
     # downgrade is only used in dev, but be explicit.
     op.execute("DELETE FROM transactions WHERE type = 'commission'")
     op.drop_constraint("ck_transactions_type_valid", "transactions", type_="check")

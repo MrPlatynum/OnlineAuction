@@ -1,6 +1,6 @@
 """Plain-HTML pages served as static templates.
 
-The frontend is multi-page, no SPA framework — each navigable URL maps
+The frontend is multi-page, no SPA framework - each navigable URL maps
 to a file in ``templates/`` returned via ``FileResponse``. Per-page
 ``static/js/<page>.js`` does the data fetching client-side; this
 module just resolves URL → file and 404s if the template is missing.

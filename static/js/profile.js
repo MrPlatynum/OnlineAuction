@@ -1,14 +1,10 @@
-  (function(){
-    const t = localStorage.getItem('theme') || 'dark';
-    if (t === 'light') document.documentElement.setAttribute('data-theme','light');
-    else if (t === 'auto' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
-      document.documentElement.setAttribute('data-theme','light');
-  })();
-  
+const token = window.getToken();
 
-const token = localStorage.getItem('token');
-
-function logout() { localStorage.removeItem('token'); location.href = 'index.html'; }
+// logout() called from templates/profile.html sidebar button resolves to
+// window.logout (defined in common.js). No per-page cleanup needed here -
+// profile.html doesn't own any open WS connections; the notification bell
+// WS lives in common.js's initNotifBell closure and the browser will close
+// it on navigation.
 if (!token) { showToast('Требуется вход', 'Войдите, чтобы открыть профиль', 'warn'); setTimeout(() => location.href = 'index.html', 1200); }
 
 /* ---- Progress ---- */
@@ -147,8 +143,8 @@ async function changePassword() {
   if (!nw || nw.length < 6) { if($('pwNewErr')) $('pwNewErr').textContent = 'Минимум 6 символов'; return; }
   if (nw !== cfm) { if($('pwConfirmErr')) $('pwConfirmErr').textContent = 'Пароли не совпадают'; return; }
   try {
-    const r = await fetch(`${API}/api/change-password`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/change-password`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ current_password: cur, new_password: nw })
     });
     const d = await r.json();
@@ -176,8 +172,8 @@ function loadNotifSettings(user) {
 async function saveNotifications() {
   const btn = $('saveNotifBtn'); if(btn) { btn.disabled = true; btn.textContent = 'Сохранение…'; }
   try {
-    const r = await fetch(`${API}/api/notification-settings`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/notification-settings`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email_notifications: $('s_email')?.checked,
         notify_outbid:       $('s_outbid')?.checked,
@@ -215,7 +211,7 @@ async function loadNotifPanel() {
   if (!el) return;
   el.innerHTML = '<div class="notif-panel-empty">Загрузка…</div>';
   try {
-    const r = await fetch(API + '/api/notifications', { headers: { Authorization: 'Bearer ' + token } });
+    const r = await apiFetch(API + '/api/notifications');
     if (!r.ok) return;
     const data = await r.json();
     const items = data.notifications || data || [];
@@ -262,11 +258,11 @@ async function loadNotifPanel() {
 
 async function markNotifRead(id, el) {
   el?.classList.remove('unread');
-  try { await fetch(`${API}/api/notifications/${id}/read`, { method: 'POST', headers: { Authorization: 'Bearer ' + token } }); } catch {}
+  try { await apiFetch(`${API}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
 }
 async function markAllReadPanel() {
   try {
-    await fetch(API + '/api/notifications/mark-all-read', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    await apiFetch(API + '/api/notifications/mark-all-read', { method: 'POST' });
     document.querySelectorAll('.notif-card.unread').forEach(c => c.classList.remove('unread'));
     const badge = $('sbNotifBadge'); if (badge) badge.style.display = 'none';
   } catch {}
@@ -505,7 +501,7 @@ function renderList(tab) {
 /* ---- Subscriptions ---- */
 async function loadSubscriptions() {
   try {
-    const r = await fetch(API + '/api/my/subscriptions', { headers: { Authorization: 'Bearer ' + token } });
+    const r = await apiFetch(API + '/api/my/subscriptions');
     if (!r.ok) return;
     subsCache = await r.json();
   } catch {}
@@ -527,16 +523,14 @@ function renderSubs() {
     const stars = avg > 0
       ? [1,2,3,4,5].map(i => `<span style="color:${i<=Math.round(avg)?'var(--accent-2)':'var(--text-3)'}">★</span>`).join('')
       : '';
-    const avatarSrc = s.avatar_url
-      ? (s.avatar_url.startsWith('http') ? s.avatar_url : `${API}${s.avatar_url}`)
-      : null;
+    const avatarSrc = resolveAvatarUrl(s.avatar_url);
     const avatarHtml = avatarSrc
       ? `<img src="${esc(avatarSrc)}" alt="${esc(s.username)}">`
       : (s.username||'?')[0].toUpperCase();
     const since = s.subscribed_at
       ? new Date(s.subscribed_at.endsWith('Z') ? s.subscribed_at : s.subscribed_at + 'Z')
           .toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' })
-      : '—';
+      : '-';
     return `
       <div class="sub-seller-card">
         <div class="sub-seller-top">
@@ -570,7 +564,7 @@ function renderSubs() {
 }
 async function unsubscribeFrom(sellerId, btn) {
   try {
-    const r = await fetch(`${API}/api/sellers/${sellerId}/subscribe`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
+    const r = await apiFetch(`${API}/api/sellers/${sellerId}/subscribe`, { method: 'DELETE' });
     if (r.ok) { subsCache = subsCache.filter(s => s.seller_id !== sellerId); renderSubs(); }
   } catch {}
 }
@@ -579,9 +573,9 @@ async function unsubscribeFrom(sellerId, btn) {
 function renderTimeline(data) {
   const tl = $('timeline');
   const events = [];
-  (data.won_auctions||[]).slice(0,2).forEach(i => events.push({ type:'win', icon:'🏆', title:'Победа в аукционе', desc: i.title || '—' }));
-  (data.active_bids||[]).slice(0,3).forEach(i => events.push({ type:'bid', icon:'🎯', title:'Активная ставка', desc: i.title || '—' }));
-  (data.created_auctions||[]).slice(0,2).forEach(i => events.push({ type:'created', icon:'📦', title:'Создан лот', desc: i.title || '—' }));
+  (data.won_auctions||[]).slice(0,2).forEach(i => events.push({ type:'win', icon:'🏆', title:'Победа в аукционе', desc: i.title || '-' }));
+  (data.active_bids||[]).slice(0,3).forEach(i => events.push({ type:'bid', icon:'🎯', title:'Активная ставка', desc: i.title || '-' }));
+  (data.created_auctions||[]).slice(0,2).forEach(i => events.push({ type:'created', icon:'📦', title:'Создан лот', desc: i.title || '-' }));
   if (!events.length) { tl.innerHTML = '<div class="tl-empty">📋 Нет активности</div>'; return; }
   tl.innerHTML = events.slice(0,6).map(e => `
     <div class="tl-item">
@@ -600,7 +594,7 @@ let cropper = null;
 function uploadAvatar(input) {
   const file = input.files[0];
   if (!file) return;
-  input.value = ''; // сбрасываем чтобы можно было выбрать тот же файл снова
+  input.value = ''; // reset so the same file can be picked again
 
   const reader = new FileReader();
   reader.onload = e => openCropModal(e.target.result);
@@ -611,15 +605,15 @@ function openCropModal(src) {
   const img = $('cropImg');
   img.src = src;
 
-  // Уничтожаем предыдущий кроппер если был
+  // Destroy the previous cropper if any.
   if (cropper) { cropper.destroy(); cropper = null; }
 
   $('cropModal').classList.add('open');
 
-  // Инициализируем Cropper после того как изображение загрузится
+  // Initialise Cropper once the source image has loaded.
   img.onload = () => {
     cropper = new Cropper(img, {
-      aspectRatio: 1,          // квадрат — для аватара
+      aspectRatio: 1,          // square crop for the avatar
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.8,
@@ -632,7 +626,7 @@ function openCropModal(src) {
       toggleDragModeOnDblclick: false,
     });
   };
-  // Если картинка уже загружена (кеш)
+  // If the image is already in the cache, fire immediately.
   if (img.complete) img.onload();
 }
 
@@ -649,40 +643,39 @@ async function confirmCrop() {
   btn.textContent = 'Загрузка…';
 
   try {
-    // Получаем обрезанный canvas (256×256)
+    // Get the cropped canvas (256x256).
     const canvas = cropper.getCroppedCanvas({ width: 256, height: 256, imageSmoothingQuality: 'high' });
 
-    // Конвертируем в Blob
+    // Convert canvas to Blob.
     const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.9));
 
-    // Показываем превью в аватаре сразу
+    // Show the preview in the sidebar avatar immediately.
     const previewSrc = canvas.toDataURL('image/jpeg', 0.9);
     applyAvatarPreview(previewSrc);
 
     closeCropModal();
 
-    // Загружаем на сервер
+    // Upload to the server.
     const formData = new FormData();
     formData.append('file', blob, 'avatar.jpg');
 
     const avatarEl = $('avatar');
     avatarEl.style.opacity = '0.6';
 
-    const r = await fetch(`${API}/api/upload-avatar`, {
+    const r = await apiFetch(`${API}/api/upload-avatar`, {
       method: 'POST',
-      headers: { Authorization: 'Bearer ' + token },
       body: formData,
     });
 
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       showToast('Ошибка', err.detail || 'Не удалось загрузить аватар', 'bad');
-      // Откатываем превью
+      // Roll back the optimistic preview on error.
       removeAvatarImg();
     } else {
       const data = await r.json();
-      const src = data.avatar_url.startsWith('http') ? data.avatar_url : `${API}${data.avatar_url}`;
-      // Обновляем src на финальный
+      const src = resolveAvatarUrl(data.avatar_url);
+      // Replace the preview src with the persisted server URL.
       const img = $('avatar').querySelector('img');
       if (img) img.src = src;
       syncSettingsAvatar(src);
@@ -714,15 +707,14 @@ function removeAvatarImg() {
 
 async function deleteAvatar() {
   try {
-    const r = await fetch(`${API}/api/upload-avatar`, {
+    const r = await apiFetch(`${API}/api/upload-avatar`, {
       method: 'DELETE',
-      headers: { Authorization: 'Bearer ' + token },
     });
     if (r.ok) {
-      // Убираем картинку из сайдбара
+      // Drop the sidebar avatar image.
       const img = $('avatar').querySelector('img');
       if (img) img.remove();
-      // Убираем из настроек
+      // Drop the settings-pane avatar image.
       const settingsAv = $('settingsAvatar');
       if (settingsAv) {
         const img2 = settingsAv.querySelector('img');
@@ -773,9 +765,7 @@ function updateBalanceDisplay(val) {
 async function loadBalance(reset = true) {
   if (reset) { txPage = 1; }
   try {
-    const r = await fetch(`${API}/api/transactions?page=${txPage}&page_size=15`, {
-      headers: { Authorization: 'Bearer ' + token }
-    });
+    const r = await apiFetch(`${API}/api/transactions?page=${txPage}&page_size=15`);
     if (!r.ok) return;
     const data = await r.json();
 
@@ -793,7 +783,7 @@ async function loadBalance(reset = true) {
 
     const html = data.items.map(t => {
       const meta = TX_META[t.type] || { icon: '💰', label: t.type, plus: true };
-      const sign = meta.plus ? '+' : '−';
+      const sign = meta.plus ? '+' : '-';
       const cls  = meta.plus ? 'plus' : 'minus';
       const desc = t.description || meta.label;
       const utc  = t.created_at.endsWith('Z') ? t.created_at : t.created_at + 'Z';
@@ -835,7 +825,7 @@ function setAmount(type, val) {
   } else {
     inp.value = val;
   }
-  // подсвечиваем пресет
+  // Highlight the active preset chip.
   const presetsId = type === 'deposit' ? 'depositPresets' : 'withdrawPresets';
   document.querySelectorAll(`#${presetsId} .amount-preset`).forEach(b => {
     const bVal = b.textContent.replace(/[^0-9]/g, '');
@@ -862,8 +852,8 @@ async function doDepositPanel() {
   }
   btn.disabled = true; btn.textContent = 'Отправка…';
   try {
-    const r = await fetch(`${API}/api/deposit`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/deposit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
     const d = await r.json();
@@ -874,7 +864,7 @@ async function doDepositPanel() {
     result.textContent = `✓ Баланс пополнен на ${amount.toFixed(2)} ₽`;
     result.className = 'balance-form-result ok';
     setTimeout(() => { result.className = 'balance-form-result'; }, 3000);
-    // Обновляем историю
+    // Refresh the transaction history list.
     txPage = 1; await loadBalance(true);
   } catch(e) {
     result.textContent = e.message; result.className = 'balance-form-result err';
@@ -892,8 +882,8 @@ async function doWithdraw() {
   }
   btn.disabled = true; btn.textContent = 'Отправка…';
   try {
-    const r = await fetch(`${API}/api/withdraw`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+    const r = await apiFetch(`${API}/api/withdraw`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
     const d = await r.json();
@@ -912,21 +902,21 @@ async function doWithdraw() {
 
 /* ---- Init ---- */
 async function load() {
-  const r1 = await fetch(API + '/api/me', { headers: { Authorization: 'Bearer ' + token }});
+  const r1 = await apiFetch(API + '/api/me');
   if (!r1.ok) { localStorage.removeItem('token'); location.href = 'index.html'; return; }
   const user = await r1.json();
 
   $('avatarLetter').textContent = (user.username[0] || '?').toUpperCase();
-  // Синхронизируем miniAvatar в настройках
+  // Sync the mini-avatar in the settings pane with the username.
   const settingsAv = $('settingsAvatar');
   if (settingsAv) settingsAv.textContent = (user.username[0] || '?').toUpperCase();
 
   if (user.avatar_url) {
-    const src = user.avatar_url.startsWith('http') ? user.avatar_url : `${API}${user.avatar_url}`;
+    const src = resolveAvatarUrl(user.avatar_url);
     const img = document.createElement('img');
     img.src = src; img.alt = user.username;
     $('avatar').prepend(img);
-    // В настройках
+    // Same in the settings pane.
     if (settingsAv) {
       settingsAv.textContent = '';
       const img2 = document.createElement('img');
@@ -945,16 +935,16 @@ async function load() {
   }
   $('bal').textContent    = Number(user.balance || 0).toFixed(2);
   if ($('balBadge'))       $('balBadge').textContent = Number(user.balance || 0).toFixed(2) + ' ₽';
-  document.title = `${user.username} — Лотус`;
+  document.title = `${user.username} - Лотус`;
 
-  // Nav-пилюля
+  // Nav-pill in the header.
   const navPill = $('navUserPill');
   const navAv   = $('navAvatarPill');
   if ($('navUserNamePill')) $('navUserNamePill').textContent = user.username;
   if ($('navBalancePill'))  $('navBalancePill').textContent  = Number(user.balance || 0).toFixed(2);
   if (navAv) {
     if (user.avatar_url) {
-      const src = user.avatar_url.startsWith('http') ? user.avatar_url : `${API}${user.avatar_url}`;
+      const src = resolveAvatarUrl(user.avatar_url);
       const img = document.createElement('img');
       img.src = src;
       img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;';
@@ -963,17 +953,17 @@ async function load() {
   }
   if (navPill) navPill.style.display = 'flex';
 
-  if ($('infoUsername'))  $('infoUsername').textContent  = user.username || '—';
-  if ($('infoEmail'))     $('infoEmail').textContent     = user.email    || '—';
+  if ($('infoUsername'))  $('infoUsername').textContent  = user.username || '-';
+  if ($('infoEmail'))     $('infoEmail').textContent     = user.email    || '-';
   if ($('emailVerifiedBadge'))   $('emailVerifiedBadge').style.display   = user.email_verified ? 'inline-flex' : 'none';
   if ($('emailUnverifiedBadge')) $('emailUnverifiedBadge').style.display = user.email_verified ? 'none' : 'inline-flex';
   if ($('resendVerifyBtn'))      $('resendVerifyBtn').style.display      = user.email_verified ? 'none' : 'inline-flex';
   if ($('infoBalance'))   $('infoBalance').textContent   = Number(user.balance || 0).toFixed(2) + ' ₽';
-  if ($('infoCreatedAt')) $('infoCreatedAt').textContent = user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('ru-RU') : '—';
+  if ($('infoCreatedAt')) $('infoCreatedAt').textContent = user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('ru-RU') : '-';
   loadNotifSettings(user);
   initTheme();
 
-  const r2 = await fetch(API + '/api/my/participation', { headers: { Authorization: 'Bearer ' + token }});
+  const r2 = await apiFetch(API + '/api/my/participation');
   if (!r2.ok) return;
   const data = await r2.json();
 
@@ -996,7 +986,7 @@ async function load() {
   loadSubscriptions();
 
   try {
-    const rn = await fetch(API + '/api/notifications/unread-count', { headers: { Authorization: 'Bearer ' + token } });
+    const rn = await apiFetch(API + '/api/notifications/unread-count');
     if (rn.ok) {
       const nd = await rn.json();
       const cnt = nd.count || 0;
@@ -1014,7 +1004,7 @@ load().catch(err => {
   }
 }).finally(() => {
   initPanelFromHash();
-  // Ждём пока canvas получит реальные размеры, затем рисуем
+  // Wait for the canvas to get its real layout size, then draw.
   const canvas = document.getElementById('chart');
   if (!canvas) return;
   const observer = new ResizeObserver(() => {
@@ -1024,7 +1014,7 @@ load().catch(err => {
     }
   });
   observer.observe(canvas.parentElement);
-  // Fallback — если панель уже видима
+  // Fallback - if the panel is already visible.
   setTimeout(() => { if (canvas.offsetWidth > 0) renderChart(); }, 100);
 });
 
@@ -1062,9 +1052,9 @@ async function doDeposit() {
   }
   btn.disabled = true; btn.textContent = 'Отправка…'; result.style.display = 'none';
   try {
-    const r = await fetch(API + '/api/deposit', {
+    const r = await apiFetch(API + '/api/deposit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount })
     });
     if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.detail || 'Ошибка сервера'); }
@@ -1081,7 +1071,7 @@ async function doDeposit() {
     result.className = 'deposit-result ok'; result.style.display = 'block';
     $('depositAmount').value = '';
     document.querySelectorAll('.deposit-preset').forEach(b => b.classList.remove('selected'));
-    // Обновляем историю если панель открыта
+    // Refresh the transaction history list if the panel is open.
     if (document.getElementById('panel-balance')?.classList.contains('active')) {
       txPage = 1; loadBalance(true);
     }

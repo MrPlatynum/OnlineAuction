@@ -1,9 +1,24 @@
 /* ================================================================
-   Лотус — Common JS utilities
+   Лотус - Common JS utilities
    Подключается ПЕРЕД per-page JS.
-   Экспортирует: API, WS_BASE, esc, fmtMoney, fmtDate, apiFetch,
+   Экспортирует: API, WS_BASE, esc, fmtMoney, fmtDate, fmtDateShort,
+                 fmtMonthYear, apiFetch, getToken, resolveAvatarUrl,
                  showToast. Авто-инициализирует nav-колокольчик.
    ================================================================ */
+
+// Theme bootstrap runs in its own IIFE BEFORE the main one so data-theme is set
+// before first paint. Live in common.js so per-page scripts (index.js, profile.js)
+// don't each need their own copy - the block was diverging already (index.js had
+// `if(t==='auto') { ... }`, profile.js had `else if (t==='auto' && ...)`).
+(function() {
+  const t = localStorage.getItem('theme') || 'dark';
+  if (t === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else if (t === 'auto' && !window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+
 (function() {
   'use strict';
 
@@ -12,12 +27,34 @@
   window.WS_BASE = window.location.origin.replace(/^http/i, 'ws');
 
   // ---- helpers ----
-  function getToken() { return localStorage.getItem('token'); }
+  // Exposed on window so per-page scripts can read the live token instead of
+  // capturing localStorage.getItem('token') in a module-level const that goes
+  // stale after login/logout in the same tab.
+  window.getToken = function() { return localStorage.getItem('token'); };
+  function getToken() { return window.getToken(); }
 
-  // Shorthand для `document.getElementById`. Удобство для per-page скриптов
-  // (auction.js, profile.js, и т.д.) — раньше каждый объявлял локальный
-  // `const $ = …`. Глобал из common.js работает потому что common.js
-  // загружается раньше всех per-page assets.
+  // Avatar URLs come in two shapes: absolute (uploaded to a CDN or external host,
+  // starts with http(s)) or path-relative ("/static/uploads/..."). Same dance was
+  // copy-pasted in 11 places across 5 files; centralised here so a future hosting
+  // tweak doesn't have to chase them all.
+  window.resolveAvatarUrl = function(url) {
+    if (!url) return null;
+    return url.startsWith('http') ? url : window.API + url;
+  };
+
+  // Single logout entry point. Per-page scripts that need to tear down their own
+  // resources (open WebSockets, intervals, in-memory caches) subscribe to the
+  // 'lotus:logout' event - keeps page-specific cleanup local without forcing
+  // each page to re-implement the token drop + redirect dance.
+  window.logout = function() {
+    try { window.dispatchEvent(new CustomEvent('lotus:logout')); } catch (_) {}
+    try { localStorage.removeItem('token'); } catch (_) {}
+    window.location.href = 'index.html';
+  };
+
+  // Shorthand for `document.getElementById` - per-page scripts used to
+  // each declare their own `const $ = ...`. Exposed on window because
+  // common.js loads before every per-page bundle.
   window.$ = (id) => document.getElementById(id);
 
   window.esc = function(s) {
@@ -28,7 +65,7 @@
 
   window.fmtMoney = function(n) {
     const num = Number(n);
-    return Number.isFinite(num) ? num.toFixed(2) + ' ₽' : '—';
+    return Number.isFinite(num) ? num.toFixed(2) + ' ₽' : '-';
   };
 
   window.fmtDate = function(iso, opts) {
@@ -39,11 +76,33 @@
     });
   };
 
+  // Short calendar date ("12 мая 2026") used in transaction lists, review
+  // headers, and seller-profile metadata. Was a one-line copy in user.js,
+  // profile.js (x2), and auction.js with subtly different option objects.
+  window.fmtDateShort = function(iso) {
+    if (!iso) return '';
+    const utc = String(iso).endsWith('Z') || String(iso).includes('+') ? iso : iso + 'Z';
+    return new Date(utc).toLocaleDateString('ru-RU', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  };
+
+  // "С нами с май 2026" string in seller bios. user.js had its own fmtMonthYear,
+  // auction.js inlined the same toLocaleDateString call.
+  window.fmtMonthYear = function(iso) {
+    if (!iso) return '';
+    const utc = String(iso).endsWith('Z') || String(iso).includes('+') ? iso : iso + 'Z';
+    return new Date(utc).toLocaleDateString('ru-RU', {
+      month: 'long', year: 'numeric',
+    });
+  };
+
   window.apiFetch = function(url, opts = {}) {
     const headers = { ...(opts.headers || {}) };
     const tk = getToken();
     if (tk) headers['Authorization'] = 'Bearer ' + tk;
-    // Timeout (default 15s) через AbortController — чтобы не висеть бесконечно
+    // Timeout (default 15s) via AbortController - keeps the request from
+    // hanging indefinitely on a stalled connection.
     const ctrl = new AbortController();
     const timeoutMs = opts.timeout ?? 15000;
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -54,10 +113,9 @@
       .finally(() => clearTimeout(timer));
   };
 
-  // FastAPI/Pydantic возвращает 422 с массивом detail[]: каждый элемент
-  // вида {loc: ["body","field"], msg: "...", type: "..."}. Поле обычной
-  // ошибки (4xx с одним detail-стринг) — просто string. Дать одно
-  // понятное сообщение для пользователя.
+  // FastAPI/Pydantic returns 422 with a detail array - each item shaped
+  // {loc: ["body","field"], msg: "...", type: "..."}. The plain-4xx case
+  // returns detail as a string. Boil both down to one user-facing line.
   const FIELD_RU = {
     title: 'Название',
     description: 'Описание',
@@ -105,8 +163,9 @@
       return detail.map(_humanizePydanticItem).join('; ') || (fallback || 'Ошибка валидации');
     }
     if (typeof detail === 'string') return detail;
-    // Изредка попадается detail-объект (например ручные HTTPException с
-    // dict вместо строки) или просто err.message без detail. Не молчим.
+    // Rare case: detail is an object (hand-rolled HTTPException with a
+    // dict body) or there's no detail at all and only err.message is set.
+    // Don't fall silent.
     if (detail && typeof detail === 'object') {
       if (typeof detail.msg === 'string') return detail.msg;
       try { return JSON.stringify(detail); } catch { /* fallthrough */ }
@@ -115,7 +174,7 @@
     return fallback || 'Ошибка';
   };
 
-  // Перенаправляет любой блок-контейнер в состояние «не удалось загрузить» с кнопкой повтора
+  // Switch any block container into a "load failed" state with a retry button.
   window.renderLoadError = function(container, msg, onRetry) {
     if (!container) return;
     const id = 'lotusRetryBtn_' + Math.random().toString(36).slice(2, 8);
@@ -132,7 +191,7 @@
     }
   };
 
-  // Заглушка для будущих разделов
+  // Placeholder for sections that aren't built yet.
   window.comingSoon = function(name) {
     window.showToast('Скоро', name ? `Раздел «${name}» в разработке` : 'Раздел в разработке', 'info');
   };
@@ -175,7 +234,7 @@
   };
 
   // ================================================================
-  // Platform commission cache — fetched once per page load from
+  // Platform commission cache - fetched once per page load from
   // /api/platform and reused by every payout-hint helper on the page.
   // Default falls back to 7%, matching the server-side default in
   // app/config.py so the UI keeps showing a plausible figure when the
@@ -196,10 +255,10 @@
    *
    * Wires a price input to a hint element so the seller sees, in real
    * time, how much will land on their balance after the platform
-   * takes its commission. Idempotent — calling twice with the same
+   * takes its commission. Idempotent - calling twice with the same
    * input just re-binds the listener.
    *
-   * options.label  — leading word in the hint, defaults to "К получению".
+   * options.label  - leading word in the hint, defaults to "К получению".
    *                  For BID start-price use "Со стартовой цены" so the
    *                  copy doesn't mislead about the final settled amount.
    */
@@ -228,7 +287,7 @@
   };
 
   // ================================================================
-  // Notification bell — авто-инициализация при наличии #notifBtn
+  // Notification bell - auto-init when #notifBtn is present on the page.
   // ================================================================
   function initNotifBell() {
     const btn      = document.getElementById('notifBtn');
@@ -308,7 +367,7 @@
           setCount(d.count ?? 0);
         }
       } catch {
-        // Bell badge is decorative — if the count fetch times out or
+        // Bell badge is decorative - if the count fetch times out or
         // the user is offline, keep the current value rather than
         // surfacing an unhandled rejection.
       }
@@ -336,7 +395,7 @@
         setCount(0);
         await fetchNotifications();
       } catch {
-        // Same story as fetchCount — user can retry by tapping the bell.
+        // Same story as fetchCount - user can retry by tapping the bell.
       }
     }
 
@@ -358,7 +417,7 @@
         if (id && item.classList.contains('unread')) {
           item.classList.remove('unread');
           setCount(unreadCount - 1);
-          // Optimistically flip the unread class first — if the POST
+          // Optimistically flip the unread class first - if the POST
           // fails the worst case is a stale "unread" badge that the
           // next page load will reconcile against the server.
           try { await window.apiFetch(`${window.API}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
@@ -373,7 +432,7 @@
     function connectNotifWS(userId) {
       // Drop any half-open socket from a prior connect attempt. .close()
       // on a CLOSED/CLOSING socket throws InvalidStateError in some
-      // browsers — irrelevant for the reconnect, swallow.
+      // browsers - irrelevant for the reconnect, swallow.
       if (wsNotif) { try { wsNotif.close(); } catch {} }
       const tk = getToken();
       if (!tk) return;
@@ -391,16 +450,16 @@
           }
         } catch {
           // Server only ever sends JSON; if it doesn't parse, ignore
-          // the frame rather than tearing down the socket — the next
+          // the frame rather than tearing down the socket - the next
           // valid frame works fine.
         }
       };
       wsNotif.onclose = (e) => {
-        // Серверные коды отказа — auth-failure (4001), forbidden (4003),
-        // policy violation (1008, в т.ч. tv-bump после change-password) и
-        // штатное закрытие (1000): любое из этого означает, что повторный
-        // коннект тем же токеном тоже отвергнут. Без guard'а клиент
-        // hammer'ит сервер раз в 1.5с навсегда.
+        // Server-side refusal codes: auth-failure (4001), forbidden (4003),
+        // policy violation (1008, includes tv-bump after change-password),
+        // clean shutdown (1000). Any of them means a reconnect with the
+        // same token will also be rejected - without this guard the client
+        // would hammer the server every 1.5s forever.
         if (e && (e.code === 1000 || e.code === 1008 || e.code === 4001 || e.code === 4003)) {
           return;
         }

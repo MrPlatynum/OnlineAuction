@@ -57,7 +57,7 @@ class _JsonFormatter(logging.Formatter):
 
 
 _SECURITY_HEADERS = {
-    # Stop content-sniffing — uploaded "image" returned with a wrong
+    # Stop content-sniffing - uploaded "image" returned with a wrong
     # Content-Type can't be re-interpreted as HTML/script by the browser.
     "X-Content-Type-Options": "nosniff",
     # No iframing. The app has no embed-in-iframe use case, and refusing
@@ -73,7 +73,7 @@ _SECURITY_HEADERS = {
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add a small set of safe-by-default security headers to every
-    response. HSTS is opt-in (``HSTS_ENABLED=true``) — it's only safe
+    response. HSTS is opt-in (``HSTS_ENABLED=true``) - it's only safe
     once the app is served exclusively over HTTPS, which is a deployment
     decision, not a code one."""
 
@@ -94,7 +94,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def setup_logging():
-    """Configure root logger once at app start. Idempotent — uvicorn's
+    """Configure root logger once at app start. Idempotent - uvicorn's
     own loggers are untouched (they own the access/error namespaces).
 
     Set ``LOG_FORMAT=json`` to switch to one-line JSON records suitable
@@ -144,7 +144,7 @@ async def lifespan(fastapi_app: FastAPI):
         # Stop the heartbeat first so the ping loop doesn't observe a
         # half-closed connection while we tear down.
         await stop_scheduler_heartbeat()
-        # Called unconditionally — a follower that promoted via the
+        # Called unconditionally - a follower that promoted via the
         # heartbeat has armed tasks in this process even though
         # ``is_leader`` (captured at startup) was False. The function
         # is a no-op when no tasks were armed.

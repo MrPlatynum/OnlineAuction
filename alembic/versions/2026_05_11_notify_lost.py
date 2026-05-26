@@ -1,6 +1,6 @@
 """Add users.notify_lost
 
-Lets a user mute the AUCTION_LOST email channel — every other event
+Lets a user mute the AUCTION_LOST email channel - every other event
 type already had its own toggle, AUCTION_LOST was the only one that
 silently followed the master ``email_notifications`` flag. Defaults
 to true so existing users keep their current behaviour.

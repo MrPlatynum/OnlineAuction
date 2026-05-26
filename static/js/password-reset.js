@@ -21,7 +21,7 @@
     e.preventDefault();
     const token = getToken();
     if (!token) {
-      showError('Ссылка повреждена — токен не найден.');
+      showError('Ссылка повреждена - токен не найден.');
       return;
     }
     const newPassword = $('newPassword').value;
@@ -57,12 +57,7 @@
       }
       let detail = 'Не удалось сбросить пароль.';
       try {
-        const data = await r.json();
-        if (data && data.detail) {
-          detail = Array.isArray(data.detail)
-            ? data.detail.map((d) => d.msg || 'Ошибка валидации').join('; ')
-            : data.detail;
-        }
+        detail = window.formatError(await r.json(), detail);
       } catch (_) {}
       showError(detail);
     } catch (_) {
@@ -75,7 +70,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     if (!getToken()) {
-      showError('Ссылка повреждена — токен не найден. Запросите новую.');
+      showError('Ссылка повреждена - токен не найден. Запросите новую.');
       $('resetSubmit').disabled = true;
     }
     $('resetForm').addEventListener('submit', submit);

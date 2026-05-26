@@ -1,6 +1,6 @@
 """Three-channel notification dispatch: in-app row, WebSocket push,
 and email. ``notify_user`` is the single fan-out helper every caller
-goes through — per-user ``notify_*`` flags gate each channel so a
+goes through - per-user ``notify_*`` flags gate each channel so a
 recipient can mute email without losing in-app history. Email send
 is fire-and-forget via the persistent outbox queue so an SMTP
 hiccup doesn't take down the request that triggered the notify.
@@ -18,6 +18,19 @@ from app.services.email import (
 )
 from app.services.email_outbox import enqueue_email
 from app.utils.security import create_email_verify_token, create_password_reset_token
+
+# Per-type opt-out: every NotificationType maps to the boolean column on
+# ``User`` whose ``False`` value silences the email channel for that type
+# (in-app + WS push fire unconditionally). Adding a new type means one
+# more row here plus the matching User column - no branching elsewhere.
+_EMAIL_OPT_OUT_FLAG: dict[NotificationType, str] = {
+    NotificationType.BID_OUTBID:     "notify_outbid",
+    NotificationType.AUCTION_WON:    "notify_winning",
+    NotificationType.AUCTION_ENDING: "notify_ending",
+    NotificationType.AUCTION_SOLD:   "notify_sold",
+    NotificationType.BID_PLACED:     "notify_bid_received",
+    NotificationType.AUCTION_LOST:   "notify_lost",
+}
 
 
 def _fire_and_forget_email(to_email: str, subject: str, html: str) -> None:
@@ -40,14 +53,14 @@ def send_verification_email(user: User) -> None:
     html_content = build_verification_email_html(user.username, link)
     _fire_and_forget_email(
         user.email,
-        "Подтвердите email — Лотус",
+        "Подтвердите email - Лотус",
         html_content,
     )
 
 
 def send_password_reset_email(user: User) -> None:
     """Fire-and-forget the password-reset link. The token's ``tv``
-    claim is read from the user's current ``token_version`` — a later
+    claim is read from the user's current ``token_version`` - a later
     successful /password-reset/confirm bumps tv so this link (and any
     other in-flight reset link for the same account) auto-invalidate."""
     token = create_password_reset_token(user)
@@ -55,7 +68,7 @@ def send_password_reset_email(user: User) -> None:
     html_content = build_password_reset_email_html(user.username, link)
     _fire_and_forget_email(
         user.email,
-        "Сброс пароля — Лотус",
+        "Сброс пароля - Лотус",
         html_content,
     )
 
@@ -63,12 +76,12 @@ def send_password_reset_email(user: User) -> None:
 def send_password_changed_email(user: User) -> None:
     """Notification email sent right after /password-reset/confirm
     succeeds. The legitimate user sees the trail even if the reset
-    was triggered by someone who'd taken over their inbox — they
+    was triggered by someone who'd taken over their inbox - they
     can react before the attacker has time to dig in."""
     html_content = build_password_changed_email_html(user.username)
     _fire_and_forget_email(
         user.email,
-        "Пароль изменён — Лотус",
+        "Пароль изменён - Лотус",
         html_content,
     )
 
@@ -82,7 +95,12 @@ async def create_notification(
     auction_id: int | None = None,
     auction_title: str | None = None,
 ):
-    """Создание уведомления в БД."""
+    """Insert one ``Notification`` row and return the persisted instance.
+
+    Caller-facing helper used by ``notify_user`` and the few places that
+    need to write a row without fanning out the WS / email channels
+    (e.g. legacy paths that pre-date the multi-channel dispatcher).
+    """
     notification = Notification(
         user_id=user_id,
         type=notification_type.value,
@@ -107,7 +125,14 @@ async def notify_user(
     auction_title: str | None = None,
     manager=None,
 ):
-    """In-app + email уведомление пользователя."""
+    """Fan a notification out across all three channels.
+
+    Always writes the in-app row (via ``create_notification``). The WS
+    push runs when ``manager`` is supplied. The email send runs only
+    when the user has the per-type opt-out flag enabled - the mapping
+    lives in ``_EMAIL_OPT_OUT_FLAG`` so adding a new ``NotificationType``
+    is one line, not another branch in this function.
+    """
 
     notification = await create_notification(
         db, user.id, notification_type, title, message, auction_id, auction_title
@@ -128,20 +153,8 @@ async def notify_user(
         })
 
     if user.email_notifications:
-        should_send_email = False
-
-        if notification_type == NotificationType.BID_OUTBID and user.notify_outbid:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_WON and user.notify_winning:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_ENDING and user.notify_ending:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_SOLD and user.notify_sold:
-            should_send_email = True
-        elif notification_type == NotificationType.BID_PLACED and user.notify_bid_received:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_LOST and user.notify_lost:
-            should_send_email = True
+        opt_out_flag = _EMAIL_OPT_OUT_FLAG.get(notification_type)
+        should_send_email = bool(opt_out_flag) and getattr(user, opt_out_flag, False)
 
         if should_send_email:
             html_content = build_notification_email_html(

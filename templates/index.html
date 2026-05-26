@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-    <title>Лотус — Онлайн-аукцион</title>
+    <title>Лотус - Онлайн-аукцион</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -30,7 +30,7 @@
       <button class="nav-link active" onclick="showSection(event,'auctions')">Аукционы</button>
     </nav>
 
-    <!-- Центральный поиск -->
+    <!-- Centered search -->
     <div class="nav-search" style="position:relative;">
       <div class="search-wrap" id="searchWrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -55,7 +55,7 @@
       <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
         <div class="nav-avatar" id="userAvatarSmall">?</div>
         <div>
-          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-user-name" id="userName">-</div>
           <div class="nav-balance"><span id="userBalanceSmall">0</span> ₽</div>
         </div>
       </a>
@@ -128,7 +128,7 @@
 
     <div class="hero-stats" id="heroStats">
       <div class="hero-stat">
-        <div class="hero-stat-value" id="statActive">—</div>
+        <div class="hero-stat-value" id="statActive">-</div>
         <div class="hero-stat-label">Активных лотов</div>
       </div>
       <div class="hero-stat-divider"></div>
@@ -166,14 +166,14 @@
 </section>
 
 <!-- ================================================================
-     FEATURED STRIP — ending soon
+     FEATURED STRIP - ending soon
      ================================================================ -->
 <section class="featured-strip" id="featuredStrip" hidden>
   <div class="featured-head">
     <div class="featured-title-wrap">
       <span class="featured-flame">🔥</span>
       <h2 class="featured-title">Скоро завершатся</h2>
-      <span class="featured-sub">Самые горящие лоты — успей сделать ставку</span>
+      <span class="featured-sub">Самые горящие лоты - успей сделать ставку</span>
     </div>
     <div class="featured-controls">
       <button type="button" class="featured-arrow" id="featuredPrev" aria-label="Прокрутить назад" disabled>
@@ -200,7 +200,7 @@
   <!-- ======= SIDEBAR FILTERS ======= -->
   <aside class="filter-sidebar" id="filterSidebar">
 
-    <!-- Drawer header — only rendered as visible inside the mobile
+    <!-- Drawer header - only rendered as visible inside the mobile
          off-canvas mode (CSS hides it on desktop). Carries the title
          and a close (×) button. -->
     <div class="fs-drawer-head">
@@ -210,7 +210,7 @@
       </button>
     </div>
 
-    <!-- Статус -->
+    <!-- Status -->
     <div class="fs-section">
       <div class="fs-label">Статус</div>
       <div class="fs-status-tabs">
@@ -220,7 +220,7 @@
       </div>
     </div>
 
-    <!-- Категории -->
+    <!-- Categories -->
     <div class="fs-section">
       <div class="fs-label">Категория</div>
       <div class="fs-cat-list" id="fsCatList">
@@ -230,7 +230,7 @@
       </div>
     </div>
 
-    <!-- Тип аукциона -->
+    <!-- Auction type -->
     <div class="fs-section">
       <div class="fs-label">Тип аукциона</div>
       <div class="fs-checks">
@@ -249,7 +249,7 @@
       </div>
     </div>
 
-    <!-- Цена -->
+    <!-- Price -->
     <div class="fs-section">
       <div class="fs-label">Цена (₽)</div>
       <div class="fs-price-row">
@@ -264,7 +264,7 @@
             </button>
           </div>
         </div>
-        <span class="fs-price-sep">—</span>
+        <span class="fs-price-sep">-</span>
         <div class="fs-num">
           <input type="number" class="fs-price-input" id="maxPrice" placeholder="до" min="0">
           <div class="fs-num-stepper">
@@ -279,7 +279,7 @@
       </div>
     </div>
 
-    <!-- Сортировка -->
+    <!-- Sort -->
     <div class="fs-section">
       <div class="fs-label">Сортировка</div>
       <div class="fs-dropdown" data-target="sortFilter">
@@ -310,13 +310,13 @@
       </div>
     </div>
 
-    <!-- Автор -->
+    <!-- Creator -->
     <div class="fs-section">
       <div class="fs-label">Автор</div>
       <input type="text" class="fs-input" id="creatorInput" placeholder="@username">
     </div>
 
-    <!-- Кнопки -->
+    <!-- Buttons -->
     <div class="fs-actions">
       <button class="btn btn-primary" style="width:100%;" onclick="applyFilters()">Применить</button>
       <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="resetFilters()">Сбросить фильтры</button>
@@ -345,10 +345,10 @@
       </div>
     </div>
 
-    <!-- Активные теги фильтров -->
+    <!-- Active filter tags -->
     <div class="filter-tags" id="filterTags"></div>
 
-    <!-- Скрытые элементы для совместимости -->
+    <!-- Hidden elements kept for compatibility -->
     <span style="display:none" id="resultInfo"></span>
     <span style="display:none" id="advancedFilters"></span>
     <button style="display:none" id="applyBtn" type="button"></button>
@@ -498,15 +498,15 @@
         <div class="create-pane">
           <div class="form-group">
             <label class="form-label">Изображения <span style="color:var(--text-3);font-weight:400">(до 5 фото)</span></label>
-            <!-- Превью загруженных -->
+            <!-- Preview of uploaded files -->
             <div class="multi-img-preview" id="multiImgPreview"></div>
-            <!-- Кнопка добавить -->
+            <!-- Add button -->
             <label class="multi-img-add" id="multiImgAddBtn" for="auctionImageFile">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Добавить фото
             </label>
             <input type="file" class="form-input" id="auctionImageFile" accept="image/*" style="display:none;" multiple>
-            <div class="img-hint">Первое фото — обложка. Можно добавить до 5 изображений.</div>
+            <div class="img-hint">Первое фото - обложка. Можно добавить до 5 изображений.</div>
           </div>
         </div>
 
@@ -523,10 +523,10 @@
             <label class="form-label">Категория</label>
             <div class="cat-picker" id="createCatPicker">
               <select class="form-input cat-picker-parent" id="auctionCategoryParent">
-                <option value="">— Выберите категорию —</option>
+                <option value="">- Выберите категорию -</option>
               </select>
               <select class="form-input cat-picker-sub" id="auctionCategory" style="display:none;">
-                <option value="">— Подкатегория —</option>
+                <option value="">- Подкатегория -</option>
               </select>
             </div>
           </div>
@@ -540,10 +540,10 @@
                 Купить сразу (BIN)
               </button>
             </div>
-            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки — побеждает наибольшая</div>
+            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки - побеждает наибольшая</div>
           </div>
 
-          <!-- BID поля -->
+          <!-- BID fields -->
           <div id="bidFields">
             <div class="form-group">
               <label class="form-label">Стартовая цена (₽)</label>
@@ -557,11 +557,11 @@
                 <input type="number" class="form-input" id="auctionDuration" min="1" max="10080" value="60" placeholder="60" style="flex:1;">
                 <span style="font-size:12px;color:var(--text-3);white-space:nowrap;">мин</span>
               </div>
-              <div class="img-hint" id="durationHint">1 час — аукцион завершится через 60 мин</div>
+              <div class="img-hint" id="durationHint">1 час - аукцион завершится через 60 мин</div>
             </div>
           </div>
 
-          <!-- BIN поля -->
+          <!-- BIN fields -->
           <div id="binFields" style="display:none;">
             <div class="form-group">
               <label class="form-label">Цена «Купить сразу» (₽)</label>
@@ -592,7 +592,7 @@
 <script src="/static/vendor/cropper.min.js"></script>
 
 <!-- ================================================================
-     COMPAT SHIMS — bridge new HTML to existing JS
+     COMPAT SHIMS - bridge new HTML to existing JS
      ================================================================ -->
   <script src="/static/js/common.js"></script>
   <script src="/static/js/index.js"></script>
@@ -686,9 +686,9 @@
         if (!items || !items.length) { section.hidden = true; return; }
         section.hidden = false;
 
-        // Используем time_remaining от сервера (он считает в UTC корректно).
-        // end_time в API — naive-UTC без 'Z', поэтому браузер парсит его как
-        // локальное время и таймер «уезжает» на UTC-offset.
+        // Use the server-supplied time_remaining (it computes against UTC correctly).
+        // end_time in the API response is naive-UTC without 'Z', so the browser
+        // parses it as local time and the countdown drifts by the UTC offset.
         const baseTs = Date.now();
         scroll.innerHTML = items.map(a => {
           const remaining = Number.isFinite(a.time_remaining) ? a.time_remaining : 0;
