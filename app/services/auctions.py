@@ -29,7 +29,7 @@ from app.utils.time import utcnow
 logger = logging.getLogger(__name__)
 
 
-def _seller_commission(gross_price: Decimal) -> Decimal:
+def seller_commission(gross_price: Decimal) -> Decimal:
     """Platform fee withheld from the seller's payout on every settled
     sale. Rounded to two decimal places with HALF_UP so the two seller
     transaction rows (auction_sale gross + commission deduction) sum
@@ -74,7 +74,7 @@ def settle_bin_purchase(
             db, seller, "auction_sale", price,
             f"Продажа «{auction.title}» по цене BIN", auction_id=auction.id,
         )
-        commission = _seller_commission(price)
+        commission = seller_commission(price)
         if commission > 0:
             seller.balance -= commission
             add_transaction(
@@ -201,7 +201,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 db, creator, "auction_sale", last_bid.amount,
                 f"Продажа лота «{auction.title}»", auction_id=auction.id,
             )
-            commission = _seller_commission(last_bid.amount)
+            commission = seller_commission(last_bid.amount)
             if commission > 0:
                 creator.balance -= commission
                 add_transaction(
@@ -226,7 +226,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
                 ))
 
         if creator and creator.id != last_bid.user_id:
-            commission = _seller_commission(last_bid.amount)
+            commission = seller_commission(last_bid.amount)
             net = last_bid.amount - commission
             pending_notifications.append((
                 creator, NotificationType.AUCTION_SOLD,

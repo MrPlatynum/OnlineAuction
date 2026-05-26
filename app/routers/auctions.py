@@ -33,8 +33,8 @@ from app.schemas import (
 )
 from app.services.auction_scheduler import cancel_auction, schedule_auction
 from app.services.auctions import (
-    _seller_commission,
     fetch_auction_bidders,
+    seller_commission,
     settle_bin_purchase,
 )
 from app.services.balance import lock_users_by_id
@@ -132,7 +132,7 @@ def _auction_to_dict(auction: Auction, bids_count: int) -> dict:
         "creator_username": creator.username if creator else None,
         "creator_avatar_url": creator.avatar_url if creator else None,
         "bids_count": bids_count,
-        "time_remaining": max(0, int((auction.end_time - utcnow()).total_seconds())),
+        "time_remaining": _time_remaining(auction),
         "category_id": auction.category_id,
         "category_name": cat.name if cat else None,
         "category_icon": cat.icon if cat else None,
@@ -264,7 +264,7 @@ async def buy_now(
     cancel_auction(auction_id)
 
     if creator:
-        commission = _seller_commission(auction.bin_price)
+        commission = seller_commission(auction.bin_price)
         net = auction.bin_price - commission
         await notify_user(
             db, creator, NotificationType.AUCTION_SOLD,

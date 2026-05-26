@@ -69,6 +69,13 @@ _BACKOFF_MAX = timedelta(hours=6)
 _worker_task: asyncio.Task | None = None
 _stop_event: asyncio.Event | None = None
 
+# Strong-ref the in-flight INSERTs so the event-loop GC doesn't reap them
+# mid-await. Each ``enqueue_email`` adds the task here and clears it via the
+# done-callback. Declared above the function that uses it for readability;
+# Python's module-level name resolution makes the placement here equivalent
+# to the post-function declaration, but reading top-down works better.
+_insert_tasks: set[asyncio.Task] = set()
+
 
 def backoff_for_attempt(attempts: int) -> timedelta:
     """Wait before the *next* SMTP try after ``attempts`` failures.
@@ -99,9 +106,6 @@ def enqueue_email(
     )
     _insert_tasks.add(task)
     task.add_done_callback(_insert_tasks.discard)
-
-
-_insert_tasks: set[asyncio.Task] = set()
 
 
 async def _insert_outbox_row(
