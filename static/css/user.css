@@ -4,7 +4,7 @@
    ================================================================ */
 
 .page-wrap {
-  max-width: 920px;          /* уже не нужно 1100, единая колонка читается лучше */
+  max-width: 920px;          /* 1100 is overkill; single column reads better */
   margin: 0 auto;
   padding: 24px 20px 64px;
 }
@@ -374,7 +374,7 @@
   margin-top: auto;
 }
 
-/* Compact list для завершённых */
+/* Compact list for completed lots */
 .lot-row {
   display: flex;
   align-items: center;
@@ -436,7 +436,7 @@
   border-color: var(--border-hi);
 }
 
-/* Цветной угол слева (тон отзыва) */
+/* Coloured left corner (review tone) */
 .review-card::before {
   content: '';
   position: absolute;

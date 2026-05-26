@@ -1352,7 +1352,7 @@ function buildPageList(current, total) {
                        data-category="${catLabel}"
                        data-slide-count="${allImgUrls.length}">
 
-                        <!-- Картинка - кликабельна -->
+                        <!-- Image - clickable -->
                         <a href="auction.html?id=${auction.id}" class="auction-image-link">
                             <div class="auction-image">
                                 ${imagesHtml}
@@ -1366,7 +1366,7 @@ function buildPageList(current, total) {
                             </div>
                         </a>
 
-                        <!-- Текстовый блок - статичный -->
+                        <!-- Text block - static -->
                         <div class="auction-body">
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
                                 <div class="auction-title">${safeTitle}</div>

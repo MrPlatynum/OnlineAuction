@@ -73,7 +73,7 @@
      ================================================================ -->
 <div class="page-wrap">
 
-  <!-- LOT HEADER: badges + title + byline (поднято наверх над колонками) -->
+  <!-- LOT HEADER: badges + title + byline (hoisted above the columns) -->
   <header class="lot-header" id="lotInfoBlock">
     <div class="lot-meta-row">
       <div class="status-badge active" id="statusBadge">Активен</div>
@@ -212,7 +212,7 @@
     </div>
   </div>
 
-  <!-- WINNER (показываем только когда аукцион завершён) -->
+  <!-- WINNER (shown only when the auction is finished) -->
   <div class="winner-block" id="winnerBlock" style="display:none;">
     <div class="winner-icon">🏆</div>
     <div>
@@ -221,7 +221,7 @@
     </div>
   </div>
 
-  <!-- TABS: Описание / Отзывы -->
+  <!-- TABS: Description / Reviews -->
   <div class="lot-tabs">
     <div class="tabs-nav" role="tablist">
       <button class="lot-tab-btn active" type="button" role="tab" data-tab="desc"
@@ -232,12 +232,12 @@
       </button>
     </div>
 
-    <!-- Tab: Описание -->
+    <!-- Tab: Description -->
     <div class="tab-panel active" id="tab-desc" role="tabpanel">
       <p class="lot-desc" id="description">Пожалуйста, подождите…</p>
     </div>
 
-    <!-- Tab: Отзывы -->
+    <!-- Tab: Reviews -->
     <div class="tab-panel" id="tab-reviews" role="tabpanel">
       <div class="reviews-section" id="reviewsSection">
         <div class="reviews-head">
@@ -253,7 +253,7 @@
           <div class="reviews-bars" id="revBars"></div>
         </div>
 
-        <!-- Star-filter пилюли -->
+        <!-- Star-filter pills -->
         <div class="rev-filter" id="revFilter" style="display:none;">
           <button class="rev-pill rev-pill-toggle" type="button" id="revPillThisLot" onclick="toggleThisLotOnly()">
             <span class="rev-pill-check"
@@ -303,7 +303,7 @@
     </div>
   </div>
 
-  <!-- Скрытые элементы для совместимости со старым JS (sync-цели) -->
+  <!-- Hidden elements kept for compatibility with the old JS (sync targets) -->
   <span id="currentPrice2" hidden></span>
   <span id="startingPrice2" hidden></span>
   <span id="timeLeft2" hidden></span>

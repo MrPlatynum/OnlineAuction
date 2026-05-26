@@ -239,7 +239,7 @@
 }
 .card-link:hover { color: var(--accent-2); }
 
-/* Price card - основной CTA */
+/* Price card - primary CTA */
 .price-card {
   background:
     radial-gradient(ellipse 100% 60% at 50% 0%, rgba(232,160,32,.06) 0%, transparent 70%),
@@ -727,7 +727,7 @@
   color: var(--red);
 }
 
-/* Стили табов и пилюль фильтра отзывов вынесены в common.css */
+/* Tab and review-filter pill styles live in common.css */
 
 .lot-desc {
   font-size: 14px;
@@ -937,14 +937,14 @@
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.55;
-  overflow-wrap: anywhere;       /* ломаем длинные слова/URL */
+  overflow-wrap: anywhere;       /* break long words / URLs */
   word-break: break-word;
-  white-space: pre-wrap;         /* сохраняем переносы пользователя */
+  white-space: pre-wrap;         /* preserve user line breaks */
   max-width: 100%;
   margin-top: 6px;
 }
 
-/* Капсула со ссылкой на лот, по которому оставлен отзыв */
+/* Pill linking back to the lot the review is anchored to */
 .rev-lot-chip {
   display: inline-flex;
   align-items: center;
@@ -974,7 +974,7 @@ a.rev-lot-chip:hover {
   color: var(--accent);
 }
 
-/* Подсветка отзыва, оставленного на текущий лот (тонкая обводка) */
+/* Highlight a review left on the current lot (thin outline) */
 .review-item.is-this-lot {
   box-shadow: 0 0 0 1px rgba(232,160,32,.15) inset;
 }

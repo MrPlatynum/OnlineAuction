@@ -1,7 +1,7 @@
 
 from pydantic import BaseModel, Field
 
-REVIEW_COMMENT_MAX = 1000  # тоже используется на фронте - держим в синхроне
+REVIEW_COMMENT_MAX = 1000  # also used by the frontend - keep in sync
 
 
 class ReviewCreate(BaseModel):

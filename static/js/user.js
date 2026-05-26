@@ -121,7 +121,7 @@ async function render(data) {
       </div>
     </div>
 
-    <!-- ===== RATING SPOTLIGHT (полная ширина) ===== -->
+    <!-- ===== RATING SPOTLIGHT (full width) ===== -->
     ${rstats.total > 0 ? `
     <div class="rating-spotlight">
       <div class="rs-score">
@@ -136,7 +136,7 @@ async function render(data) {
     </div>
     ` : ''}
 
-    <!-- ===== SECTION: Активные лоты ===== -->
+    <!-- ===== SECTION: Active lots ===== -->
     <div class="profile-section" id="section-lots">
       <div class="profile-section-head">
         <div class="profile-section-title">
@@ -153,7 +153,7 @@ async function render(data) {
     </div>
 
     ${completedLots.length > 0 ? `
-    <!-- ===== SECTION: Завершённые ===== -->
+    <!-- ===== SECTION: Completed ===== -->
     <div class="profile-section" id="section-completed">
       <div class="profile-section-head">
         <div class="profile-section-title">
@@ -166,7 +166,7 @@ async function render(data) {
     </div>
     ` : ''}
 
-    <!-- ===== SECTION: Отзывы ===== -->
+    <!-- ===== SECTION: Reviews ===== -->
     <div class="profile-section" id="section-reviews">
       <div class="profile-section-head">
         <div class="profile-section-title">
