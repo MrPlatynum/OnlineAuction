@@ -491,6 +491,18 @@ async def update_auction(
             db.add(AuctionImage(auction_id=auction_id, url=url, order=i))
         auction.image_url = data.image_urls[0] if data.image_urls else None
 
+    # A BIN listing without a price is meaningless: /buy-now would 400
+    # on every request, and the DB CheckConstraint
+    # ``ck_auctions_bin_requires_price`` would otherwise fire at commit
+    # time and surface as an opaque 500. Catch both cases here -
+    # explicitly nulling bin_price on a bin lot, and switching the type
+    # to bin without supplying a price.
+    if auction.auction_type == "bin" and auction.bin_price is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Для лота с фиксированной ценой обязательно указать bin_price",
+        )
+
     # BIN is a fixed-price listing - bin_price IS the displayed/charged
     # price. If the seller edits it (or switches the lot to BIN), drag
     # starting_price / current_price along so the listing card and

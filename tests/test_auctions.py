@@ -269,6 +269,58 @@ async def test_update_bin_price_syncs_current_price(client, registered_user):
     assert refreshed["starting_price"] == 450.0
 
 
+async def test_update_bin_price_null_on_bin_lot_rejected(client, registered_user):
+    """Nulling bin_price on a BIN listing leaves /buy-now with no price
+    to charge. Used to slip past the handler and surface as a DB
+    CheckConstraint 500 at commit; now caught as a clean 400."""
+    listing = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "BIN with no replacement",
+            "description": "...",
+            "starting_price": 200.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": 200.0,
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    r = await client.patch(
+        f"/api/auctions/{listing['id']}",
+        json={"bin_price": None},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400, r.text
+    assert "bin_price" in r.json()["detail"]
+
+
+async def test_update_auction_type_to_bin_without_price_rejected(
+    client, registered_user
+):
+    """Switching a bid lot to bin without supplying a price would land
+    on the DB CheckConstraint at commit. Caught at the handler now."""
+    listing = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Bid lot to convert",
+            "description": "...",
+            "starting_price": 50.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    r = await client.patch(
+        f"/api/auctions/{listing['id']}",
+        json={"auction_type": "bin"},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400, r.text
+    assert "bin_price" in r.json()["detail"]
+
+
 async def test_buy_now_past_end_time_defers_to_scheduler(
     client, registered_user, second_user
 ):
