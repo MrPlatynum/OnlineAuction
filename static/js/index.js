@@ -1980,7 +1980,6 @@ location.reload();
             Object.values(timers).forEach(timer => clearInterval(timer));
         });
 
-        // Boot.
         init();
     
 
