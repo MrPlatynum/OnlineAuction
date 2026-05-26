@@ -168,7 +168,10 @@ async def count_bids_by_auction(
             .group_by(Bid.auction_id)
         )
     ).all()
-    return {aid: cnt for aid, cnt in rows}
+    # ``func.count`` returns ``int`` on asyncpg but ``Decimal`` on
+    # other drivers. Coerce at the boundary so downstream callers and
+    # response schemas don't have to.
+    return {aid: int(cnt) for aid, cnt in rows}
 
 
 async def fetch_auction_bidders(

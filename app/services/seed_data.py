@@ -90,8 +90,11 @@ def _build_new_subs(
 
 async def seed_categories():
     async with SessionLocal() as db:
-        existing_count = (await db.execute(select(Category))).scalars().first()
-        if existing_count is None:
+        # ``.first()`` returns the first row (or None), not a count -
+        # the prior ``existing_count`` name read wrong; the test below
+        # only cares whether *any* row exists.
+        existing = (await db.execute(select(Category))).scalars().first()
+        if existing is None:
             parents = [Category(name=n, slug=s, icon=i) for n, s, i in _PARENTS]
             db.add_all(parents)
             await db.commit()
