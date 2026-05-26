@@ -13,7 +13,7 @@ from datetime import timedelta
 import jwt
 import pytest
 
-from app.config import ALGORITHM, SECRET_KEY
+from app.config import ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, SECRET_KEY
 from app.utils.security import EMAIL_VERIFY_PURPOSE, create_email_verify_token
 from app.utils.time import utcnow
 
@@ -25,6 +25,8 @@ def _make_token(user_id: int, email: str, *, purpose: str = EMAIL_VERIFY_PURPOSE
         "email": email,
         "purpose": purpose,
         "exp": utcnow() + exp_delta,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 

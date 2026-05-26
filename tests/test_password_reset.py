@@ -15,7 +15,7 @@ import jwt
 import pytest
 from sqlalchemy import select
 
-from app.config import ALGORITHM, SECRET_KEY
+from app.config import ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, SECRET_KEY
 from app.database import SessionLocal
 from app.models import User
 from app.utils.security import (
@@ -49,6 +49,8 @@ def _make_token(
         "tv": tv,
         "purpose": purpose,
         "exp": utcnow() + exp_delta,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 

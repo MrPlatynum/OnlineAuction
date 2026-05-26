@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import (
     ACCESS_TOKEN_EXPIRE_HOURS,
     ALGORITHM,
+    JWT_AUDIENCE,
+    JWT_ISSUER,
     LEGACY_PASSWORD_KEYS,
     SECRET_KEY,
 )
@@ -119,9 +121,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def create_access_token(claims: dict) -> str:
     """Sign a JWT carrying ``claims`` plus a fixed expiry. Callers pass
     in domain-specific fields (``user_id``, ``tv``, …); this function
-    only adds ``exp`` so the expiry policy stays in one place."""
+    only adds ``exp`` and the standard ``iss`` / ``aud`` claims so the
+    expiry + audience policy stays in one place."""
     payload = claims.copy()
     payload["exp"] = utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    payload["iss"] = JWT_ISSUER
+    payload["aud"] = JWT_AUDIENCE
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -159,6 +164,8 @@ def create_email_verify_token(user: "User") -> str:
         "email": user.email,
         "purpose": EMAIL_VERIFY_PURPOSE,
         "exp": expire,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -176,6 +183,8 @@ def create_password_reset_token(user: "User") -> str:
         "tv": user.token_version,
         "purpose": PASSWORD_RESET_PURPOSE,
         "exp": expire,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -196,7 +205,13 @@ def _decode_purpose_token(
     claims because the failure detail there matches the expiry detail.
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+        )
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=400, detail=expired_detail) from None
     except jwt.PyJWTError:
@@ -240,7 +255,13 @@ def decode_email_verify_token(token: str) -> tuple[int, str]:
 
 def decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+        )
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired") from None
