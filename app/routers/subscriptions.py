@@ -11,9 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Auction, Review, Subscription, User
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["subscriptions"])
@@ -127,7 +129,9 @@ async def get_subscription(
 
 
 @router.post("/sellers/{seller_id}/subscribe")
+@limiter.limit("60/minute")
 async def subscribe(
+    request: Request,
     seller_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -167,7 +171,9 @@ async def subscribe(
 
 
 @router.delete("/sellers/{seller_id}/subscribe")
+@limiter.limit("60/minute")
 async def unsubscribe(
+    request: Request,
     seller_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
