@@ -69,3 +69,43 @@ async def test_disconnect_clears_empty_bucket():
     mgr.active_connections[3] = [sock]
     mgr.disconnect(sock, 3)
     assert 3 not in mgr.active_connections
+
+
+class _DisconnectingWebSocket(_StubWebSocket):
+    """Stub that disconnects ``victim`` mid-send. Reproduces the race
+    where a concurrent ``disconnect`` mutates the bucket while
+    ``_fan_out`` is iterating it: when an *earlier* element is removed,
+    a plain ``for conn in bucket`` shifts list indices and silently
+    skips a later, live socket."""
+
+    def __init__(self, mgr: ConnectionManager, key: int, victim: _StubWebSocket):
+        super().__init__()
+        self._mgr = mgr
+        self._key = key
+        self._victim = victim
+
+    async def send_json(self, message: dict):
+        await super().send_json(message)
+        self._mgr.disconnect(self._victim, self._key)
+
+
+@pytest.mark.asyncio
+async def test_broadcast_iteration_safe_against_concurrent_disconnect():
+    """While broadcasting to [a, b, c], b's send_json removes a from the
+    bucket (e.g. a's WS client closed and a cleanup coroutine ran during
+    b's send await). A naive ``for x in bucket`` then advances index 2
+    past the end and skips c entirely - the snapshot in _fan_out
+    prevents that."""
+    mgr = ConnectionManager()
+    a = _StubWebSocket()
+    c = _StubWebSocket()
+    b = _DisconnectingWebSocket(mgr, 9, a)
+    mgr.active_connections[9] = [a, b, c]
+
+    await mgr.broadcast({"v": 1}, 9)
+
+    # Key invariant: c still receives the message even though a was
+    # removed mid-iteration. Without the snapshot, c is skipped.
+    assert c.sent == [{"v": 1}]
+    # Bucket reflects the in-flight disconnect of a.
+    assert mgr.active_connections[9] == [b, c]
