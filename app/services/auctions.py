@@ -191,7 +191,13 @@ async def fetch_auction_bidders(
 
 
 async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
-    """Уведомление участникам, что аукцион скоро завершится."""
+    """Fire the five-minute warning to every bidder on this lot.
+
+    Registered into auction_scheduler as the ENDING_SOON handler at module
+    import time. The "winning / not winning" copy is tailored per recipient
+    against the most recent bid - the current leader gets a "Вы лидируете"
+    message, everyone else gets a "сделайте ставку" nudge.
+    """
     last_bid = (
         await db.execute(
             select(Bid)
@@ -220,7 +226,15 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
 
 
 async def complete_auction(auction_id: int, db: AsyncSession):
-    """Завершение аукциона и уведомление участников."""
+    """Settle the lot and notify every participant.
+
+    Registered into auction_scheduler as the SETTLE handler at module
+    import time. Takes ``SELECT ... FOR UPDATE`` on the auction so a
+    duplicate scheduler tick (post-restart) or a /buy-now race ends up
+    serialised; the second caller sees ``is_active=False`` and bails.
+    If the deadline moved (PATCH extension) the tick re-arms itself
+    via ``schedule_auction`` instead of settling early.
+    """
     # FOR UPDATE so a duplicate scheduler tick (post-restart) or a race
     # with /buy-now can't double-settle - second caller sees is_active=False.
     auction = (

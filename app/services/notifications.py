@@ -95,7 +95,12 @@ async def create_notification(
     auction_id: int | None = None,
     auction_title: str | None = None,
 ):
-    """Создание уведомления в БД."""
+    """Insert one ``Notification`` row and return the persisted instance.
+
+    Caller-facing helper used by ``notify_user`` and the few places that
+    need to write a row without fanning out the WS / email channels
+    (e.g. legacy paths that pre-date the multi-channel dispatcher).
+    """
     notification = Notification(
         user_id=user_id,
         type=notification_type.value,
@@ -120,7 +125,14 @@ async def notify_user(
     auction_title: str | None = None,
     manager=None,
 ):
-    """In-app + email уведомление пользователя."""
+    """Fan a notification out across all three channels.
+
+    Always writes the in-app row (via ``create_notification``). The WS
+    push runs when ``manager`` is supplied. The email send runs only
+    when the user has the per-type opt-out flag enabled - the mapping
+    lives in ``_EMAIL_OPT_OUT_FLAG`` so adding a new ``NotificationType``
+    is one line, not another branch in this function.
+    """
 
     notification = await create_notification(
         db, user.id, notification_type, title, message, auction_id, auction_title
