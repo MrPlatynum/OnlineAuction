@@ -1473,6 +1473,15 @@ function buildPageList(current, total) {
                 }
                 if (data.type === 'new_bid') {
                     updatePrice(auctionId, data.current_price);
+                    // Anti-sniping extension: a bid inside the closing window
+                    // pushes end_time forward. Without restarting the
+                    // per-card timer from the server-provided remaining
+                    // seconds, the local countdown keeps ticking to 0, flips
+                    // the card to 'Завершён' on screen, and the user sees a
+                    // closed listing while the lot is still actually live.
+                    if (Number.isFinite(data.time_remaining)) {
+                        startTimer(auctionId, data.time_remaining);
+                    }
                 }
             };
 
