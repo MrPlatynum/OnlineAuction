@@ -49,12 +49,12 @@ SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "Лотус <noreply@localhost>")
 
-# Public-facing base URL приложения — используется в email-уведомлениях
+# Public-facing base URL приложения - используется в email-уведомлениях
 # для построения ссылок (auction.html, profile.html и т. п.).
 # В проде задаётся через env: PUBLIC_BASE_URL=https://lotus.example.com
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 
-# Platform commission charged to the seller on every settled sale —
+# Platform commission charged to the seller on every settled sale -
 # both BIN purchases and auction completions. Held in a single Decimal
 # so the multiplication path in app/services/auctions.py doesn't have
 # to coerce float → Decimal on the hot settlement path. Operators can
@@ -74,13 +74,13 @@ CORS_ORIGINS = [
 ]
 # AUCTION_ENV is the project-scoped environment name (dev/local/test
 # enable developer conveniences; anything else is treated as prod).
-# Bare ``ENV`` was too generic — collided with cloud platforms that
+# Bare ``ENV`` was too generic - collided with cloud platforms that
 # inject their own ENV value (e.g. AWS Elastic Beanstalk).
 AUCTION_ENV = os.getenv("AUCTION_ENV", "").lower()
 
 # Localhost CORS regex is a dev convenience: a fresh checkout serving
 # the SPA from :5500 / :3000 talks to the API on :8000. In production
-# the regex must be off — without it, any page hosted on a literal
+# the regex must be off - without it, any page hosted on a literal
 # ``localhost`` subdomain (e.g. attacker-controlled ``localhost.evil``
 # resolved via /etc/hosts) could make credentialed requests once the
 # user is logged in. CORS_ORIGINS handles legitimate production hosts.

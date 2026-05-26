@@ -22,7 +22,7 @@ class User(Base):
     email_verified = Column(Boolean, default=False, nullable=False)
     # Last time we mailed a password-reset link to this account. Used
     # by /password-reset/request to throttle per-email (1/min) on top
-    # of the per-IP slowapi limit — without the per-email floor, an
+    # of the per-IP slowapi limit - without the per-email floor, an
     # attacker with rotating IPs could flood the inbox.
     password_reset_sent_at = Column(DateTime, nullable=True)
     balance = Column(Numeric(12, 2), default=1000.0, nullable=False)

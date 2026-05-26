@@ -57,7 +57,7 @@ async def test_unverified_user_cannot_place_bid(client, registered_user, unverif
 
 
 async def test_unverified_user_cannot_buy_now(client, registered_user, unverified_user):
-    """BIN purchase is a write action that moves money — gated together
+    """BIN purchase is a write action that moves money - gated together
     with /bids."""
     auction = await client.post(
         "/api/auctions",
@@ -97,7 +97,7 @@ async def test_unverified_user_cannot_create_auction(client, unverified_user):
 
 
 async def test_unverified_user_cannot_deposit_or_withdraw(client, unverified_user):
-    """Both money-mutation endpoints require a confirmed email — without
+    """Both money-mutation endpoints require a confirmed email - without
     that gate a throwaway account could move money around and complicate
     refund flows even before it tried to bid."""
     r_deposit = await client.post(
@@ -136,7 +136,7 @@ async def test_unverified_user_cannot_upload_image(client, unverified_user):
 
 
 async def test_unverified_user_cannot_post_review(client, unverified_user, registered_user):
-    """Reviews change a seller's public reputation — gate them so a
+    """Reviews change a seller's public reputation - gate them so a
     throwaway account can't drive-by trash someone."""
     r = await client.post(
         "/api/reviews",
@@ -159,13 +159,13 @@ async def test_verify_email_with_valid_token(client, unverified_user):
     r = await client.post("/api/verify-email", json={"token": token})
     assert r.status_code == 200
 
-    # The user is now verified — confirmed by /me reflecting the flag.
+    # The user is now verified - confirmed by /me reflecting the flag.
     me = await client.get("/api/me", headers=unverified_user["headers"])
     assert me.json()["email_verified"] is True
 
 
 async def test_verify_email_with_expired_token(client, unverified_user):
-    """Past-exp tokens get 400 (user-facing input error), not 401 — the
+    """Past-exp tokens get 400 (user-facing input error), not 401 - the
     user's session is still valid, just the verification link is stale."""
     user_id = unverified_user["user"]["id"]
     email = unverified_user["email"]
@@ -177,7 +177,7 @@ async def test_verify_email_with_expired_token(client, unverified_user):
 
 async def test_verify_email_with_bad_signature(client, unverified_user):
     """Tokens signed with a different key (e.g. forged on the client)
-    fail at decode — 400, not 200."""
+    fail at decode - 400, not 200."""
     user_id = unverified_user["user"]["id"]
     email = unverified_user["email"]
     forged = jwt.encode(
@@ -196,7 +196,7 @@ async def test_verify_email_with_bad_signature(client, unverified_user):
 
 async def test_verify_email_rejects_wrong_purpose(client, unverified_user):
     """An auth token (purpose missing or != email_verify) must NOT be
-    accepted as a verification token — otherwise any login token could
+    accepted as a verification token - otherwise any login token could
     flip the email_verified flag without the email click."""
     user_id = unverified_user["user"]["id"]
     email = unverified_user["email"]
@@ -217,7 +217,7 @@ async def test_verify_email_rejects_mismatched_email(client, unverified_user):
 
 async def test_verify_email_is_idempotent(client, unverified_user):
     """A second click on the same link (or a link prefetcher racing
-    the user) still returns 200, not an error — re-verifying an
+    the user) still returns 200, not an error - re-verifying an
     already-verified user is a no-op."""
     user_id = unverified_user["user"]["id"]
     email = unverified_user["email"]
@@ -237,7 +237,7 @@ async def test_resend_requires_auth(client):
 
 
 async def test_resend_for_already_verified_returns_400(client, registered_user):
-    """The registered_user fixture is auto-verified — resending on top
+    """The registered_user fixture is auto-verified - resending on top
     of that should reject (no point spamming the inbox)."""
     r = await client.post(
         "/api/verify-email/resend",

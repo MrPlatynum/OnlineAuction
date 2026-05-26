@@ -43,7 +43,7 @@
   };
 
   // Shorthand для `document.getElementById`. Удобство для per-page скриптов
-  // (auction.js, profile.js, и т.д.) — раньше каждый объявлял локальный
+  // (auction.js, profile.js, и т.д.) - раньше каждый объявлял локальный
   // `const $ = …`. Глобал из common.js работает потому что common.js
   // загружается раньше всех per-page assets.
   window.$ = (id) => document.getElementById(id);
@@ -56,7 +56,7 @@
 
   window.fmtMoney = function(n) {
     const num = Number(n);
-    return Number.isFinite(num) ? num.toFixed(2) + ' ₽' : '—';
+    return Number.isFinite(num) ? num.toFixed(2) + ' ₽' : '-';
   };
 
   window.fmtDate = function(iso, opts) {
@@ -92,7 +92,7 @@
     const headers = { ...(opts.headers || {}) };
     const tk = getToken();
     if (tk) headers['Authorization'] = 'Bearer ' + tk;
-    // Timeout (default 15s) через AbortController — чтобы не висеть бесконечно
+    // Timeout (default 15s) через AbortController - чтобы не висеть бесконечно
     const ctrl = new AbortController();
     const timeoutMs = opts.timeout ?? 15000;
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -105,7 +105,7 @@
 
   // FastAPI/Pydantic возвращает 422 с массивом detail[]: каждый элемент
   // вида {loc: ["body","field"], msg: "...", type: "..."}. Поле обычной
-  // ошибки (4xx с одним detail-стринг) — просто string. Дать одно
+  // ошибки (4xx с одним detail-стринг) - просто string. Дать одно
   // понятное сообщение для пользователя.
   const FIELD_RU = {
     title: 'Название',
@@ -224,7 +224,7 @@
   };
 
   // ================================================================
-  // Platform commission cache — fetched once per page load from
+  // Platform commission cache - fetched once per page load from
   // /api/platform and reused by every payout-hint helper on the page.
   // Default falls back to 7%, matching the server-side default in
   // app/config.py so the UI keeps showing a plausible figure when the
@@ -245,10 +245,10 @@
    *
    * Wires a price input to a hint element so the seller sees, in real
    * time, how much will land on their balance after the platform
-   * takes its commission. Idempotent — calling twice with the same
+   * takes its commission. Idempotent - calling twice with the same
    * input just re-binds the listener.
    *
-   * options.label  — leading word in the hint, defaults to "К получению".
+   * options.label  - leading word in the hint, defaults to "К получению".
    *                  For BID start-price use "Со стартовой цены" so the
    *                  copy doesn't mislead about the final settled amount.
    */
@@ -277,7 +277,7 @@
   };
 
   // ================================================================
-  // Notification bell — авто-инициализация при наличии #notifBtn
+  // Notification bell - авто-инициализация при наличии #notifBtn
   // ================================================================
   function initNotifBell() {
     const btn      = document.getElementById('notifBtn');
@@ -357,7 +357,7 @@
           setCount(d.count ?? 0);
         }
       } catch {
-        // Bell badge is decorative — if the count fetch times out or
+        // Bell badge is decorative - if the count fetch times out or
         // the user is offline, keep the current value rather than
         // surfacing an unhandled rejection.
       }
@@ -385,7 +385,7 @@
         setCount(0);
         await fetchNotifications();
       } catch {
-        // Same story as fetchCount — user can retry by tapping the bell.
+        // Same story as fetchCount - user can retry by tapping the bell.
       }
     }
 
@@ -407,7 +407,7 @@
         if (id && item.classList.contains('unread')) {
           item.classList.remove('unread');
           setCount(unreadCount - 1);
-          // Optimistically flip the unread class first — if the POST
+          // Optimistically flip the unread class first - if the POST
           // fails the worst case is a stale "unread" badge that the
           // next page load will reconcile against the server.
           try { await window.apiFetch(`${window.API}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
@@ -422,7 +422,7 @@
     function connectNotifWS(userId) {
       // Drop any half-open socket from a prior connect attempt. .close()
       // on a CLOSED/CLOSING socket throws InvalidStateError in some
-      // browsers — irrelevant for the reconnect, swallow.
+      // browsers - irrelevant for the reconnect, swallow.
       if (wsNotif) { try { wsNotif.close(); } catch {} }
       const tk = getToken();
       if (!tk) return;
@@ -440,12 +440,12 @@
           }
         } catch {
           // Server only ever sends JSON; if it doesn't parse, ignore
-          // the frame rather than tearing down the socket — the next
+          // the frame rather than tearing down the socket - the next
           // valid frame works fine.
         }
       };
       wsNotif.onclose = (e) => {
-        // Серверные коды отказа — auth-failure (4001), forbidden (4003),
+        // Серверные коды отказа - auth-failure (4001), forbidden (4003),
         // policy violation (1008, в т.ч. tv-bump после change-password) и
         // штатное закрытие (1000): любое из этого означает, что повторный
         // коннект тем же токеном тоже отвергнут. Без guard'а клиент

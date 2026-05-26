@@ -1,5 +1,5 @@
 /* ================================================================
-   Лотус — Auction page (page-specific)
+   Лотус - Auction page (page-specific)
    Общие стили в /static/css/common.css
    ================================================================ */
 
@@ -11,7 +11,7 @@
 }
 
 /* ================================================================
-   LOT HEADER — поднят над колонками: бейджи + заголовок + автор
+   LOT HEADER - поднят над колонками: бейджи + заголовок + автор
    ================================================================ */
 .lot-header { margin-bottom: 20px; }
 
@@ -239,7 +239,7 @@
 }
 .card-link:hover { color: var(--accent-2); }
 
-/* Price card — основной CTA */
+/* Price card - основной CTA */
 .price-card {
   background:
     radial-gradient(ellipse 100% 60% at 50% 0%, rgba(232,160,32,.06) 0%, transparent 70%),
@@ -289,7 +289,7 @@
 /* Owner-only "net payout" hint under price-hero. Sits in the same
    12-px metadata row as price-start, but visually grouped by an accent-
    tinted background so the seller doesn't confuse it with a buyer-side
-   stat. Hidden by default — auction.js flips display:flex when the
+   stat. Hidden by default - auction.js flips display:flex when the
    viewer owns the lot. */
 .seller-payout-hint {
   display: none;
@@ -1261,7 +1261,7 @@ a.rev-lot-chip:hover {
 .lb-nav:hover { background: rgba(0,0,0,0.75); }
 .lb-prev { left: 18px; }
 .lb-next { right: 18px; }
-/* Невидимая расширенная hit-area вокруг кнопок ‹/›/× — промах
+/* Невидимая расширенная hit-area вокруг кнопок ‹/›/× - промах
    до 24 px от видимого края считается попаданием в саму кнопку.
    pointer-events явно выставлены, чтобы зона перехватила клик
    до сцены, у которой есть свой обработчик навигации. */

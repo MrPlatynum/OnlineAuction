@@ -1,4 +1,4 @@
-"""Users router — public profile + notification preferences."""
+"""Users router - public profile + notification preferences."""
 
 
 async def test_public_profile_does_not_leak_email(client, registered_user):
@@ -7,7 +7,7 @@ async def test_public_profile_does_not_leak_email(client, registered_user):
     body = r.json()
     user = body["user"]
     assert user["username"] == registered_user["user"]["username"]
-    # Email is private — must not appear anywhere in the profile payload.
+    # Email is private - must not appear anywhere in the profile payload.
     flat = str(body)
     assert "@example.com" not in flat
     assert "email" not in user
@@ -44,7 +44,7 @@ async def test_update_notification_settings_persists(client, registered_user):
 
 async def test_profile_caps_auctions_list_but_keeps_total(client, registered_user):
     """A power-seller with 100+ lots used to serialise the entire list
-    on every profile hit — now capped at 100 with the true total still
+    on every profile hit - now capped at 100 with the true total still
     surfaced via ``stats.created_count``."""
     from app import database as _db_module
     from app.models import Auction
@@ -129,14 +129,14 @@ async def test_update_notification_settings_requires_auth(client):
 async def test_notify_lost_defaults_true_for_existing_users(client, registered_user):
     """Migration backfills server_default=true, so users created via
     /register before AND after this PR have notify_lost=True at first
-    look — keeps existing /me consumers stable."""
+    look - keeps existing /me consumers stable."""
     me = (await client.get("/api/me", headers=registered_user["headers"])).json()
     assert me["notify_lost"] is True
 
 
 async def test_profile_stats_with_bids_counts_lost(client, registered_user, second_user):
     """Covers the ``if bid_auction_ids:`` branch in the user profile
-    handler — without a user who has placed bids, ``lost_count`` is
+    handler - without a user who has placed bids, ``lost_count`` is
     hard-coded to 0 and the SQL count never runs."""
     # registered_user creates a lot; second_user bids on it.
     create = await client.post(

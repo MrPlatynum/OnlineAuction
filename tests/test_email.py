@@ -2,7 +2,7 @@
 
 The notification HTML is built by string interpolation, which means
 every user-controlled field (lot titles, usernames, message copy) has
-to be HTML-escaped before it lands in the template — otherwise a
+to be HTML-escaped before it lands in the template - otherwise a
 malicious lot title like ``<img src=x onerror=alert(1)>`` becomes
 live HTML in whatever the recipient's mail client renders.
 """
@@ -48,7 +48,7 @@ def test_safe_strings_render_unchanged():
 
 
 def test_none_auction_title_is_safe():
-    """``auction_title=None`` is the no-lot-card branch — must not
+    """``auction_title=None`` is the no-lot-card branch - must not
     blow up on ``html.escape(None)``."""
     out = build_notification_email_html(
         notification_type_value="bid_placed",
@@ -62,7 +62,7 @@ def test_none_auction_title_is_safe():
 
 
 def test_public_base_url_is_html_escaped(monkeypatch):
-    """``PUBLIC_BASE_URL`` is operator-set but still env-supplied —
+    """``PUBLIC_BASE_URL`` is operator-set but still env-supplied -
     if a misconfig pushes ``"`` or ``<`` into it, the unquoted splice
     into ``<a href="...">`` would break out of the attribute."""
     from app.services import email as email_module

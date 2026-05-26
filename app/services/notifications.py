@@ -1,6 +1,6 @@
 """Three-channel notification dispatch: in-app row, WebSocket push,
 and email. ``notify_user`` is the single fan-out helper every caller
-goes through — per-user ``notify_*`` flags gate each channel so a
+goes through - per-user ``notify_*`` flags gate each channel so a
 recipient can mute email without losing in-app history. Email send
 is fire-and-forget via the persistent outbox queue so an SMTP
 hiccup doesn't take down the request that triggered the notify.
@@ -53,14 +53,14 @@ def send_verification_email(user: User) -> None:
     html_content = build_verification_email_html(user.username, link)
     _fire_and_forget_email(
         user.email,
-        "Подтвердите email — Лотус",
+        "Подтвердите email - Лотус",
         html_content,
     )
 
 
 def send_password_reset_email(user: User) -> None:
     """Fire-and-forget the password-reset link. The token's ``tv``
-    claim is read from the user's current ``token_version`` — a later
+    claim is read from the user's current ``token_version`` - a later
     successful /password-reset/confirm bumps tv so this link (and any
     other in-flight reset link for the same account) auto-invalidate."""
     token = create_password_reset_token(user)
@@ -68,7 +68,7 @@ def send_password_reset_email(user: User) -> None:
     html_content = build_password_reset_email_html(user.username, link)
     _fire_and_forget_email(
         user.email,
-        "Сброс пароля — Лотус",
+        "Сброс пароля - Лотус",
         html_content,
     )
 
@@ -76,12 +76,12 @@ def send_password_reset_email(user: User) -> None:
 def send_password_changed_email(user: User) -> None:
     """Notification email sent right after /password-reset/confirm
     succeeds. The legitimate user sees the trail even if the reset
-    was triggered by someone who'd taken over their inbox — they
+    was triggered by someone who'd taken over their inbox - they
     can react before the attacker has time to dig in."""
     html_content = build_password_changed_email_html(user.username)
     _fire_and_forget_email(
         user.email,
-        "Пароль изменён — Лотус",
+        "Пароль изменён - Лотус",
         html_content,
     )
 

@@ -1,5 +1,5 @@
 /* ================================================================
-   Лотус — Common Design System
+   Лотус - Common Design System
    Подключается ПЕРЕД per-page CSS на всех страницах.
    Содержит: токены, reset, навбар, кнопки, модалки, формы,
              уведомления, футер, моб.меню, FAB, scrollbar.
@@ -198,7 +198,7 @@ body {
 }
 
 /* ================================================================
-   SEARCH (универсальный — навбар и страницы)
+   SEARCH (универсальный - навбар и страницы)
    ================================================================ */
 .search-wrap {
   display: flex; align-items: center; gap: 8px;
@@ -629,7 +629,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 
 /* ================================================================
-   TABS — общий компонент (.lot-tabs / .tabs-nav / .lot-tab-btn / .tab-panel)
+   TABS - общий компонент (.lot-tabs / .tabs-nav / .lot-tab-btn / .tab-panel)
    Используется на auction.html и user.html.
    ================================================================ */
 .lot-tabs {
@@ -645,7 +645,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
   border-bottom: 1px solid var(--border);
   background: var(--bg-3);
   padding: 0 4px;
-  /* sticky убран — конфликтовал с overflow:hidden родителя
+  /* sticky убран - конфликтовал с overflow:hidden родителя
      и при некоторых условиях вкладки накладывались на содержимое */
 }
 .lot-tab-btn {
@@ -768,7 +768,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
   cursor: not-allowed;
 }
 
-/* Toggle-пилюля (чекбокс-стиль) — независимая от выбора звёзд */
+/* Toggle-пилюля (чекбокс-стиль) - независимая от выбора звёзд */
 .rev-pill-toggle {
   background: var(--bg-2);
   border-color: var(--border-hi);
@@ -824,7 +824,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 
 /* ================================================================
-   LOAD ERROR — общая ошибка загрузки данных (renderLoadError)
+   LOAD ERROR - общая ошибка загрузки данных (renderLoadError)
    ================================================================ */
 .load-error {
   display: flex; flex-direction: column;
@@ -881,7 +881,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 .page-content-wrap { flex: 1; }
 
 /* ================================================================
-   UTILITY CLASSES — ограниченный набор, чтобы вытащить
+   UTILITY CLASSES - ограниченный набор, чтобы вытащить
    самые повторяющиеся inline-стили из шаблонов
    ================================================================ */
 .flex-1     { flex: 1; }
@@ -923,7 +923,7 @@ textarea.form-input { height: auto; padding: 10px 12px; resize: vertical; min-he
 }
 
 /* ================================================================
-   PAYOUT HINT — shown live under seller-side price inputs (create
+   PAYOUT HINT - shown live under seller-side price inputs (create
    modal on the home page, edit modal on the lot page). Driven by
    attachPayoutHint() in the per-page JS so the hint always reflects
    the live commission rate from /api/platform.

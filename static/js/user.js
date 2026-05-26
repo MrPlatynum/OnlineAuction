@@ -59,7 +59,7 @@ async function init() {
 async function render(data) {
   const { user, auctions, stats } = data;
   sellerId = user.id;
-  document.title = `${user.username} — Лотус`;
+  document.title = `${user.username} - Лотус`;
   document.getElementById('crumbName').textContent = user.username;
 
   const isMe = token && (() => {
@@ -191,7 +191,7 @@ async function render(data) {
   `;
 
   if (rstats.total > 0) renderReviews();
-  // Deep-link: #reviews — плавно скроллит к секции отзывов
+  // Deep-link: #reviews - плавно скроллит к секции отзывов
   if (location.hash === '#reviews') {
     setTimeout(() => document.getElementById('section-reviews')?.scrollIntoView({ behavior: 'smooth' }), 200);
   }

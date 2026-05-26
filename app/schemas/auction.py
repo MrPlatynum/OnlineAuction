@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 def _check_image_url(value: str) -> str:
     """Reject anything that's not an http(s) absolute URL or a same-site
     /-relative path. Without this, ``javascript:``, ``data:``, ``vbscript:``
-    URLs flow into the DB and end up rendered as ``<img src="...">`` —
+    URLs flow into the DB and end up rendered as ``<img src="...">`` -
     which is the exact stored-XSS shape we already escape on the client,
     but defence-in-depth: don't accept hostile content in the first place.
     """

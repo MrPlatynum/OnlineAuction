@@ -39,19 +39,19 @@ window.syncUrlFromFilters = function() {
   const newUrl = location.pathname + (qs ? '?' + qs : '') + location.hash;
   if (newUrl === location.pathname + location.search + location.hash) return;
   // pushState (а не replaceState), чтобы Back/Forward работали как
-  // ожидает пользователь — каждый коммит фильтра = отдельная запись
+  // ожидает пользователь - каждый коммит фильтра = отдельная запись
   // истории. popstate-обработчик ниже перезагружает страницу: проще
   // и надёжнее чем дублировать всю логику UI-sync из init-IIFE.
   history.pushState({ filters: true }, '', newUrl);
 };
 
-// При навигации Back/Forward — перезагружаем страницу, чтобы инициализация
-// полностью отработала по новой URL. Альтернатива — вручную синхронизировать
-// все инпуты/чекбоксы/активные классы/breadcrumb — на ~80 строк кода больше
+// При навигации Back/Forward - перезагружаем страницу, чтобы инициализация
+// полностью отработала по новой URL. Альтернатива - вручную синхронизировать
+// все инпуты/чекбоксы/активные классы/breadcrumb - на ~80 строк кода больше
 // и легче расходится с init IIFE.
 window.addEventListener('popstate', () => {
   // Защита от случая, когда наша же pushState внутри loadAuctions
-  // как-то прокатилась — реальный popstate всегда несёт state≠null от нас
+  // как-то прокатилась - реальный popstate всегда несёт state≠null от нас
   // или null от первой записи. Перезагрузка идемпотентна в обоих случаях.
   location.reload();
 });
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => setTimeout(loadCategories, 1
 
 // Fetch the live platform constants and reflect the seller commission
 // in the hero strip. Falls back silently to the hard-coded "7%" already
-// in the HTML if the endpoint is unreachable — the page must not break
+// in the HTML if the endpoint is unreachable - the page must not break
 // because a marketing badge couldn't update.
 document.addEventListener('DOMContentLoaded', async () => {
   const el = document.getElementById('statCommission');
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Загрузка категорий с сервера
 // ===== Search History =====
 // localStorage can throw on every access in private-browsing mode
-// (Safari) and when the user has disabled site data — search history
+// (Safari) and when the user has disabled site data - search history
 // is a nice-to-have, never let it break the page. Each access below
 // is wrapped in try/catch that intentionally swallows; the function
 // returns an empty array / no-ops so callers don't need to branch.
@@ -198,8 +198,8 @@ function setAuctionType(type) {
   const isBin = type === 'bin';
   const hint  = document.getElementById('auctionTypeHint');
   if (hint) hint.textContent = isBin
-    ? 'Фиксированная цена — первый покупатель забирает лот'
-    : 'Покупатели делают ставки — побеждает наибольшая';
+    ? 'Фиксированная цена - первый покупатель забирает лот'
+    : 'Покупатели делают ставки - побеждает наибольшая';
 
   const bidFields = document.getElementById('bidFields');
   const binFields = document.getElementById('binFields');
@@ -217,7 +217,7 @@ async function loadCategories() {
     if (!r.ok) return;
     const cats = await r.json();
 
-    // Заполняем боковую панель — дерево категорий
+    // Заполняем боковую панель - дерево категорий
     const listEl = document.getElementById('fsCatList');
     if (listEl) {
       // Убираем дубли если уже есть
@@ -309,7 +309,7 @@ async function loadCategories() {
       parentSel.addEventListener('change', () => {
         const catId = +parentSel.value;
         const cat = cats.find(c => c.id === catId);
-        subSel.innerHTML = '<option value="">— Вся категория —</option>';
+        subSel.innerHTML = '<option value="">- Вся категория -</option>';
         if (cat && cat.children && cat.children.length) {
           cat.children.forEach(ch => {
             const o = document.createElement('option');
@@ -320,7 +320,7 @@ async function loadCategories() {
         } else {
           subSel.style.display = 'none';
         }
-        // Если нет подкатегорий — sub = parent
+        // Если нет подкатегорий - sub = parent
         if (!cat || !cat.children || !cat.children.length) {
           subSel.value = parentSel.value || '';
         } else {
@@ -388,12 +388,12 @@ window.renderFilterTags = function() {
     const parentName = currentFilters.categoryParentName;
     // Имена приходят из loadCategories асинхронно (~150мс задержка после
     // DOMContentLoaded). До этого либо если slug отсутствует в каталоге,
-    // имя пустое — показываем сам slug как fallback, иначе чип будет
+    // имя пустое - показываем сам slug как fallback, иначе чип будет
     // выглядеть пустым «📂 ».
     const name = currentFilters.categoryName || currentFilters.category;
     let label;
     if (parentSlug && parentName) {
-      // Подкатегория — "Одежда → Мужская", клик на "Одежда" переключает на родителя
+      // Подкатегория - "Одежда → Мужская", клик на "Одежда" переключает на родителя
       label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${esc(parentName)}">${esc(parentName)}</span> <span style="opacity:.5;">›</span> ${esc(name)}`;
     } else {
       label = `📂 ${esc(name)}`;
@@ -502,7 +502,7 @@ window.resetFilters = function() {
 
 
 
-// Duration hint — показывает время окончания в реальном времени
+// Duration hint - показывает время окончания в реальном времени
 document.addEventListener('DOMContentLoaded', () => {
   const dur = document.getElementById('auctionDuration');
   const hint = document.getElementById('durationHint');
@@ -520,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const end = new Date(Date.now() + mins * 60000);
     const endStr = end.toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    hint.textContent = `${label} — завершится ${endStr}`;
+    hint.textContent = `${label} - завершится ${endStr}`;
   }
 
   dur.addEventListener('input', updateHint);
@@ -665,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                                              : 'Активные аукционы';
                 }
             }
-            // Категория — slug может прийти из хлебных крошек страницы лота.
+            // Категория - slug может прийти из хлебных крошек страницы лота.
             // Названия категорий подгрузятся в loadCategories(), но фильтр работает по slug.
             if (p.get('category')) {
                 currentFilters.category = p.get('category');
@@ -693,7 +693,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentFilters.sortBy = sb;
                 const sel = document.getElementById('sortFilter');
                 if (sel) sel.value = sb;
-                // обновить декоративный dropdown — селект + лейбл
+                // обновить декоративный dropdown - селект + лейбл
                 document.querySelectorAll('.fs-dd-opt').forEach(o => {
                     const isSel = o.dataset.value === sb;
                     o.classList.toggle('is-selected', isSel);
@@ -707,7 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const pg = parseInt(p.get('page') || '', 10);
             if (Number.isFinite(pg) && pg > 1) currentFilters.page = pg;
-            // Если в URL есть фильтры — пользователь пришёл из ссылки
+            // Если в URL есть фильтры - пользователь пришёл из ссылки
             // «Все лоты» / «Все завершённые». После первой загрузки лотов
             // плавно прокручиваем к началу списка.
             const hasUrlFilters = !!(
@@ -716,7 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 || p.get('sort_by') || p.get('page')
             );
             window._scrollToLotsOnLoad = hasUrlFilters || !!p.get('scroll');
-            // URL — авторитетный источник фильтров: запретить позже
+            // URL - авторитетный источник фильтров: запретить позже
             // loadFiltersFromStorage перезаписывать значения из localStorage,
             // иначе расшаренная ссылка перестанет восстанавливаться один-в-один.
             window._filtersFromUrl = hasUrlFilters;
@@ -853,7 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }</div>`;
         }
 
-        // Cards are now <a> tags — no click handler needed
+        // Cards are now <a> tags - no click handler needed
 
         let totalPages = 1;
 
@@ -895,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     localStorage.removeItem('flash_verify_email');
                     showToast(
                         'Подтвердите email',
-                        `Мы отправили письмо на ${flashEmail}. Чтобы делать ставки и создавать лоты — подтвердите адрес.`,
+                        `Мы отправили письмо на ${flashEmail}. Чтобы делать ставки и создавать лоты - подтвердите адрес.`,
                         'info'
                     );
                 }
@@ -911,7 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // wired once: image upload + crop UI
             try { wireLotImageUI(); } catch {}
 
-            // если токена нет — гость
+            // если токена нет - гость
             if (!token) {
                 currentUser = null;
                 window.currentUser = null;
@@ -924,7 +924,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     method: 'GET'
                 });
             } catch (err) {
-                // сеть/сервер недоступен — НЕ разлогиниваем
+                // сеть/сервер недоступен - НЕ разлогиниваем
                 console.warn('loadCurrentUser: network error', err);
                 return null;
             }
@@ -967,12 +967,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function loadAuctions() {
             const container = document.getElementById('auctionsContainer');
-            // Любой запрос — это и есть «зафиксированные фильтры»: синхронизируем
+            // Любой запрос - это и есть «зафиксированные фильтры»: синхронизируем
             // URL и активные чипы фильтров, чтобы оба индикатора шли в ногу.
             if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
             if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
 
-            // 1. Fade-out — гарантированно ждём конца анимации
+            // 1. Fade-out - гарантированно ждём конца анимации
             if (container) {
                 container.classList.remove('fade-in');
                 container.classList.add('fade-out');
@@ -1114,7 +1114,7 @@ function buildPageList(current, total) {
             let isAutoScrolling = false;
             // Активна ли зона снэпа: верх «.page-header» (или фоллбек на ленту лотов)
             // находится в коридоре [navH+12, navH+12+SNAP_ZONE_PX] от верха viewport.
-            // Меньше значение — позже срабатывает, ближе к самому началу лотов.
+            // Меньше значение - позже срабатывает, ближе к самому началу лотов.
             const SNAP_ZONE_PX = 120;
             const DEBOUNCE_MS = 150;
             const COOLDOWN_MS = 700;
@@ -1123,7 +1123,7 @@ function buildPageList(current, total) {
                 if (isAutoScrolling) return;
                 // не вмешиваемся при открытой модалке (auth / create / sort dropdown и пр.)
                 if (document.body.classList.contains('modal-open')) return;
-                // если фокус в поле ввода (поиск, фильтр) — пользователь печатает, не трогаем
+                // если фокус в поле ввода (поиск, фильтр) - пользователь печатает, не трогаем
                 const ae = document.activeElement;
                 if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
 
@@ -1159,7 +1159,7 @@ function buildPageList(current, total) {
             goToPage(currentFilters.page + delta);
         }
 
-        // Page-jump input — Enter or blur applies
+        // Page-jump input - Enter or blur applies
         document.addEventListener('DOMContentLoaded', () => {
             const jumpInput = document.getElementById('pageJumpInput');
             if (!jumpInput) return;
@@ -1228,14 +1228,14 @@ function buildPageList(current, total) {
 
         // Безопасное закрытие WebSocket с учётом состояния. Если ws ещё
         // в CONNECTING (readyState=0), браузер логирует «closed before
-        // connection established» — это безобидно, но шумно. Дожидаемся
+        // connection established» - это безобидно, но шумно. Дожидаемся
         // onopen и закрываем уже установленное соединение.
         function safeCloseWs(ws) {
             if (!ws) return;
             ws.intentionallyClosed = true;
             if (ws.pingInterval) clearInterval(ws.pingInterval);
             // При быстром скролле наблюдатель может попросить закрыть
-            // сокет, который ещё не успел соединиться — сетевая ошибка
+            // сокет, который ещё не успел соединиться - сетевая ошибка
             // в такой момент не должна копить счётчик реконнектов.
             const id = ws._auctionId;
             if (id != null) reconnectAttempts[id] = 0;
@@ -1353,7 +1353,7 @@ function buildPageList(current, total) {
                        data-category="${catLabel}"
                        data-slide-count="${allImgUrls.length}">
 
-                        <!-- Картинка — кликабельна -->
+                        <!-- Картинка - кликабельна -->
                         <a href="auction.html?id=${auction.id}" class="auction-image-link">
                             <div class="auction-image">
                                 ${imagesHtml}
@@ -1367,7 +1367,7 @@ function buildPageList(current, total) {
                             </div>
                         </a>
 
-                        <!-- Текстовый блок — статичный -->
+                        <!-- Текстовый блок - статичный -->
                         <div class="auction-body">
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
                                 <div class="auction-title">${safeTitle}</div>
@@ -1382,7 +1382,7 @@ function buildPageList(current, total) {
                 `;
             }).join('');
 
-            // Таймеры — на все лоты сразу: дёшево, идёт чисто по DOM.
+            // Таймеры - на все лоты сразу: дёшево, идёт чисто по DOM.
             auctions.forEach(auction => {
                 startTimer(auction.id, auction.time_remaining);
             });
@@ -1391,7 +1391,7 @@ function buildPageList(current, total) {
             // области. Без этого 25-50 одновременных подключений с одного
             // IP пробивают лимит сервера и часть карточек получает 1008
             // Policy Violation. IntersectionObserver сам поднимает /
-            // закрывает соединение при скролле — естественный rate limit.
+            // закрывает соединение при скролле - естественный rate limit.
             if (token) attachAuctionWsObserver();
         }
 
@@ -1407,7 +1407,7 @@ function buildPageList(current, total) {
         }
 
         function startTimer(auctionId, initialTime) {
-            // Если аукцион уже завершён — просто выставляем текст и НЕ запускаем интервал
+            // Если аукцион уже завершён - просто выставляем текст и НЕ запускаем интервал
             const timerElementNow = document.querySelector(`[data-timer="${auctionId}"]`);
             const init = Number(initialTime);
 
@@ -1476,8 +1476,8 @@ function buildPageList(current, total) {
                 }
 
                 // Не реконнектиться при намеренном закрытии (смена страницы,
-                // фильтр) и при отказе сервера по политике (1008 — лимит
-                // подключений с IP, 1011 — внутренняя ошибка). Иначе
+                // фильтр) и при отказе сервера по политике (1008 - лимит
+                // подключений с IP, 1011 - внутренняя ошибка). Иначе
                 // получится reconnect-шторм против лимита коннектов.
                 if (ws.intentionallyClosed) return;
                 if (event && (event.code === 1000 || event.code === 1008 || event.code === 1011)) {
@@ -1486,7 +1486,7 @@ function buildPageList(current, total) {
 
                 // Экспоненциальная задержка с half-jitter: при разовом
                 // падении сервера сотня вкладок не штормит обратно
-                // одной секундой — равномерно размазывается по [base/2, base].
+                // одной секундой - равномерно размазывается по [base/2, base].
                 if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
                 const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
                 const delay = base / 2 + Math.random() * (base / 2);
@@ -1519,7 +1519,7 @@ function buildPageList(current, total) {
             const priceEl = card.querySelector('.auction-price');
             if (!priceEl) return;
             const next = Number(newPrice).toFixed(2) + ' ₽';
-            // Если цена не изменилась — ничего не трогаем, анимация-флэш
+            // Если цена не изменилась - ничего не трогаем, анимация-флэш
             // только для реальных обновлений. Иначе при refresh-on-view
             // (REST-запросе при первом появлении карточки в viewport)
             // карточка моргала бы зря.
@@ -1662,7 +1662,7 @@ function buildPageList(current, total) {
             if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
             backdrop.addEventListener('click', () => setOpen(false));
 
-            // Esc dismisses — keyboard accessibility + a useful escape
+            // Esc dismisses - keyboard accessibility + a useful escape
             // hatch for desktop testing in DevTools mobile emulation.
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {
@@ -1671,7 +1671,7 @@ function buildPageList(current, total) {
             });
 
             // Apply / Reset buttons inside the drawer should dismiss it
-            // on mobile — the user has expressed intent, no reason to
+            // on mobile - the user has expressed intent, no reason to
             // keep the overlay covering the results they're about to see.
             sidebar.addEventListener('click', (e) => {
                 const btn = e.target.closest('.fs-actions .btn');
@@ -1680,7 +1680,7 @@ function buildPageList(current, total) {
                 }
             });
 
-            // Active-filter badge — recomputes whenever filters change so
+            // Active-filter badge - recomputes whenever filters change so
             // the user can see at a glance whether the drawer hides any
             // narrowing rules. Counts: status≠active, any category, any
             // type, any price, any creator, any non-default sort.
@@ -1703,7 +1703,7 @@ function buildPageList(current, total) {
                 toggle.classList.toggle('has-active', n > 0);
             };
             updateBadge();
-            // Recompute after any handler that mutates filters — the
+            // Recompute after any handler that mutates filters - the
             // sidebar fires applyFilters at the end of each change, and
             // resetFilters writes the inputs synchronously, so a single
             // listener on the sidebar is enough for both paths.
@@ -1755,7 +1755,7 @@ function buildPageList(current, total) {
             if (typeof setAuctionType === 'function') setAuctionType('bid');
             if (typeof loadCategories === 'function') loadCategories();
             // Wire the live "К получению" hints under both price inputs.
-            // Idempotent — attaches the listener once per modal lifetime.
+            // Idempotent - attaches the listener once per modal lifetime.
             if (typeof window.attachPayoutHint === 'function') {
                 window.attachPayoutHint(
                     document.getElementById('auctionPrice'),

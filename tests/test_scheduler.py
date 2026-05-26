@@ -1,6 +1,6 @@
 """Event-driven auction scheduler.
 
-Direct tests against ``app.services.auction_scheduler`` — bypass the
+Direct tests against ``app.services.auction_scheduler`` - bypass the
 HTTP layer so we can craft auctions with sub-minute ``end_time`` (the
 public API enforces ``duration_minutes >= 1``).
 """
@@ -118,7 +118,7 @@ async def test_auction_completes_when_end_time_passes(registered_user):
 async def test_complete_auction_skips_when_end_time_extended(registered_user):
     """complete_auction must re-check end_time after acquiring the row
     lock. If end_time is now in the future (PATCH /auctions extend
-    raced with this tick) it must exit without settling — otherwise an
+    raced with this tick) it must exit without settling - otherwise an
     extended lot would close at the OLD deadline."""
     from app.services.auctions import complete_auction
 
@@ -143,7 +143,7 @@ async def test_complete_auction_commits_money_before_notifying(
     partial set of notifications. Worse, if the *first* notify raised
     before its own commit the entire financial state (balances,
     transactions, is_completed) was rolled back. After the refactor
-    notifications run only after a single final commit — even if every
+    notifications run only after a single final commit - even if every
     one of them blows up, the money has already moved."""
     from datetime import timedelta
 
@@ -186,7 +186,7 @@ async def test_complete_auction_commits_money_before_notifying(
         ).scalar_one()
         assert bidder.balance == 1000 - 250
         # Seller is credited gross (+250) then debited 7% commission
-        # (−17.50) in the same transaction — both moves committed
+        # (−17.50) in the same transaction - both moves committed
         # before the notification raise, so the net is the post-fee
         # 1000 + 250 − 17.50 = 1232.50.
         assert seller.balance == 1232.50
@@ -195,7 +195,7 @@ async def test_complete_auction_commits_money_before_notifying(
 async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
     """When _wait_and_complete wakes and sees the lot was extended, it
     calls schedule_auction itself to re-arm the tick. The original task
-    then exits via its finally clause — which must NOT pop the dict
+    then exits via its finally clause - which must NOT pop the dict
     entry, because schedule_auction has already replaced it with the new
     task. Without the identity check the new task would be orphaned from
     cancel_auction / shutdown."""

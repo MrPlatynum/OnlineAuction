@@ -72,7 +72,7 @@ async def _invalidate_user_sessions(user: User) -> None:
 @router.post("/register", response_model=dict)
 @limiter.limit("5/minute")
 async def register(request: Request, user: UserCreate, db: AsyncSession = Depends(get_db)):
-    # Single generic message for both collisions — separate "username taken"
+    # Single generic message for both collisions - separate "username taken"
     # vs "email taken" replies let an attacker enumerate registered usernames
     # and emails by probing /register.
     username_taken = (
@@ -95,7 +95,7 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
     except IntegrityError:
         # Two concurrent /register calls can both pass the pre-check
         # (no row exists yet) and race to insert the same username or
-        # email — Postgres unique-constraint enforcement makes the loser
+        # email - Postgres unique-constraint enforcement makes the loser
         # see IntegrityError. Return the same generic 400 as the
         # pre-check so the response is timing- and message-stable.
         await db.rollback()
@@ -118,7 +118,7 @@ async def verify_email(
     data: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Public — landing page POSTs the token from the email link here.
+    """Public - landing page POSTs the token from the email link here.
     Idempotent: a click on an already-consumed link still returns 200 so
     a double-fire (user clicking the link twice, or a link prefetcher
     racing the user) doesn't look like an error."""
@@ -127,7 +127,7 @@ async def verify_email(
         await db.execute(select(User).where(User.id == user_id))
     ).scalar_one_or_none()
     if user is None:
-        # Don't distinguish "user gone" from "bad token" — the latter
+        # Don't distinguish "user gone" from "bad token" - the latter
         # branch is more common (expired / typo), and both warrant the
         # same 400 from the user's perspective.
         raise HTTPException(
@@ -202,7 +202,7 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
     current_user.hashed_password = hash_password(data.new_password)
     # Bump tv + close in-flight WS in one step. The caller still has
-    # *this* request's token in their browser — return a fresh one so
+    # *this* request's token in their browser - return a fresh one so
     # they don't get kicked out of the very session they used to
     # change the password.
     await _invalidate_user_sessions(current_user)
@@ -213,7 +213,7 @@ async def change_password(
 
 
 # Generic responses kept identical regardless of whether the address
-# corresponds to a registered account — without this, response timing
+# corresponds to a registered account - without this, response timing
 # or text could be used to enumerate users (same anti-enumeration
 # guarantee /register makes).
 _GENERIC_REQUEST_RESPONSE = {
@@ -231,14 +231,14 @@ async def password_reset_request(
     data: PasswordResetRequestBody,
     db: AsyncSession = Depends(get_db),
 ):
-    """Public — accepts an email and *if it exists* mails a reset link.
+    """Public - accepts an email and *if it exists* mails a reset link.
     Always returns 200 with a generic message so the response shape
     can't be used to probe which addresses are registered."""
     # Без выравнивания времени можно отличать три ветки по latency:
     # unknown (только SELECT, ~5мс) / throttled (SELECT, ~5мс) /
     # fresh existing (SELECT + UPDATE + COMMIT + REFRESH + enqueue,
     # ~30-50мс). Поднимаем минимальную длительность отклика так, чтобы
-    # все три ветки укладывались в одинаковое окно — детектируемая
+    # все три ветки укладывались в одинаковое окно - детектируемая
     # разница над шумом сети уходит.
     deadline = asyncio.get_running_loop().time() + PASSWORD_RESET_REQUEST_FLOOR_SECONDS
     user = (
@@ -270,7 +270,7 @@ async def password_reset_confirm(
     data: PasswordResetConfirmBody,
     db: AsyncSession = Depends(get_db),
 ):
-    """Public — accepts a token and the new password. Validates the
+    """Public - accepts a token and the new password. Validates the
     token's ``tv`` against the user's current ``token_version`` so a
     second click on the same link (after a successful first reset)
     fails: the first confirm bumped tv, the second's claim no longer
@@ -278,7 +278,7 @@ async def password_reset_confirm(
     user_id, claimed_tv = decode_password_reset_token(data.token)
     # Row-lock the user so two concurrent confirms with the same token
     # serialise. Without this, both reads see the original token_version,
-    # both pass the check, both bump tv to N+1, both commit — and the
+    # both pass the check, both bump tv to N+1, both commit - and the
     # link is two-shot instead of one-shot.
     user = (
         await db.execute(
@@ -286,7 +286,7 @@ async def password_reset_confirm(
         )
     ).scalar_one_or_none()
     if user is None or claimed_tv != user.token_version:
-        # Don't distinguish "user gone" from "token superseded" — both
+        # Don't distinguish "user gone" from "token superseded" - both
         # branches are equally a "this link doesn't work anymore" 400
         # from the user's perspective.
         raise HTTPException(
@@ -294,7 +294,7 @@ async def password_reset_confirm(
         )
 
     user.hashed_password = hash_password(data.new_password)
-    # Bumping tv kills every other JWT this user holds — outstanding
+    # Bumping tv kills every other JWT this user holds - outstanding
     # auth sessions, other in-flight reset links, all gone. The fresh
     # password forces a re-login on /login (we don't auto-issue a
     # token here: the user typed the new password into the reset

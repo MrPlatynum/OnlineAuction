@@ -526,7 +526,7 @@ function renderSubs() {
     const since = s.subscribed_at
       ? new Date(s.subscribed_at.endsWith('Z') ? s.subscribed_at : s.subscribed_at + 'Z')
           .toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' })
-      : '—';
+      : '-';
     return `
       <div class="sub-seller-card">
         <div class="sub-seller-top">
@@ -569,9 +569,9 @@ async function unsubscribeFrom(sellerId, btn) {
 function renderTimeline(data) {
   const tl = $('timeline');
   const events = [];
-  (data.won_auctions||[]).slice(0,2).forEach(i => events.push({ type:'win', icon:'🏆', title:'Победа в аукционе', desc: i.title || '—' }));
-  (data.active_bids||[]).slice(0,3).forEach(i => events.push({ type:'bid', icon:'🎯', title:'Активная ставка', desc: i.title || '—' }));
-  (data.created_auctions||[]).slice(0,2).forEach(i => events.push({ type:'created', icon:'📦', title:'Создан лот', desc: i.title || '—' }));
+  (data.won_auctions||[]).slice(0,2).forEach(i => events.push({ type:'win', icon:'🏆', title:'Победа в аукционе', desc: i.title || '-' }));
+  (data.active_bids||[]).slice(0,3).forEach(i => events.push({ type:'bid', icon:'🎯', title:'Активная ставка', desc: i.title || '-' }));
+  (data.created_auctions||[]).slice(0,2).forEach(i => events.push({ type:'created', icon:'📦', title:'Создан лот', desc: i.title || '-' }));
   if (!events.length) { tl.innerHTML = '<div class="tl-empty">📋 Нет активности</div>'; return; }
   tl.innerHTML = events.slice(0,6).map(e => `
     <div class="tl-item">
@@ -609,7 +609,7 @@ function openCropModal(src) {
   // Инициализируем Cropper после того как изображение загрузится
   img.onload = () => {
     cropper = new Cropper(img, {
-      aspectRatio: 1,          // квадрат — для аватара
+      aspectRatio: 1,          // квадрат - для аватара
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.8,
@@ -931,7 +931,7 @@ async function load() {
   }
   $('bal').textContent    = Number(user.balance || 0).toFixed(2);
   if ($('balBadge'))       $('balBadge').textContent = Number(user.balance || 0).toFixed(2) + ' ₽';
-  document.title = `${user.username} — Лотус`;
+  document.title = `${user.username} - Лотус`;
 
   // Nav-пилюля
   const navPill = $('navUserPill');
@@ -949,13 +949,13 @@ async function load() {
   }
   if (navPill) navPill.style.display = 'flex';
 
-  if ($('infoUsername'))  $('infoUsername').textContent  = user.username || '—';
-  if ($('infoEmail'))     $('infoEmail').textContent     = user.email    || '—';
+  if ($('infoUsername'))  $('infoUsername').textContent  = user.username || '-';
+  if ($('infoEmail'))     $('infoEmail').textContent     = user.email    || '-';
   if ($('emailVerifiedBadge'))   $('emailVerifiedBadge').style.display   = user.email_verified ? 'inline-flex' : 'none';
   if ($('emailUnverifiedBadge')) $('emailUnverifiedBadge').style.display = user.email_verified ? 'none' : 'inline-flex';
   if ($('resendVerifyBtn'))      $('resendVerifyBtn').style.display      = user.email_verified ? 'none' : 'inline-flex';
   if ($('infoBalance'))   $('infoBalance').textContent   = Number(user.balance || 0).toFixed(2) + ' ₽';
-  if ($('infoCreatedAt')) $('infoCreatedAt').textContent = user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('ru-RU') : '—';
+  if ($('infoCreatedAt')) $('infoCreatedAt').textContent = user.created_at ? new Date(user.created_at + 'Z').toLocaleDateString('ru-RU') : '-';
   loadNotifSettings(user);
   initTheme();
 
@@ -1010,7 +1010,7 @@ load().catch(err => {
     }
   });
   observer.observe(canvas.parentElement);
-  // Fallback — если панель уже видима
+  // Fallback - если панель уже видима
   setTimeout(() => { if (canvas.offsetWidth > 0) renderChart(); }, 100);
 });
 

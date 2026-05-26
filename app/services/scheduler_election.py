@@ -2,7 +2,7 @@
 
 The auction scheduler (`app/services/auction_scheduler.py`) keeps a
 pair of ``asyncio.Task`` per active lot and is single-process by
-design — state lives in module dicts. Running it under
+design - state lives in module dicts. Running it under
 ``uvicorn --workers N`` would arm N copies of every timer; the
 existing row-lock + ``is_active`` guard in ``complete_auction`` keeps
 that *correct* (only one worker actually settles each lot), but it's
@@ -29,7 +29,7 @@ Lifecycle:
   (not pooled), the lock is taken, and the connection sits idle
   for the lifetime of the worker. Postgres releases the lock when
   the backend disconnects, so a SIGKILL'd leader frees the lock
-  automatically — the next worker restart can claim it.
+  automatically - the next worker restart can claim it.
 - Graceful shutdown closes the connection explicitly.
 
 Heartbeat (#M3):
@@ -57,7 +57,7 @@ from app import database as _db_module
 
 logger = logging.getLogger(__name__)
 
-# Hand-picked 64-bit integer — picked once, hard-coded forever so
+# Hand-picked 64-bit integer - picked once, hard-coded forever so
 # every replica probes the same slot. ``pg_advisory_lock`` takes
 # ``bigint``; this fits.
 SCHEDULER_LOCK_KEY: int = 0x4C_4F_54_55_53_53_43_48  # "LOTUSSCH"
@@ -68,7 +68,7 @@ _leader_connection: AsyncConnection | None = None
 def _election_enabled() -> bool:
     """Tests and single-worker dev set this to ``false`` so every
     process just acts as the leader without touching the lock. The
-    election code paths themselves still have to be tested — those
+    election code paths themselves still have to be tested - those
     tests flip the env var back on around the call."""
     return os.getenv("AUCTION_SCHEDULER_ELECTION_ENABLED", "true").lower() not in {
         "false", "0", "no", "off",
@@ -118,7 +118,7 @@ async def try_become_scheduler_leader() -> bool:
     if not got:
         await conn.close()
         logger.info(
-            "scheduler leader is held by another worker — "
+            "scheduler leader is held by another worker - "
             "this process will serve traffic only"
         )
         return False
@@ -131,7 +131,7 @@ async def try_become_scheduler_leader() -> bool:
 
 
 async def release_scheduler_lock() -> None:
-    """Close the leader connection on graceful shutdown — Postgres
+    """Close the leader connection on graceful shutdown - Postgres
     releases the advisory lock when the backend disconnects, so the
     next worker can claim it. Safe to call on a follower (no-op)."""
     global _leader_connection
@@ -167,7 +167,7 @@ _heartbeat_stop: asyncio.Event | None = None
 async def _ping_leader_connection() -> bool:
     """Run ``SELECT 1`` on the leader connection. Returns True if it
     succeeds (connection alive, lock still held implicitly), False if
-    it errors — in which case we step down by closing the connection
+    it errors - in which case we step down by closing the connection
     and clearing module state."""
     global _leader_connection
     if _leader_connection is None:
@@ -199,7 +199,7 @@ async def _heartbeat_tick(
     if was_leader:
         if await _ping_leader_connection():
             return True
-        # Lost the lock — fall through to try-claim path.
+        # Lost the lock - fall through to try-claim path.
     became_leader = await try_become_scheduler_leader()
     if became_leader and not was_leader and on_promote is not None:
         try:
@@ -238,7 +238,7 @@ def start_scheduler_heartbeat(
 ) -> None:
     """Start the heartbeat task. No-op if election is disabled (tests)
     or if a task is already running. ``on_promote`` is called once
-    per fresh promotion — typically ``schedule_active_auctions``."""
+    per fresh promotion - typically ``schedule_active_auctions``."""
     global _heartbeat_task, _heartbeat_stop
     if not _election_enabled():
         return

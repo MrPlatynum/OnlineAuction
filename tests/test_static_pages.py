@@ -1,7 +1,7 @@
 """Static-page routes (``static_pages`` router).
 
 Each route just returns one of the templates from ``TEMPLATES_DIR`` via
-``FileResponse``. There's no business logic to test — only that the
+``FileResponse``. There's no business logic to test - only that the
 route is wired, the template exists on disk, and the 404 branch fires
 when it doesn't."""
 

@@ -97,7 +97,7 @@ async def test_buy_now_own_lot_rejected(client, registered_user):
 async def test_withdraw_respects_committed_balance(client, registered_user, second_user):
     """A user leading on an auction has those funds locked. /withdraw
     used to ignore that and let the balance go effectively negative once
-    the auction settled — now it subtracts committed-balance up-front."""
+    the auction settled - now it subtracts committed-balance up-front."""
     auction = (await client.post(
         "/api/auctions",
         json={
@@ -110,7 +110,7 @@ async def test_withdraw_respects_committed_balance(client, registered_user, seco
         headers=registered_user["headers"],
     )).json()
 
-    # bob has $1000, bids $700 — committed = $700, available = $300.
+    # bob has $1000, bids $700 - committed = $700, available = $300.
     bid = await client.post(
         "/api/bids",
         json={"auction_id": auction["id"], "amount": 700.0},
@@ -118,7 +118,7 @@ async def test_withdraw_respects_committed_balance(client, registered_user, seco
     )
     assert bid.status_code == 200
 
-    # Try to withdraw $500 — only $300 is actually free. Used to succeed.
+    # Try to withdraw $500 - only $300 is actually free. Used to succeed.
     r_blocked = await client.post(
         "/api/withdraw",
         json={"amount": 500.0},
@@ -159,7 +159,7 @@ async def test_concurrent_buy_now_only_one_succeeds(
     client, registered_user, second_user, third_user
 ):
     """Two simultaneous /buy-now on the same BIN lot must serialise via
-    SELECT FOR UPDATE — only one buyer is debited and the seller is
+    SELECT FOR UPDATE - only one buyer is debited and the seller is
     credited exactly once."""
     third_headers = third_user["headers"]
 
@@ -197,7 +197,7 @@ async def test_concurrent_buy_now_only_one_succeeds(
 
 async def test_deposit_beyond_max_balance_rejected(client, registered_user):
     """A user firing /deposit at rate-limit ceiling could push their
-    balance past Numeric(12, 2)'s 9_999_999_999.99 max — the column
+    balance past Numeric(12, 2)'s 9_999_999_999.99 max - the column
     would overflow with an opaque DataError. Cap the visible balance
     instead so the failure is a clean 400."""
     from sqlalchemy import update
@@ -238,7 +238,7 @@ async def test_transactions_returns_deposit_record(client, registered_user):
     body = r.json()
     assert body["balance"] == starting_balance + 100.0
     assert body["page"] == 1
-    # Newest first — the deposit we just made is item 0 regardless of
+    # Newest first - the deposit we just made is item 0 regardless of
     # any starting-balance grant.
     deposit_txn = body["items"][0]
     assert deposit_txn["type"] == "deposit"
@@ -248,7 +248,7 @@ async def test_transactions_returns_deposit_record(client, registered_user):
 
 
 async def test_transactions_pagination(client, registered_user):
-    # Five fresh deposits — we assert on the page size, not on absolute
+    # Five fresh deposits - we assert on the page size, not on absolute
     # ``total``, because a starting-balance grant may or may not seed a
     # Transaction row depending on registration logic.
     for amount in (10.0, 20.0, 30.0, 40.0, 50.0):
@@ -301,7 +301,7 @@ async def test_bin_purchase_writes_commission_row(client, registered_user, secon
         await client.get("/api/transactions", headers=registered_user["headers"])
     ).json()
     types = [t["type"] for t in seller_tx["items"][:2]]
-    # Newest first — commission is the second move on the seller side.
+    # Newest first - commission is the second move on the seller side.
     assert types == ["commission", "auction_sale"]
     commission_row = seller_tx["items"][0]
     sale_row = seller_tx["items"][1]

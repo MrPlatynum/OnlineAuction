@@ -1,6 +1,6 @@
 """Seller reviews.
 
-A review is anchored to a settled auction the reviewer participated in —
+A review is anchored to a settled auction the reviewer participated in -
 either as the winning bidder or as the BIN buyer. The endpoints handle
 creation, deletion by the author, and the seller-side aggregate
 (average + per-rating histogram) consumed by the auction page.
@@ -85,7 +85,7 @@ async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db))
                 "created_at": r.created_at.isoformat(),
                 "auction_id": r.auction_id,
                 "auction_title": auctions_map[r.auction_id].title if r.auction_id and r.auction_id in auctions_map else None,
-                "reviewer_username": reviewers[r.reviewer_id].username if r.reviewer_id in reviewers else "—",
+                "reviewer_username": reviewers[r.reviewer_id].username if r.reviewer_id in reviewers else "-",
                 "reviewer_avatar_url": reviewers[r.reviewer_id].avatar_url if r.reviewer_id in reviewers else None,
             }
             for r in reviews
@@ -107,7 +107,7 @@ async def create_review(
     if not seller:
         raise HTTPException(status_code=404, detail="Продавец не найден")
 
-    # Reviewer must have actually transacted with this seller — won the
+    # Reviewer must have actually transacted with this seller - won the
     # referenced completed auction (the only way Auction.winner_id is set
     # is through complete_auction or /buy-now). Without this gate, anyone
     # can post a review on any seller.

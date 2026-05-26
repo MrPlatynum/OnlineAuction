@@ -1,7 +1,7 @@
 """Image upload endpoints for lot photos and user avatars.
 
 Every uploaded byte stream goes through
-``utils.images.validate_and_normalise_image`` first — Pillow ``verify``
+``utils.images.validate_and_normalise_image`` first - Pillow ``verify``
 rejects payloads that don't match a real image header, then a re-open +
 save strips EXIF / ICC and re-encodes. The CPU-bound part runs on a
 worker thread so a multi-megabyte file doesn't stall the event loop;
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api", tags=["uploads"])
 
 def _safely_remove(path: str) -> None:
     """Best-effort delete of an old upload file. Logs on failure
-    instead of swallowing — a stale file blocks nothing functional, but
+    instead of swallowing - a stale file blocks nothing functional, but
     silent failures hide a misconfigured UPLOAD_DIR."""
     if not os.path.exists(path):
         return
@@ -78,7 +78,7 @@ async def _accept_image(file: UploadFile) -> tuple[bytes, str]:
         validate_and_normalise_image, raw
     )
     if content_type != file.content_type:
-        # Magic bytes don't match the Content-Type the client claimed —
+        # Magic bytes don't match the Content-Type the client claimed -
         # almost always means a payload disguised as an image.
         raise HTTPException(status_code=400, detail="Тип содержимого изображения не совпадает")
     return sanitised, ext

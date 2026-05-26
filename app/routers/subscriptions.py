@@ -134,7 +134,7 @@ async def subscribe(
     if seller_id == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя подписаться на себя")
     # Pre-check existence instead of letting the FK violation bubble as
-    # 500 — a non-existent seller_id is a client mistake (stale link),
+    # 500 - a non-existent seller_id is a client mistake (stale link),
     # not an internal error.
     seller = (
         await db.execute(select(User.id).where(User.id == seller_id))

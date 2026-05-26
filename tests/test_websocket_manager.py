@@ -3,7 +3,7 @@
 Exercises the broadcast fan-out's dead-connection cleanup directly
 against the manager so we don't need a full WebSocket testing harness.
 A previous version of broadcast just swallowed the exception and left
-the dead socket in the bucket — every subsequent broadcast then
+the dead socket in the bucket - every subsequent broadcast then
 iterated growing piles of dead sockets and re-raised.
 """
 

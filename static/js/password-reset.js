@@ -21,7 +21,7 @@
     e.preventDefault();
     const token = getToken();
     if (!token) {
-      showError('Ссылка повреждена — токен не найден.');
+      showError('Ссылка повреждена - токен не найден.');
       return;
     }
     const newPassword = $('newPassword').value;
@@ -75,7 +75,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     if (!getToken()) {
-      showError('Ссылка повреждена — токен не найден. Запросите новую.');
+      showError('Ссылка повреждена - токен не найден. Запросите новую.');
       $('resetSubmit').disabled = true;
     }
     $('resetForm').addEventListener('submit', submit);

@@ -9,7 +9,7 @@ spread across categories with varied prices, end times, and a mix of
 BID/BIN types.
 
 Idempotent on the user; auctions are appended every run. Refuses to
-run unless ``AUCTION_ENV in {dev, test, local}`` — the historical
+run unless ``AUCTION_ENV in {dev, test, local}`` - the historical
 hardcoded ``demo`` password risked planting a trivial account on a
 misconfigured prod. ``AUCTION_ENV`` is the project-scoped name; bare
 ``ENV`` was too generic and clashed with cloud-provider conventions.
@@ -34,7 +34,7 @@ from app.utils.time import utcnow
 DEMO_USERNAME = "demo"
 DEMO_EMAIL = "demo@example.com"
 # Random per-run password; printed at the end so the operator can log in.
-# Beats the old hardcoded "demo" — a script ran on the wrong DB no longer
+# Beats the old hardcoded "demo" - a script ran on the wrong DB no longer
 # leaves a trivially-guessable account behind.
 DEMO_PASSWORD = secrets.token_urlsafe(16)
 
@@ -96,7 +96,7 @@ async def seed():
         cats = (await db.execute(select(Category))).scalars().all()
         slug_to_id = {c.slug: c.id for c in cats}
         if not slug_to_id:
-            print("No categories found — run app once (or seed_categories) first.")
+            print("No categories found - run app once (or seed_categories) first.")
             return
 
         user = await get_or_create_demo_user(db)

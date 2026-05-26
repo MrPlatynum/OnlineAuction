@@ -24,9 +24,6 @@ env/
 # Application data — never commit
 static/uploads/
 
-# Personal notes (not for repo)
-otchet/
-
 # Misc
 *.bak
 *.bak.html

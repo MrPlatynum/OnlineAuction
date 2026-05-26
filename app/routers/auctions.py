@@ -52,7 +52,7 @@ def _empty_auctions_page(page: int, page_size: int) -> "PaginatedAuctionsRespons
     references a value that doesn't exist (unknown ``created_by``
     username, unknown ``category`` slug). Lets the handler short-
     circuit instead of building a query that's guaranteed to return
-    nothing — saves the COUNT and the eager-load round trips."""
+    nothing - saves the COUNT and the eager-load round trips."""
     return PaginatedAuctionsResponse(
         items=[],
         total=0,
@@ -63,7 +63,7 @@ def _empty_auctions_page(page: int, page_size: int) -> "PaginatedAuctionsRespons
 
 
 def _time_remaining(auction: Auction) -> int:
-    """Seconds left until ``end_time`` — single source of truth used by
+    """Seconds left until ``end_time`` - single source of truth used by
     every dict-builder in this module. Returns 0 for completed lots or
     when ``end_time`` is somehow None (defensive: the column is NOT NULL
     but a freshly-built ORM instance can briefly be unset)."""
@@ -152,7 +152,7 @@ async def create_auction(
     end_time = start_time + timedelta(minutes=auction.duration_minutes)
 
     auction_type = auction.auction_type or "bid"
-    # BIN is a fixed-price listing — starting_price is meaningless there
+    # BIN is a fixed-price listing - starting_price is meaningless there
     # and would let the UI show "$10" on a lot the buyer actually pays
     # $bin_price for. Coerce both seed prices to bin_price so what the
     # listing card shows is what /buy-now charges.
@@ -203,7 +203,7 @@ async def create_auction(
         )
 
     # Re-fetch with relationships eager-loaded so the response goes through
-    # the same shape as the listing — kept these dicts drifting apart before
+    # the same shape as the listing - kept these dicts drifting apart before
     # (missing fields, divergent time_remaining math). bids_count is 0 by
     # construction: a freshly-created auction has no bids yet.
     loaded = (
@@ -227,7 +227,7 @@ async def buy_now(
     db: AsyncSession = Depends(get_db),
 ):
     # FOR UPDATE so two /buy-now (or /buy-now racing complete_auction)
-    # don't double-charge — the second caller sees is_active=False.
+    # don't double-charge - the second caller sees is_active=False.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()
@@ -273,7 +273,7 @@ async def buy_now(
             (
                 f"{current_user.username} купил «{auction.title}» за {auction.bin_price:.2f} ₽. "
                 f"На баланс зачислено {net:.2f} ₽ "
-                f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% — {commission:.2f} ₽)."
+                f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% - {commission:.2f} ₽)."
             ),
             auction.id, auction.title, manager,
         )
@@ -437,7 +437,7 @@ async def update_auction(
     if auction.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Это не ваш лот")
     if not auction.is_active:
-        raise HTTPException(status_code=400, detail="Лот уже завершён — редактирование недоступно")
+        raise HTTPException(status_code=400, detail="Лот уже завершён - редактирование недоступно")
 
     fields = data.model_fields_set
     has_bids = await db.scalar(
@@ -449,7 +449,7 @@ async def update_auction(
     if has_bids and fields - {"extend_minutes"}:
         raise HTTPException(
             status_code=400,
-            detail="На лоте уже есть ставки — можно только продлить срок (extend_minutes)",
+            detail="На лоте уже есть ставки - можно только продлить срок (extend_minutes)",
         )
 
     if "title" in fields and data.title:
@@ -477,7 +477,7 @@ async def update_auction(
             db.add(AuctionImage(auction_id=auction_id, url=url, order=i))
         auction.image_url = data.image_urls[0] if data.image_urls else None
 
-    # BIN is a fixed-price listing — bin_price IS the displayed/charged
+    # BIN is a fixed-price listing - bin_price IS the displayed/charged
     # price. If the seller edits it (or switches the lot to BIN), drag
     # starting_price / current_price along so the listing card and
     # /buy-now stay in sync.
@@ -528,7 +528,7 @@ async def delete_auction(
     await db.commit()
     # Cancel the in-memory scheduler tasks *after* the row is gone for
     # good. If the commit fails (FK violation, lost connection) we still
-    # want the scheduler to settle the lot — popping its task before the
+    # want the scheduler to settle the lot - popping its task before the
     # commit would leave the row alive without anyone armed to complete it.
     cancel_auction(auction_id)
     return {"message": "Лот удалён"}

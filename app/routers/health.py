@@ -2,7 +2,7 @@
 
 Returns 200 with ``{"status": "ok", "db": "ok"}`` when the app and its
 Postgres dependency are both reachable, 503 when the DB ping fails.
-Designed for load-balancer / Kubernetes ``readinessProbe`` checks —
+Designed for load-balancer / Kubernetes ``readinessProbe`` checks -
 plain liveness probes can hit the same path and just look at the HTTP
 code.
 """

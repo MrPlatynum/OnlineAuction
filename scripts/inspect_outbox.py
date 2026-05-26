@@ -63,7 +63,7 @@ async def _retry_one(outbox_id: int) -> int:
             return 1
         if row.status != "failed":
             print(
-                f"Row {outbox_id} status is {row.status!r}, not 'failed' — "
+                f"Row {outbox_id} status is {row.status!r}, not 'failed' - "
                 f"not retrying (already done or in flight).",
                 file=sys.stderr,
             )

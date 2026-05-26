@@ -1,4 +1,4 @@
-"""Categories router — read-only listing with parent → children tree."""
+"""Categories router - read-only listing with parent → children tree."""
 
 
 async def test_categories_returns_parent_children_tree(client):

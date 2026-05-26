@@ -33,7 +33,7 @@ def seller_commission(gross_price: Decimal) -> Decimal:
     """Platform fee withheld from the seller's payout on every settled
     sale. Rounded to two decimal places with HALF_UP so the two seller
     transaction rows (auction_sale gross + commission deduction) sum
-    cleanly to the net payout — banker's rounding would leave 0.005 ₽
+    cleanly to the net payout - banker's rounding would leave 0.005 ₽
     drifts at scale."""
     raw = gross_price * PLATFORM_COMMISSION_PERCENT / Decimal(100)
     return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -49,7 +49,7 @@ def _credit_seller(
 ) -> None:
     """Apply the seller side of a settled sale: a gross sale credit
     followed by a separate commission debit. Two transaction rows
-    instead of one net row so the audit history reads naturally — the
+    instead of one net row so the audit history reads naturally - the
     seller sees the headline sale price and the platform fee as
     distinct lines. Used by both the BIN and the bid settlement paths,
     which differ only in ``sale_description`` (BIN says "по цене BIN",
@@ -81,7 +81,7 @@ def settle_bin_purchase(
     with row locks and notifications.
 
     ``seller is None`` is the "creator account was deleted while their
-    listing was up" edge case — buyer still gets the goods, the lot
+    listing was up" edge case - buyer still gets the goods, the lot
     just doesn't credit anyone."""
     price = auction.bin_price
     buyer.balance -= price
@@ -111,7 +111,7 @@ def _build_completion_notifications(
 ) -> list[tuple[User, NotificationType, str, str]]:
     """Build the (recipient, type, title, body) tuples for every
     notification fired off the end-of-auction settle path. Pure: no DB
-    work, no commits — caller is responsible for the actual dispatch
+    work, no commits - caller is responsible for the actual dispatch
     after the financial commit has gone through. Pulled out of
     ``complete_auction`` to keep that function's flow readable; the
     same shape is also easier to unit-test in isolation."""
@@ -138,7 +138,7 @@ def _build_completion_notifications(
             (
                 f"Лот продан за {last_bid.amount:.2f} ₽. "
                 f"На баланс зачислено {net:.2f} ₽ "
-                f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% — {commission:.2f} ₽)."
+                f"(комиссия платформы {PLATFORM_COMMISSION_PERCENT}% - {commission:.2f} ₽)."
             ),
         ))
     return pending
@@ -222,7 +222,7 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
 async def complete_auction(auction_id: int, db: AsyncSession):
     """Завершение аукциона и уведомление участников."""
     # FOR UPDATE so a duplicate scheduler tick (post-restart) or a race
-    # with /buy-now can't double-settle — second caller sees is_active=False.
+    # with /buy-now can't double-settle - second caller sees is_active=False.
     auction = (
         await db.execute(
             select(Auction).where(Auction.id == auction_id).with_for_update()

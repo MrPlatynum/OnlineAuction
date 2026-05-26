@@ -26,7 +26,7 @@ os.environ.setdefault("AUCTION_RATE_LIMIT_ENABLED", "false")
 # hammering Postgres on every test, and SMTP would fail anyway.
 os.environ.setdefault("AUCTION_OUTBOX_WORKER_ENABLED", "false")
 # Each test recreates the engine and the scheduler runs inside the
-# same process — there's no second worker to race against and no
+# same process - there's no second worker to race against and no
 # need to actually take the Postgres advisory lock. The scheduler-
 # election tests flip this back on around the specific calls they
 # need to test.
@@ -65,7 +65,7 @@ def _suppress_outbox_enqueue(monkeypatch):
     """Default behaviour for *every* test: emails sent during a
     request go nowhere. Tests that want to *capture* the call (assert
     on subject/body/recipient) take the ``capture_emails`` fixture
-    instead — it overrides this stub with a list-appending one. Test
+    instead - it overrides this stub with a list-appending one. Test
     files that exercise the outbox queue itself use
     ``monkeypatch.setattr`` to put the real implementation back
     before invoking the worker."""
@@ -99,7 +99,7 @@ async def reset_db():
     """Recreate the engine + schema before each test.
 
     The event loop is shared across the session (``asyncio_default_*_loop_scope =
-    session`` in ``pytest.ini``) — asyncpg's pool bindings hate being
+    session`` in ``pytest.ini``) - asyncpg's pool bindings hate being
     torn down per-test, so we keep one loop alive. Test isolation
     comes from this fixture instead: new engine + ``drop_all`` +
     ``create_all`` between every test, so module-level state (e.g.
@@ -165,7 +165,7 @@ async def third_user(client):
 
 @pytest_asyncio.fixture
 async def unverified_user(client):
-    """Fresh registration with ``email_verified`` still False — for
+    """Fresh registration with ``email_verified`` still False - for
     tests of the verification gate (write endpoints must 403) and the
     /verify-email flow itself."""
     payload = {

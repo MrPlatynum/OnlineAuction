@@ -2,7 +2,7 @@
 
 Schema migrations are managed by Alembic (see ``alembic/`` and run with
 ``alembic upgrade head``). This module only handles idempotent reference-
-data seeding for categories — those don't fit cleanly into a one-shot
+data seeding for categories - those don't fit cleanly into a one-shot
 migration because we want them to be top-up-able as new sub-categories
 are added in code.
 """

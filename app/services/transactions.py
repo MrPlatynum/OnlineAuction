@@ -1,7 +1,7 @@
 """Single helper that pins every balance mutation to an audit row.
 Every ₽-move (deposit, withdrawal, bid_win, auction_sale, bin_purchase,
 commission) goes through this function so the ``transactions`` table
-always carries a row with ``balance_after`` matching the user object —
+always carries a row with ``balance_after`` matching the user object -
 the foundation of the ledger view at ``GET /api/transactions``.
 """
 

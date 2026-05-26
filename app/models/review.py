@@ -27,6 +27,6 @@ class Review(Base):
 
     __table_args__ = (
         CheckConstraint("rating BETWEEN 1 AND 5", name="ck_reviews_rating_range"),
-        # one review per (reviewer, auction) — only enforced when auction_id present
+        # one review per (reviewer, auction) - only enforced when auction_id present
         UniqueConstraint("reviewer_id", "auction_id", name="uq_reviews_one_per_auction"),
     )

@@ -19,7 +19,7 @@ async function initAuth() {
       img.alt = me.username;
       avEl.appendChild(img);
     }
-    document.getElementById('userName').textContent    = me.username || '—';
+    document.getElementById('userName').textContent    = me.username || '-';
     document.getElementById('userBalance').textContent = Number(me.balance||0).toFixed(2);
     return me;
   } catch { return null; }
@@ -153,7 +153,7 @@ function renderList() {
   if (!items.length) {
     const msgs = {
       active:  ['🎯', 'Нет активных ставок', 'Найдите интересный лот и сделайте первую ставку'],
-      won:     ['🏆', 'Побед пока нет', 'Участвуйте в аукционах — удача будет на вашей стороне'],
+      won:     ['🏆', 'Побед пока нет', 'Участвуйте в аукционах - удача будет на вашей стороне'],
       lost:    ['😤', 'Проигрышей нет', 'Отличный результат!'],
       created: ['📦', 'Вы ещё не создали лотов', 'Создайте свой первый лот прямо сейчас'],
     };

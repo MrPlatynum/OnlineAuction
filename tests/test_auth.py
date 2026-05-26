@@ -52,7 +52,7 @@ async def test_login_with_wrong_password_returns_401(client, registered_user):
 async def test_login_oversized_password_rejected_at_schema(client, registered_user):
     """UserLogin.password caps at 128 chars (matches UserCreate /
     ChangePasswordRequest). Without this, /login would parse a multi-MB
-    JSON body before verify_password's internal byte-limit kicked in —
+    JSON body before verify_password's internal byte-limit kicked in -
     pointless CPU and memory for a request that can't possibly succeed."""
     response = await client.post("/api/login", json={
         "username": registered_user["user"]["username"],
@@ -70,7 +70,7 @@ async def test_me_returns_current_user(client, registered_user):
 async def test_me_without_token_rejected(client):
     response = await client.get("/api/me")
     # FastAPI ≥ 0.116 returns 401 (semantically correct: no creds = unauthenticated)
-    # — earlier versions returned 403 for the same condition.
+    # - earlier versions returned 403 for the same condition.
     assert response.status_code == 401
 
 
@@ -122,8 +122,8 @@ def test_hash_password_rejects_oversized_input():
 
 
 def test_verify_password_rejects_oversized_input():
-    """An oversized password can never be a valid credential — we
-    never accept it for hashing — so reject without spending CPU on
+    """An oversized password can never be a valid credential - we
+    never accept it for hashing - so reject without spending CPU on
     argon2/bcrypt verification."""
     from app.utils.security import (
         PASSWORD_INPUT_LIMIT,
@@ -138,7 +138,7 @@ def test_verify_password_rejects_oversized_input():
 
 
 async def test_change_password_invalidates_old_jwt(client, registered_user):
-    """JWT issued before /change-password must stop working — the
+    """JWT issued before /change-password must stop working - the
     token_version bump makes get_current_user reject anything stamped
     with the old version."""
     old_headers = registered_user["headers"]
@@ -163,8 +163,8 @@ async def test_change_password_invalidates_old_jwt(client, registered_user):
 
 async def test_change_password_closes_open_ws_notifications(client, registered_user):
     """/ws/notifications validates token_version only at handshake. After
-    /change-password bumps the version, any already-open socket — including
-    one authenticated with a leaked token — must be closed so it stops
+    /change-password bumps the version, any already-open socket - including
+    one authenticated with a leaked token - must be closed so it stops
     receiving pushes."""
     from app.services.websocket_manager import manager
 

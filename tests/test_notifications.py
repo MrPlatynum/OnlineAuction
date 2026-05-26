@@ -1,4 +1,4 @@
-"""Notifications router — list / mark-read / delete with ownership checks.
+"""Notifications router - list / mark-read / delete with ownership checks.
 
 Notifications can't be created via a public endpoint (they're side
 effects of bidding, etc), so these tests insert directly via the test
@@ -113,7 +113,7 @@ async def test_mark_read_on_someone_elses_notification_returns_404(
     client, registered_user, second_user
 ):
     """The handler scopes the lookup by user_id, so accessing another
-    user's notification id is indistinguishable from a missing row —
+    user's notification id is indistinguishable from a missing row -
     deliberate, prevents leaking existence."""
     alices = await _seed_notification(registered_user["user"]["id"])
     r = await client.post(
@@ -137,7 +137,7 @@ async def test_delete_someone_elses_notification_returns_404(
 async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
     """notify_user gates the AUCTION_LOST email behind ``notify_lost``;
     flipping it to False stops the fire-and-forget send. The fix
-    completes the coverage matrix — every NotificationType now has
+    completes the coverage matrix - every NotificationType now has
     its own user-pref toggle."""
     from app.models import NotificationType, User
     from app.services import notifications as notif_module

@@ -13,7 +13,7 @@ class EmailOutbox(Base):
     html_body = Column(Text, nullable=False)
     # ``pending``: not yet sent or scheduled for retry.
     # ``sent``: terminal success.
-    # ``failed``: terminal dead-letter — retry budget exhausted.
+    # ``failed``: terminal dead-letter - retry budget exhausted.
     status = Column(String, nullable=False, default="pending")
     attempts = Column(Integer, nullable=False, default=0)
     max_attempts = Column(Integer, nullable=False, default=5)

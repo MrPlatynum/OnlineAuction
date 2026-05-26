@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-    <title>Лотус — Онлайн-аукцион</title>
+    <title>Лотус - Онлайн-аукцион</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -55,7 +55,7 @@
       <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
         <div class="nav-avatar" id="userAvatarSmall">?</div>
         <div>
-          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-user-name" id="userName">-</div>
           <div class="nav-balance"><span id="userBalanceSmall">0</span> ₽</div>
         </div>
       </a>
@@ -128,7 +128,7 @@
 
     <div class="hero-stats" id="heroStats">
       <div class="hero-stat">
-        <div class="hero-stat-value" id="statActive">—</div>
+        <div class="hero-stat-value" id="statActive">-</div>
         <div class="hero-stat-label">Активных лотов</div>
       </div>
       <div class="hero-stat-divider"></div>
@@ -166,14 +166,14 @@
 </section>
 
 <!-- ================================================================
-     FEATURED STRIP — ending soon
+     FEATURED STRIP - ending soon
      ================================================================ -->
 <section class="featured-strip" id="featuredStrip" hidden>
   <div class="featured-head">
     <div class="featured-title-wrap">
       <span class="featured-flame">🔥</span>
       <h2 class="featured-title">Скоро завершатся</h2>
-      <span class="featured-sub">Самые горящие лоты — успей сделать ставку</span>
+      <span class="featured-sub">Самые горящие лоты - успей сделать ставку</span>
     </div>
     <div class="featured-controls">
       <button type="button" class="featured-arrow" id="featuredPrev" aria-label="Прокрутить назад" disabled>
@@ -200,7 +200,7 @@
   <!-- ======= SIDEBAR FILTERS ======= -->
   <aside class="filter-sidebar" id="filterSidebar">
 
-    <!-- Drawer header — only rendered as visible inside the mobile
+    <!-- Drawer header - only rendered as visible inside the mobile
          off-canvas mode (CSS hides it on desktop). Carries the title
          and a close (×) button. -->
     <div class="fs-drawer-head">
@@ -264,7 +264,7 @@
             </button>
           </div>
         </div>
-        <span class="fs-price-sep">—</span>
+        <span class="fs-price-sep">-</span>
         <div class="fs-num">
           <input type="number" class="fs-price-input" id="maxPrice" placeholder="до" min="0">
           <div class="fs-num-stepper">
@@ -506,7 +506,7 @@
               Добавить фото
             </label>
             <input type="file" class="form-input" id="auctionImageFile" accept="image/*" style="display:none;" multiple>
-            <div class="img-hint">Первое фото — обложка. Можно добавить до 5 изображений.</div>
+            <div class="img-hint">Первое фото - обложка. Можно добавить до 5 изображений.</div>
           </div>
         </div>
 
@@ -523,10 +523,10 @@
             <label class="form-label">Категория</label>
             <div class="cat-picker" id="createCatPicker">
               <select class="form-input cat-picker-parent" id="auctionCategoryParent">
-                <option value="">— Выберите категорию —</option>
+                <option value="">- Выберите категорию -</option>
               </select>
               <select class="form-input cat-picker-sub" id="auctionCategory" style="display:none;">
-                <option value="">— Подкатегория —</option>
+                <option value="">- Подкатегория -</option>
               </select>
             </div>
           </div>
@@ -540,7 +540,7 @@
                 Купить сразу (BIN)
               </button>
             </div>
-            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки — побеждает наибольшая</div>
+            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки - побеждает наибольшая</div>
           </div>
 
           <!-- BID поля -->
@@ -557,7 +557,7 @@
                 <input type="number" class="form-input" id="auctionDuration" min="1" max="10080" value="60" placeholder="60" style="flex:1;">
                 <span style="font-size:12px;color:var(--text-3);white-space:nowrap;">мин</span>
               </div>
-              <div class="img-hint" id="durationHint">1 час — аукцион завершится через 60 мин</div>
+              <div class="img-hint" id="durationHint">1 час - аукцион завершится через 60 мин</div>
             </div>
           </div>
 
@@ -592,7 +592,7 @@
 <script src="/static/vendor/cropper.min.js"></script>
 
 <!-- ================================================================
-     COMPAT SHIMS — bridge new HTML to existing JS
+     COMPAT SHIMS - bridge new HTML to existing JS
      ================================================================ -->
   <script src="/static/js/common.js"></script>
   <script src="/static/js/index.js"></script>
@@ -687,7 +687,7 @@
         section.hidden = false;
 
         // Используем time_remaining от сервера (он считает в UTC корректно).
-        // end_time в API — naive-UTC без 'Z', поэтому браузер парсит его как
+        // end_time в API - naive-UTC без 'Z', поэтому браузер парсит его как
         // локальное время и таймер «уезжает» на UTC-offset.
         const baseTs = Date.now();
         scroll.innerHTML = items.map(a => {

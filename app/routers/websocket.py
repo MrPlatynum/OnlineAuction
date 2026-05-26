@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Cap per source IP to keep one client from holding the WebSocket
-# slots for everyone — /ws/auction is unauthenticated, so without
+# slots for everyone - /ws/auction is unauthenticated, so without
 # this cap any peer can open thousands of connections and stall the
 # event loop on broadcast fan-out.
 MAX_AUCTION_WS_PER_IP = 50
@@ -49,7 +49,7 @@ def _client_ip(websocket: WebSocket) -> str:
 @router.websocket("/ws/auction/{auction_id}")
 async def websocket_endpoint(websocket: WebSocket, auction_id: int):
     ip = _client_ip(websocket)
-    # ``.get`` instead of ``[ip]`` — direct subscript on a defaultdict creates
+    # ``.get`` instead of ``[ip]`` - direct subscript on a defaultdict creates
     # a 0-entry for every probing IP we then reject, leaking keys forever.
     held = _auction_ws_per_ip.get(ip, 0)
     if held >= MAX_AUCTION_WS_PER_IP:
@@ -112,9 +112,9 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
 async def notifications_websocket(
     websocket: WebSocket, user_id: int, token: str | None = Query(None)
 ):
-    # Token preferred via Sec-WebSocket-Protocol subprotocol — clients send
+    # Token preferred via Sec-WebSocket-Protocol subprotocol - clients send
     #   new WebSocket(url, ['bearer', '<jwt>'])
-    # — so the JWT never lands in URLs (proxy/access logs / browser history).
+    # - so the JWT never lands in URLs (proxy/access logs / browser history).
     # Query-string fallback retained for backward compat; will be removed
     # once all clients are on the subprotocol scheme.
     accepted_protocol: str | None = None
@@ -158,7 +158,7 @@ async def notifications_websocket(
         await websocket.close(code=1008)
         return
 
-    # ``connect_user`` calls accept() — propagate the subprotocol echo so the
+    # ``connect_user`` calls accept() - propagate the subprotocol echo so the
     # browser handshake completes (per RFC 6455 §1.9 server must echo one
     # of the offered subprotocols).
     if accepted_protocol:

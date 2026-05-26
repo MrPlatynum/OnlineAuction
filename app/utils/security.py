@@ -42,7 +42,7 @@ pwd_context = CryptContext(
 security = HTTPBearer()
 
 # Defensive cap on raw password input. Pydantic enforces max_length=128
-# on register / change-password, but UserLogin.password is unbounded —
+# on register / change-password, but UserLogin.password is unbounded -
 # without this cap a multi-MB password input would let an attacker
 # spend our CPU on argon2/bcrypt verification.
 PASSWORD_INPUT_LIMIT = 1024
@@ -51,7 +51,7 @@ PASSWORD_INPUT_LIMIT = 1024
 # timing stable when the supplied username doesn't exist. Without this
 # the handler short-circuits before verify_password and "user-doesn't-
 # exist" returns in microseconds while a real-but-wrong password takes
-# ~50 ms — trivial to distinguish over the network. We verify against
+# ~50 ms - trivial to distinguish over the network. We verify against
 # this hash instead so both branches spend the same CPU. Hash is
 # evaluated lazily on first /login so the import-time cost stays zero.
 _DUMMY_HASH: str | None = None
@@ -86,7 +86,7 @@ def is_modern_password_hash(hashed_password: str) -> bool:
 
 def needs_rehash(hashed_password: str) -> bool:
     """True if the stored hash should be rotated on the next successful
-    login — either it's the legacy SHA256+key format from before passlib
+    login - either it's the legacy SHA256+key format from before passlib
     was wired up, or it's a deprecated scheme (bcrypt now that argon2id
     is primary)."""
     if not is_modern_password_hash(hashed_password):
@@ -95,8 +95,8 @@ def needs_rehash(hashed_password: str) -> bool:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    # An over-cap input can never be a valid credential — we never
-    # accept it for hashing — so reject without spending CPU.
+    # An over-cap input can never be a valid credential - we never
+    # accept it for hashing - so reject without spending CPU.
     if len(plain_password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
         return False
     if is_modern_password_hash(hashed_password):
@@ -138,7 +138,7 @@ EMAIL_VERIFY_TOKEN_TTL_HOURS = 24
 PASSWORD_RESET_PURPOSE = "password_reset"
 PASSWORD_RESET_TOKEN_TTL_HOURS = 1
 PASSWORD_RESET_THROTTLE_SECONDS = 60
-# Минимальная длительность отклика /password-reset/request — гарантирует
+# Минимальная длительность отклика /password-reset/request - гарантирует
 # что unknown-email / throttled-existing / fresh-existing ветки невозможно
 # различить по latency. 100 мс заметно больше любой из трёх веток без падинга.
 PASSWORD_RESET_REQUEST_FLOOR_SECONDS = 0.1
@@ -261,7 +261,7 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="User not found")
     # Tokens issued before a password change carry the old token_version
     # and must be rejected. Old tokens missing the claim default to 0,
-    # which matches the column default — so pre-migration tokens stay
+    # which matches the column default - so pre-migration tokens stay
     # valid for their original 24 h lifetime instead of every existing
     # user being kicked the moment this PR ships.
     token_version = payload.get("tv", 0)

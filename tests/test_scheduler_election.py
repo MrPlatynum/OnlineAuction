@@ -31,7 +31,7 @@ async def test_first_caller_becomes_leader():
 
 async def test_second_caller_from_same_process_is_idempotent():
     """A worker calling ``try_become_scheduler_leader`` twice keeps
-    returning True without re-acquiring — the lock is already held."""
+    returning True without re-acquiring - the lock is already held."""
     first = await scheduler_election.try_become_scheduler_leader()
     second = await scheduler_election.try_become_scheduler_leader()
     assert first is True
@@ -43,7 +43,7 @@ async def test_second_concurrent_connection_cannot_acquire():
     second one trying to take the same advisory-lock key gets
     ``false`` from ``pg_try_advisory_lock``. We simulate "second
     process" with a direct DB connection that opens its own
-    asyncpg session — the advisory lock is session-scoped so it
+    asyncpg session - the advisory lock is session-scoped so it
     doesn't see the first holder's lock as its own."""
     leader_acquired = await scheduler_election.try_become_scheduler_leader()
     assert leader_acquired is True
@@ -60,7 +60,7 @@ async def test_second_concurrent_connection_cannot_acquire():
 
 async def test_release_frees_lock_for_next_caller():
     """After the leader releases, a rival connection can claim the
-    lock — that's how a restarted worker takes over."""
+    lock - that's how a restarted worker takes over."""
     assert await scheduler_election.try_become_scheduler_leader() is True
     await scheduler_election.release_scheduler_lock()
     assert scheduler_election.is_leader() is False
@@ -86,7 +86,7 @@ async def test_heartbeat_ping_keeps_leader_alive():
     keeping the connection alive against managed-PG idle-disconnect."""
     assert await scheduler_election.try_become_scheduler_leader() is True
     assert await scheduler_election._ping_leader_connection() is True
-    # Still leader after the ping — connection not torn down.
+    # Still leader after the ping - connection not torn down.
     assert scheduler_election.is_leader() is True
 
 
@@ -97,7 +97,7 @@ async def test_heartbeat_steps_down_when_ping_fails():
     drop by closing the connection out from under the ping."""
     assert await scheduler_election.try_become_scheduler_leader() is True
     # Force-close the underlying connection without going through
-    # release_scheduler_lock so _leader_connection stays set —
+    # release_scheduler_lock so _leader_connection stays set -
     # exactly what a server-side disconnect looks like.
     await scheduler_election._leader_connection.close()
 
@@ -111,7 +111,7 @@ async def test_heartbeat_tick_promotes_follower_and_runs_callback():
     """A follower whose tick fires after the previous leader has
     released the lock should promote itself and run ``on_promote``
     exactly once for that transition."""
-    # Start as follower — another connection holds the lock.
+    # Start as follower - another connection holds the lock.
     async with _db_module.engine.connect() as rival:
         await rival.execute(
             text("SELECT pg_advisory_lock(:key)"),
@@ -150,7 +150,7 @@ async def test_env_override_skips_election(monkeypatch):
     """Single-worker dev / pytest set ``AUCTION_SCHEDULER_ELECTION_ENABLED=false``;
     the function returns True without touching the DB so the
     caller's scheduler still arms. We assert this by swapping the
-    module's engine for a stub that raises on any usage — the call
+    module's engine for a stub that raises on any usage - the call
     must not even try to open a connection."""
     monkeypatch.setenv("AUCTION_SCHEDULER_ELECTION_ENABLED", "false")
 
@@ -165,7 +165,7 @@ async def test_env_override_skips_election(monkeypatch):
 
 
 async def test_concurrent_election_only_one_wins():
-    """Two workers starting at the same time — exactly one wins,
+    """Two workers starting at the same time - exactly one wins,
     the other gets False. ``pg_try_advisory_lock`` is atomic so
     the race is decided at the DB; we just want to assert the
     expected outcome from the application's side."""
@@ -173,7 +173,7 @@ async def test_concurrent_election_only_one_wins():
     leader_first = await scheduler_election.try_become_scheduler_leader()
     assert leader_first is True
 
-    # Second worker — open a fresh connection, run the same query
+    # Second worker - open a fresh connection, run the same query
     # path the module does. This mirrors what a sibling
     # ``uvicorn --workers 2`` process would observe.
     async def second_worker_attempt() -> bool:
@@ -197,7 +197,7 @@ async def test_concurrent_election_only_one_wins():
 
 async def test_query_failure_returns_false_and_closes_connection(monkeypatch):
     """If the lock query raises (network blip, DB down), the
-    function must return False *and* close the connection — leaking
+    function must return False *and* close the connection - leaking
     it would burn through the pool."""
 
     class _BrokenConnection:

@@ -63,7 +63,7 @@ async def test_limiter_disabled_in_default_test_env(client):
 
 def test_client_key_falls_back_to_remote_address(monkeypatch):
     """Without ``AUCTION_TRUST_PROXY`` the X-Forwarded-For header is
-    ignored — a spoofed value mustn't let a client escape its bucket
+    ignored - a spoofed value mustn't let a client escape its bucket
     on a direct-internet listener."""
     from starlette.requests import Request
 
@@ -82,7 +82,7 @@ def test_client_key_falls_back_to_remote_address(monkeypatch):
 
 def test_client_key_uses_xff_when_proxy_trusted(monkeypatch):
     """With ``AUCTION_TRUST_PROXY=true`` the leftmost X-Forwarded-For
-    entry wins — without this every request behind a reverse proxy
+    entry wins - without this every request behind a reverse proxy
     would share one bucket keyed on the proxy's own address."""
     from starlette.requests import Request
 

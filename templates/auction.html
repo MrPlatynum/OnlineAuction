@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <title>Лот — Лотус</title>
+  <title>Лот - Лотус</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -38,7 +38,7 @@
       <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
         <div class="nav-avatar" id="avatar">?</div>
         <div>
-          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-user-name" id="userName">-</div>
           <div class="nav-balance" id="userBalance"></div>
         </div>
       </a>
@@ -110,29 +110,29 @@
           <span class="bid-count-pill"><span id="bidsCount">0</span> ст.</span>
         </div>
         <div class="price-hero">
-          <span class="price-hero-val" id="currentPrice">—</span>
+          <span class="price-hero-val" id="currentPrice">-</span>
         </div>
-        <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">—</span></div>
+        <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">-</span></div>
         <!-- Owner-only hint: how much actually lands on the seller's
              balance after the platform takes its cut. Hidden by default,
              flipped to display:flex from auction.js when the viewer is
              the lot's creator. -->
         <div class="seller-payout-hint" id="sellerPayoutHint" style="display:none;">
           <span class="seller-payout-label">К получению</span>
-          <span class="seller-payout-val" id="sellerPayoutVal">—</span>
+          <span class="seller-payout-val" id="sellerPayoutVal">-</span>
           <span class="seller-payout-note" id="sellerPayoutNote">после комиссии</span>
         </div>
 
         <div class="timer-row" id="timerRow">
           <span class="timer-pulse"></span>
-          <span class="timer-val" id="timeLeft">—</span>
+          <span class="timer-val" id="timeLeft">-</span>
           <span class="timer-label">до конца</span>
         </div>
 
         <!-- BIN block -->
         <div id="binBlock" style="display:none;" class="bin-block">
           <div class="bin-label">Купить сразу</div>
-          <div class="bin-price" id="binPriceDisplay">—</div>
+          <div class="bin-price" id="binPriceDisplay">-</div>
           <button class="btn btn-primary" id="binBtn" onclick="buyNow()" style="width:100%;height:42px;font-size:14px;">Купить</button>
           <div id="binDivider" class="bin-divider">
             <div class="bin-divider-line"></div>
@@ -180,7 +180,7 @@
         <div class="seller-top">
           <div class="seller-avatar" id="sellerAvatar">?</div>
           <div>
-            <a class="seller-name-link" id="sellerLink" href="#">—</a>
+            <a class="seller-name-link" id="sellerLink" href="#">-</a>
             <div class="seller-meta" id="sellerMeta">Продавец</div>
             <div class="seller-rating-row">
               <div class="stars" id="sellerStars"></div>
@@ -191,15 +191,15 @@
         </div>
         <div class="seller-stats">
           <div class="seller-stat">
-            <div class="seller-stat-val" id="sellerLots">—</div>
+            <div class="seller-stat-val" id="sellerLots">-</div>
             <div class="seller-stat-lbl">Лотов</div>
           </div>
           <div class="seller-stat">
-            <div class="seller-stat-val" id="sellerSubs">—</div>
+            <div class="seller-stat-val" id="sellerSubs">-</div>
             <div class="seller-stat-lbl">Подписчиков</div>
           </div>
           <div class="seller-stat">
-            <div class="seller-stat-val" id="sellerReviews">—</div>
+            <div class="seller-stat-val" id="sellerReviews">-</div>
             <div class="seller-stat-lbl">Отзывов</div>
           </div>
         </div>
@@ -217,7 +217,7 @@
     <div class="winner-icon">🏆</div>
     <div>
       <div class="winner-label">Победитель</div>
-      <div class="winner-name" id="winnerName">—</div>
+      <div class="winner-name" id="winnerName">-</div>
     </div>
   </div>
 
@@ -246,7 +246,7 @@
         </div>
         <div class="reviews-summary" id="reviewsSummary" style="display:none;">
           <div class="reviews-big-score">
-            <div class="reviews-big-num" id="revAvg">—</div>
+            <div class="reviews-big-num" id="revAvg">-</div>
             <div class="reviews-big-stars" id="revBigStars"></div>
             <div class="reviews-big-count" id="revCount"></div>
           </div>
@@ -338,8 +338,8 @@
       <div class="form-group m-0">
         <label class="form-label">Категория</label>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <select class="form-input" id="editCategoryParent"><option value="">— Выберите категорию —</option></select>
-          <select class="form-input" id="editCategory" style="display:none;"><option value="">— Вся категория —</option></select>
+          <select class="form-input" id="editCategoryParent"><option value="">- Выберите категорию -</option></select>
+          <select class="form-input" id="editCategory" style="display:none;"><option value="">- Вся категория -</option></select>
         </div>
       </div>
 
@@ -374,7 +374,7 @@
           Добавить фото
         </label>
         <input type="file" id="editImageFile" accept="image/*" multiple style="display:none;">
-        <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Первое фото — обложка. До 5 изображений.</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Первое фото - обложка. До 5 изображений.</div>
       </div>
     </div>
 

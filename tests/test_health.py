@@ -8,7 +8,7 @@ async def test_health_returns_ok(client):
     assert body["status"] == "ok"
     assert body["db"] == "ok"
     # 503 path is hard to trigger without breaking the connection;
-    # what matters is that /health never echoes ``str(exc)`` back —
+    # what matters is that /health never echoes ``str(exc)`` back -
     # check the success body has no ``detail`` field carrying a DSN.
     assert "detail" not in body
 

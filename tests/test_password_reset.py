@@ -148,7 +148,7 @@ async def test_confirm_with_bad_signature(client, registered_user):
 
 
 async def test_confirm_rejects_wrong_purpose(client, registered_user):
-    """An auth token must NOT double as a reset token — otherwise a
+    """An auth token must NOT double as a reset token - otherwise a
     leaked JWT could be used to silently rotate the password."""
     token = _make_token(
         registered_user["user"]["id"], 0, purpose="login"
@@ -286,7 +286,7 @@ async def test_confirm_fires_password_changed_notice(
 
 
 async def test_confirm_rejects_short_password(client, registered_user):
-    """min_length=8 must reject before the JWT is even decoded — same
+    """min_length=8 must reject before the JWT is even decoded - same
     schema cap as /register and /change-password."""
     token = _make_token(registered_user["user"]["id"], 0)
     r = await client.post(
