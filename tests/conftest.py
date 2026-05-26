@@ -117,6 +117,25 @@ async def reset_db():
     await engine.dispose()
 
 
+@pytest_asyncio.fixture(autouse=True)
+def _reset_websocket_manager():
+    """The process-wide ConnectionManager (``app.services.websocket_manager.
+    manager``) keeps its registries between tests. Tests that inject
+    ``_StubWebSocket`` instances directly into ``manager.user_connections``
+    (see test_bids.py, test_auth.py, test_password_reset.py) used to leak
+    those stubs into the next test - if a fixture user re-used the same
+    id, an unrelated broadcast in the next test could hit a stub left
+    over from the prior one. ``reset_db`` only clears DB state; the
+    in-memory registry needs its own reset."""
+    from app.services.websocket_manager import manager
+
+    manager.active_connections.clear()
+    manager.user_connections.clear()
+    yield
+    manager.active_connections.clear()
+    manager.user_connections.clear()
+
+
 @pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)
