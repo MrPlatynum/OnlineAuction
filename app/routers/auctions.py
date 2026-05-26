@@ -436,7 +436,7 @@ async def get_auction(auction_id: int, db: AsyncSession = Depends(get_db)):
 async def update_auction(
     auction_id: int,
     data: AuctionUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     # FOR UPDATE so concurrent place_bid / complete_auction can't mutate
@@ -513,7 +513,7 @@ async def update_auction(
 @router.delete("/auctions/{auction_id}")
 async def delete_auction(
     auction_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     # FOR UPDATE so scheduler._wait_and_complete can't settle the lot

@@ -81,6 +81,57 @@ async def test_unverified_user_cannot_buy_now(client, registered_user, unverifie
     assert r.status_code == 403
 
 
+async def test_unverified_user_cannot_update_auction(
+    client, registered_user, unverified_user
+):
+    """PATCH /auctions/{id} mutates listing content and can change price
+    while bids may already be on file - gated together with create and
+    buy-now so an unverified account never reaches the handler."""
+    auction = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Lot",
+            "description": "test",
+            "starting_price": 10,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    r = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"title": "Hijacked"},
+        headers=unverified_user["headers"],
+    )
+    assert r.status_code == 403
+
+
+async def test_unverified_user_cannot_delete_auction(
+    client, registered_user, unverified_user
+):
+    """DELETE /auctions/{id} drops the lot entirely (with all referencing
+    bid history). Gating at the dependency layer means the unverified
+    request never reaches the ownership check below."""
+    auction = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "Lot",
+            "description": "test",
+            "starting_price": 10,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=registered_user["headers"],
+    )).json()
+
+    r = await client.delete(
+        f"/api/auctions/{auction['id']}",
+        headers=unverified_user["headers"],
+    )
+    assert r.status_code == 403
+
+
 async def test_unverified_user_cannot_create_auction(client, unverified_user):
     r = await client.post(
         "/api/auctions",
