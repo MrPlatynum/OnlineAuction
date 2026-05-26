@@ -54,6 +54,13 @@ def _credit_seller(
     distinct lines. Used by both the BIN and the bid settlement paths,
     which differ only in ``sale_description`` (BIN says "по цене BIN",
     bid says "лота")."""
+    # Quantize gross to 2 decimals before mutating the in-memory ORM
+    # balance. The DB column is Numeric(12, 2) - any caller passing a
+    # Decimal with >2 decimal places (in practice the per-row stored
+    # value already matches, but a future caller computing gross at
+    # higher precision could drift) would leave seller.balance and
+    # the audit row both un-quantized while Postgres rounds on store.
+    gross = gross.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     seller.balance += gross
     add_transaction(
         db, seller, "auction_sale", gross,
