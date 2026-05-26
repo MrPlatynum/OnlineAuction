@@ -145,9 +145,16 @@ PASSWORD_RESET_TOKEN_TTL_HOURS = 1
 PASSWORD_RESET_THROTTLE_SECONDS = 60
 # Floor on the /password-reset/request response time - ensures the three
 # branches (unknown email / throttled existing / fresh existing) cannot be
-# distinguished by latency. 100 ms is comfortably larger than any of the
-# three unpadded branches.
-PASSWORD_RESET_REQUEST_FLOOR_SECONDS = 0.1
+# distinguished by latency.
+#
+# Was 100 ms; raised to 500 ms because under DB contention or SMTP
+# back-pressure the fresh-existing branch routinely exceeds 100 ms in
+# production (the outbox INSERT alone can land at 150-200 ms on a
+# busy box), and once a single branch crosses the floor the timing
+# difference between the three states becomes observable again. The
+# UX cost is invisible - the user is staring at a generic
+# "if your email exists we sent a link" page either way.
+PASSWORD_RESET_REQUEST_FLOOR_SECONDS = 0.5
 
 
 def create_email_verify_token(user: "User") -> str:
