@@ -1187,13 +1187,18 @@
     $('lbImg').classList.remove('dragging');
   });
 
-  // Expose handlers for inline onclick="..." in auction.html
+  // Expose handlers for inline onclick="..." in auction.html and
+  // for handlers we render inline into innerHTML strings (thumbnail
+  // strip via updateThumbs, review delete button via deleteReview).
+  // The closure-local references are not on window by default, so
+  // clicks would otherwise throw ReferenceError.
   Object.assign(window, {
-    buyNow, bumpBid, closeEditModal, closeLightbox, filterReviewsByRating,
-    goAuth, lbSlide, lbZoom, lbZoomReset: lbResetZoom,
-    lotGoTo, lotSlide, openEditModal, openLightbox, placeBid, removeEditImg,
-    saveEdit, setExtend, submitReview, switchLotTab, toggleSubscription,
-    toggleThisLotOnly, updateReviewCounter,
+    buyNow, bumpBid, closeEditModal, closeLightbox, deleteReview,
+    filterReviewsByRating, goAuth, lbSlide, lbZoom,
+    lbZoomReset: lbResetZoom, lotGoTo, lotSlide, openEditModal,
+    openLightbox, placeBid, removeEditImg, saveEdit, setExtend,
+    submitReview, switchLotTab, toggleSubscription, toggleThisLotOnly,
+    updateReviewCounter, updateThumbs,
   });
 
   // Deep-link: auction.html?id=...#reviews opens the Reviews tab on load.
