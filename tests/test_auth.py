@@ -12,6 +12,29 @@ async def test_register_creates_user_and_returns_token(client):
     assert body["user"]["balance"] == 1000.0
 
 
+async def test_register_rejects_html_in_username(client):
+    """Defence-in-depth: usernames flow into Notification.message and
+    listing pages. The frontend escapes through esc() everywhere, but
+    constraining the source means a future render-path regression
+    that calls innerHTML directly on a username can't be exploited."""
+    r = await client.post("/api/register", json={
+        "username": "<img src=x onerror=alert(1)>",
+        "email": "evil@example.com",
+        "password": "secret123",
+    })
+    assert r.status_code == 422, r.text
+
+
+async def test_register_accepts_cyrillic_username(client):
+    r = await client.post("/api/register", json={
+        "username": "Алиса",
+        "email": "alisa@example.com",
+        "password": "secret123",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["username"] == "Алиса"
+
+
 async def test_register_duplicate_username_or_email_indistinguishable(
     client, registered_user
 ):
