@@ -160,6 +160,14 @@ def schedule_auction(auction: Auction) -> None:
 
     Safe to call multiple times - any pre-existing tasks for the same id
     are cancelled first. No-op for inactive auctions.
+
+    Intentionally synchronous (no ``await``). The dict mutations below
+    rely on asyncio's run-to-completion semantics: with no yield point
+    inside the function body, two concurrent callers cannot interleave
+    a cancel from one with a create_task from the other. Adding an
+    ``await`` here breaks that invariant - either restructure to keep
+    it sync, or wrap the body in an ``asyncio.Lock`` to restore
+    serialisation.
     """
     cancel_auction(auction.id)
     if not auction.is_active:
