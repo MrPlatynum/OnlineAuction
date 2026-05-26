@@ -8,6 +8,7 @@ creation, deletion by the author, and the seller-side aggregate
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -145,7 +146,18 @@ async def create_review(
         comment=data.comment,
     )
     db.add(review)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Two concurrent /reviews POSTs for the same (reviewer, auction)
+        # pair both pass the pre-check (no row yet) and race to insert; the
+        # ``uq_reviews_one_per_auction`` unique constraint makes the loser
+        # raise. Convert to the same 400 the pre-check would have produced.
+        await db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Вы уже оставили отзыв на этот аукцион",
+        ) from None
     return {"message": "Отзыв добавлен", "id": review.id}
 
 
