@@ -5,7 +5,11 @@ from pydantic import BaseModel, Field
 
 class BidCreate(BaseModel):
     auction_id: int
-    amount: float = Field(gt=0)
+    # Cap matches MAX_USER_BALANCE in routers/balance.py - a user can't
+    # bid more than they could possibly hold. Without the upper bound a
+    # value past ~10^10 would overflow Numeric(12, 2) at commit and
+    # surface as an opaque 500.
+    amount: float = Field(gt=0, le=10_000_000)
 
 
 class BidResponse(BaseModel):
