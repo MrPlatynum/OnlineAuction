@@ -303,6 +303,11 @@
     let wsNotif = null;
     let currentUserId = null;
     let reconnectDelay = 1500;
+    // Handle for the 60s unread-count poll. Held so cross-tab token
+    // changes (each one re-runs ``start()``) don't stack a new
+    // setInterval on top of the previous - without this the polling
+    // count grows linearly with the number of cross-tab logins.
+    let pollHandle = null;
 
     const ICONS = {
       bid_outbid:     '⚡',
@@ -487,7 +492,8 @@
         // /me fails → WebSocket stays off. Polling below still keeps
         // the badge up to date until the user logs in again.
       }
-      setInterval(fetchCount, 60000);
+      if (pollHandle !== null) clearInterval(pollHandle);
+      pollHandle = setInterval(fetchCount, 60000);
     }
 
     setTimeout(start, 800);

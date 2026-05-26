@@ -1461,7 +1461,16 @@ function buildPageList(current, total) {
             };
 
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+                // Ignore non-JSON frames (some proxies echo 'pong' for our
+                // 'ping' keepalive; future server-side heartbeats follow the
+                // same shape). auction.js and common.js already wrap this in
+                // try/catch - keep the listing-grid handler consistent.
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    return;
+                }
                 if (data.type === 'new_bid') {
                     updatePrice(auctionId, data.current_price);
                 }
