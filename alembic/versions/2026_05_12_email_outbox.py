@@ -2,7 +2,7 @@
 
 Persistent queue for transactional email. The previous fire-and-forget
 ``asyncio.create_task`` model dropped any email the SMTP server
-refused — fine for "you've been outbid" pushes, fatal for the
+refused - fine for "you've been outbid" pushes, fatal for the
 password-reset link (lost link == account lockout). A background
 worker drains this table with exponential backoff and dead-letters
 rows that exhaust their retry budget.

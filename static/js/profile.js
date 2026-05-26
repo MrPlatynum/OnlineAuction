@@ -779,7 +779,7 @@ async function loadBalance(reset = true) {
 
     const html = data.items.map(t => {
       const meta = TX_META[t.type] || { icon: '💰', label: t.type, plus: true };
-      const sign = meta.plus ? '+' : '−';
+      const sign = meta.plus ? '+' : '-';
       const cls  = meta.plus ? 'plus' : 'minus';
       const desc = t.description || meta.label;
       const utc  = t.created_at.endsWith('Z') ? t.created_at : t.created_at + 'Z';

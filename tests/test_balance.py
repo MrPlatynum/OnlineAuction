@@ -190,7 +190,7 @@ async def test_concurrent_buy_now_only_one_succeeds(
     assert statuses == [200, 400], (r_a.text, r_b.text)
 
     seller = (await client.get("/api/me", headers=registered_user["headers"])).json()
-    # Seller starts at 1000, credited exactly once (+400 gross, −28
+    # Seller starts at 1000, credited exactly once (+400 gross, -28
     # commission at 7% = +372 net), not twice.
     assert seller["balance"] == 1372.0
 
@@ -308,7 +308,7 @@ async def test_bin_purchase_writes_commission_row(client, registered_user, secon
     assert commission_row["amount"] == 70.0     # 7% of 1000
     assert sale_row["amount"] == 1000.0
     assert sale_row["balance_after"] == 2000.0  # 1000 starting + 1000 gross
-    assert commission_row["balance_after"] == 1930.0  # − 70 commission
+    assert commission_row["balance_after"] == 1930.0  # - 70 commission
 
 
 async def test_completed_auction_writes_commission_row(
