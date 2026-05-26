@@ -32,6 +32,14 @@ class User(Base):
     # from many IPs can't sneak past the per-IP rate limit.
     failed_login_count = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime, nullable=True)
+    # Rolling-24h upload byte-budget. ``upload_window_start`` is the
+    # opening of the current window; once a fresh upload lands more
+    # than 24h after it, the counter resets and the start moves to
+    # ``now``. Without this cap any verified user could push 8 MB at
+    # 20/min into static/uploads indefinitely and use the platform
+    # as free image hosting.
+    upload_bytes_window = Column(Integer, default=0, nullable=False)
+    upload_window_start = Column(DateTime, nullable=True)
     balance = Column(Numeric(12, 2), default=1000.0, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
