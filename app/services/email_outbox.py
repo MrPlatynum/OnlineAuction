@@ -194,10 +194,21 @@ async def _run_one_tick() -> int:
             )
         ).scalars().all()
         for row in rows:
-            await _process_one(row, db)
-            processed += 1
-        if rows:
-            await db.commit()
+            # Commit per row. A batch commit at the end of the loop
+            # used to roll back every row's state change if any later
+            # _process_one raised: row 1 marked sent + row 2 marked
+            # failed + row 3 raises = all three reset to pending and
+            # on the next tick row 1's email is sent again.
+            try:
+                await _process_one(row, db)
+                await db.commit()
+                processed += 1
+            except Exception:
+                logger.exception(
+                    "Outbox row %s tick crashed; rolling back its state",
+                    row.id,
+                )
+                await db.rollback()
     return processed
 
 
