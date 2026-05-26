@@ -1,9 +1,24 @@
 /* ================================================================
-   Лотус — Common JS utilities
+   Лотус - Common JS utilities
    Подключается ПЕРЕД per-page JS.
-   Экспортирует: API, WS_BASE, esc, fmtMoney, fmtDate, apiFetch,
+   Экспортирует: API, WS_BASE, esc, fmtMoney, fmtDate, fmtDateShort,
+                 fmtMonthYear, apiFetch, getToken, resolveAvatarUrl,
                  showToast. Авто-инициализирует nav-колокольчик.
    ================================================================ */
+
+// Theme bootstrap runs in its own IIFE BEFORE the main one so data-theme is set
+// before first paint. Live in common.js so per-page scripts (index.js, profile.js)
+// don't each need their own copy - the block was diverging already (index.js had
+// `if(t==='auto') { ... }`, profile.js had `else if (t==='auto' && ...)`).
+(function() {
+  const t = localStorage.getItem('theme') || 'dark';
+  if (t === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else if (t === 'auto' && !window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+})();
+
 (function() {
   'use strict';
 
@@ -12,7 +27,20 @@
   window.WS_BASE = window.location.origin.replace(/^http/i, 'ws');
 
   // ---- helpers ----
-  function getToken() { return localStorage.getItem('token'); }
+  // Exposed on window so per-page scripts can read the live token instead of
+  // capturing localStorage.getItem('token') in a module-level const that goes
+  // stale after login/logout in the same tab.
+  window.getToken = function() { return localStorage.getItem('token'); };
+  function getToken() { return window.getToken(); }
+
+  // Avatar URLs come in two shapes: absolute (uploaded to a CDN or external host,
+  // starts with http(s)) or path-relative ("/static/uploads/..."). Same dance was
+  // copy-pasted in 11 places across 5 files; centralised here so a future hosting
+  // tweak doesn't have to chase them all.
+  window.resolveAvatarUrl = function(url) {
+    if (!url) return null;
+    return url.startsWith('http') ? url : window.API + url;
+  };
 
   // Shorthand для `document.getElementById`. Удобство для per-page скриптов
   // (auction.js, profile.js, и т.д.) — раньше каждый объявлял локальный
@@ -36,6 +64,27 @@
     const utc = String(iso).endsWith('Z') || String(iso).includes('+') ? iso : iso + 'Z';
     return new Date(utc).toLocaleString('ru-RU', opts || {
       day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  // Short calendar date ("12 мая 2026") used in transaction lists, review
+  // headers, and seller-profile metadata. Was a one-line copy in user.js,
+  // profile.js (x2), and auction.js with subtly different option objects.
+  window.fmtDateShort = function(iso) {
+    if (!iso) return '';
+    const utc = String(iso).endsWith('Z') || String(iso).includes('+') ? iso : iso + 'Z';
+    return new Date(utc).toLocaleDateString('ru-RU', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  };
+
+  // "С нами с май 2026" string in seller bios. user.js had its own fmtMonthYear,
+  // auction.js inlined the same toLocaleDateString call.
+  window.fmtMonthYear = function(iso) {
+    if (!iso) return '';
+    const utc = String(iso).endsWith('Z') || String(iso).includes('+') ? iso : iso + 'Z';
+    return new Date(utc).toLocaleDateString('ru-RU', {
+      month: 'long', year: 'numeric',
     });
   };
 

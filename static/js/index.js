@@ -1,12 +1,3 @@
-(function(){
-  const t = localStorage.getItem('theme') || 'dark';
-  if (t === 'light') document.documentElement.setAttribute('data-theme','light');
-  else if (t === 'auto') {
-    if (!window.matchMedia('(prefers-color-scheme: dark)').matches)
-      document.documentElement.setAttribute('data-theme','light');
-  }
-})();
-
 // Mobile nav
 function openMobileNav() { document.getElementById('mobileNav').classList.add('open'); }
 function closeMobileNavFull() { document.getElementById('mobileNav').classList.remove('open'); }
@@ -967,7 +958,7 @@ document.addEventListener('DOMContentLoaded', () => {
               avEl.textContent = (currentUser.username || '?').charAt(0).toUpperCase();
               if (currentUser.avatar_url) {
                 const img = document.createElement('img');
-                img.src = currentUser.avatar_url.startsWith('http') ? currentUser.avatar_url : `${API_URL}${currentUser.avatar_url}`;
+                img.src = resolveAvatarUrl(currentUser.avatar_url);
                 img.alt = currentUser.username;
                 avEl.appendChild(img);
               }

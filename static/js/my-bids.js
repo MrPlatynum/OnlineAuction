@@ -15,7 +15,7 @@ async function initAuth() {
     avEl.textContent = (me.username||'?')[0].toUpperCase();
     if (me.avatar_url) {
       const img = document.createElement('img');
-      img.src = me.avatar_url.startsWith('http') ? me.avatar_url : `${API}${me.avatar_url}`;
+      img.src = resolveAvatarUrl(me.avatar_url);
       img.alt = me.username;
       avEl.appendChild(img);
     }

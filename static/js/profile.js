@@ -1,11 +1,3 @@
-  (function(){
-    const t = localStorage.getItem('theme') || 'dark';
-    if (t === 'light') document.documentElement.setAttribute('data-theme','light');
-    else if (t === 'auto' && !window.matchMedia('(prefers-color-scheme: dark)').matches)
-      document.documentElement.setAttribute('data-theme','light');
-  })();
-  
-
 const token = localStorage.getItem('token');
 
 function logout() { localStorage.removeItem('token'); location.href = 'index.html'; }
@@ -527,9 +519,7 @@ function renderSubs() {
     const stars = avg > 0
       ? [1,2,3,4,5].map(i => `<span style="color:${i<=Math.round(avg)?'var(--accent-2)':'var(--text-3)'}">★</span>`).join('')
       : '';
-    const avatarSrc = s.avatar_url
-      ? (s.avatar_url.startsWith('http') ? s.avatar_url : `${API}${s.avatar_url}`)
-      : null;
+    const avatarSrc = resolveAvatarUrl(s.avatar_url);
     const avatarHtml = avatarSrc
       ? `<img src="${esc(avatarSrc)}" alt="${esc(s.username)}">`
       : (s.username||'?')[0].toUpperCase();
@@ -681,7 +671,7 @@ async function confirmCrop() {
       removeAvatarImg();
     } else {
       const data = await r.json();
-      const src = data.avatar_url.startsWith('http') ? data.avatar_url : `${API}${data.avatar_url}`;
+      const src = resolveAvatarUrl(data.avatar_url);
       // Обновляем src на финальный
       const img = $('avatar').querySelector('img');
       if (img) img.src = src;
@@ -922,7 +912,7 @@ async function load() {
   if (settingsAv) settingsAv.textContent = (user.username[0] || '?').toUpperCase();
 
   if (user.avatar_url) {
-    const src = user.avatar_url.startsWith('http') ? user.avatar_url : `${API}${user.avatar_url}`;
+    const src = resolveAvatarUrl(user.avatar_url);
     const img = document.createElement('img');
     img.src = src; img.alt = user.username;
     $('avatar').prepend(img);
@@ -954,7 +944,7 @@ async function load() {
   if ($('navBalancePill'))  $('navBalancePill').textContent  = Number(user.balance || 0).toFixed(2);
   if (navAv) {
     if (user.avatar_url) {
-      const src = user.avatar_url.startsWith('http') ? user.avatar_url : `${API}${user.avatar_url}`;
+      const src = resolveAvatarUrl(user.avatar_url);
       const img = document.createElement('img');
       img.src = src;
       img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;';

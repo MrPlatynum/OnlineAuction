@@ -147,7 +147,7 @@
     $('avatar').textContent=(user.username?.[0]||'?').toUpperCase();
     if (user.avatar_url) {
       const img=document.createElement('img');
-      img.src=user.avatar_url.startsWith('http')?user.avatar_url:`${API}${user.avatar_url}`;
+      img.src=resolveAvatarUrl(user.avatar_url);
       img.alt=user.username; $('avatar').appendChild(img);
     }
     $('userName').textContent=user.username||'-';
@@ -251,7 +251,7 @@
       $('sellerAvatar').textContent=a.creator_username[0].toUpperCase();
       if (a.creator_avatar_url) {
         const img=document.createElement('img');
-        img.src=a.creator_avatar_url.startsWith('http')?a.creator_avatar_url:`${API}${a.creator_avatar_url}`;
+        img.src=resolveAvatarUrl(a.creator_avatar_url);
         img.alt=a.creator_username; $('sellerAvatar').appendChild(img);
       }
       syncEl('sellerLink','@'+a.creator_username);
@@ -516,7 +516,7 @@
         syncEl('sellerMeta',`С нами с ${new Date(d.user?.created_at+'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`);
         syncEl('sellerLots',d.stats?.created_count??'-');
         if (d.user?.avatar_url&&!$('sellerAvatar').querySelector('img')) {
-          const img=document.createElement('img');img.src=d.user.avatar_url.startsWith('http')?d.user.avatar_url:`${API}${d.user.avatar_url}`;img.alt=username;$('sellerAvatar').appendChild(img);
+          const img=document.createElement('img');img.src=resolveAvatarUrl(d.user.avatar_url);img.alt=username;$('sellerAvatar').appendChild(img);
         }
       }
     } catch {}
@@ -701,9 +701,7 @@
       const utc = rev.created_at.endsWith('Z') ? rev.created_at : rev.created_at + 'Z';
       const date = new Date(utc).toLocaleDateString('ru-RU', { day:'2-digit', month:'short', year:'numeric' });
       const stars = [1,2,3,4,5].map(i => `<span class="review-star${i <= rev.rating ? ' on' : ''}">★</span>`).join('');
-      const avatarSrc = rev.reviewer_avatar_url
-        ? (rev.reviewer_avatar_url.startsWith('http') ? rev.reviewer_avatar_url : `${API}${rev.reviewer_avatar_url}`)
-        : null;
+      const avatarSrc = resolveAvatarUrl(rev.reviewer_avatar_url);
       const avatarHtml = avatarSrc
         ? `<img src="${esc(avatarSrc)}" alt="${esc(rev.reviewer_username)}">`
         : (rev.reviewer_username || '?')[0].toUpperCase();

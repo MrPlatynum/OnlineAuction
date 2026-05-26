@@ -70,9 +70,7 @@ async function render(data) {
   const completedLots = (auctions || []).filter(a => !a.is_active).slice(0, 8);
   const totalDecided  = stats.won_count + stats.lost_count;
   const winRate       = totalDecided > 0 ? Math.round(stats.won_count / totalDecided * 100) : null;
-  const avatarBig = user.avatar_url
-    ? (user.avatar_url.startsWith('http') ? user.avatar_url : API + user.avatar_url)
-    : null;
+  const avatarBig = resolveAvatarUrl(user.avatar_url);
 
   let subHtml = '';
   if (!isMe && token) {
@@ -272,9 +270,7 @@ function renderReviews() {
   el.innerHTML = filtered.map(rev => {
     const tone = rev.rating >= 4 ? 'positive' : rev.rating <= 2 ? 'negative' : 'neutral';
     const numCls = rev.rating >= 4 ? '' : rev.rating <= 2 ? 'low' : 'mid';
-    const avaSrc = rev.reviewer_avatar_url
-      ? (rev.reviewer_avatar_url.startsWith('http') ? rev.reviewer_avatar_url : API + rev.reviewer_avatar_url)
-      : null;
+    const avaSrc = resolveAvatarUrl(rev.reviewer_avatar_url);
     const avaHtml = avaSrc
       ? `<img src="${esc(avaSrc)}" alt="">`
       : esc((rev.reviewer_username || '?')[0].toUpperCase());
