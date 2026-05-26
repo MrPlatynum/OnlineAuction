@@ -14,7 +14,7 @@ module stays a one-way upstream dependency.
 import logging
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PLATFORM_COMMISSION_PERCENT
@@ -142,6 +142,26 @@ def _build_completion_notifications(
             ),
         ))
     return pending
+
+
+async def count_bids_by_auction(
+    db: AsyncSession, auction_ids: list[int]
+) -> dict[int, int]:
+    """Single grouped COUNT per page of auctions. Turns the listing
+    handler from O(page_size) round-trips (one COUNT per lot) into O(1).
+    Used by both the public ``/auctions`` listing and the
+    ``/my/participation`` created_auctions bucket - they both pull a
+    page of Auction rows and need ``bids_count`` for each."""
+    if not auction_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(Bid.auction_id, func.count(Bid.id))
+            .where(Bid.auction_id.in_(auction_ids))
+            .group_by(Bid.auction_id)
+        )
+    ).all()
+    return {aid: cnt for aid, cnt in rows}
 
 
 async def fetch_auction_bidders(

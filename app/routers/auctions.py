@@ -33,6 +33,7 @@ from app.schemas import (
 )
 from app.services.auction_scheduler import cancel_auction, schedule_auction
 from app.services.auctions import (
+    count_bids_by_auction,
     fetch_auction_bidders,
     seller_commission,
     settle_bin_purchase,
@@ -379,19 +380,7 @@ async def get_auctions(
         )
     ).scalars().all()
 
-    # One aggregate query for the whole page instead of one COUNT per
-    # row — turns the listing from O(page_size) round-trips into O(1).
-    auction_ids = [a.id for a in auctions]
-    bid_counts: dict[int, int] = {}
-    if auction_ids:
-        rows = (
-            await db.execute(
-                select(Bid.auction_id, func.count(Bid.id))
-                .where(Bid.auction_id.in_(auction_ids))
-                .group_by(Bid.auction_id)
-            )
-        ).all()
-        bid_counts = {aid: cnt for aid, cnt in rows}
+    bid_counts = await count_bids_by_auction(db, [a.id for a in auctions])
 
     result = [
         AuctionResponse(**_auction_to_dict(a, bid_counts.get(a.id, 0)))
@@ -595,16 +584,7 @@ async def get_my_participation(
         )
     ).scalars().all()
 
-    # One aggregate for bid counts across all of my auctions.
-    bid_counts: dict[int, int] = {}
-    if my_auctions:
-        bid_counts = dict(
-            (await db.execute(
-                select(Bid.auction_id, func.count(Bid.id))
-                .where(Bid.auction_id.in_([a.id for a in my_auctions]))
-                .group_by(Bid.auction_id)
-            )).all()
-        )
+    bid_counts = await count_bids_by_auction(db, [a.id for a in my_auctions])
 
     created_auctions = [
         _created_lot_row(a, bid_counts.get(a.id, 0)) for a in my_auctions
