@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Auction, Review, User
-from app.schemas import ReviewCreate
+from app.schemas import ReviewCreate, SellerReviewsResponse
 from app.utils.security import get_current_user, require_verified_user
 
 router = APIRouter(prefix="/api", tags=["reviews"])
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api", tags=["reviews"])
 _REVIEWS_LIST_CAP = 50
 
 
-@router.get("/sellers/{seller_id}/reviews")
+@router.get("/sellers/{seller_id}/reviews", response_model=SellerReviewsResponse)
 async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db)):
     base_filter = Review.seller_id == seller_id
 

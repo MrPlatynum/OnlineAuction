@@ -7,7 +7,12 @@ from app.schemas.auction import (
 from app.schemas.balance import DepositRequest, WithdrawRequest
 from app.schemas.bid import BidCreate, BidResponse, PaginatedBidsResponse
 from app.schemas.notification import NotificationResponse
-from app.schemas.review import ReviewCreate
+from app.schemas.review import (
+    ReviewCreate,
+    SellerReviewItem,
+    SellerReviewsResponse,
+    SellerReviewsStats,
+)
 from app.schemas.user import (
     ChangePasswordRequest,
     NotificationSettings,
@@ -39,4 +44,7 @@ __all__ = [
     "DepositRequest",
     "WithdrawRequest",
     "ReviewCreate",
+    "SellerReviewItem",
+    "SellerReviewsResponse",
+    "SellerReviewsStats",
 ]
