@@ -10,6 +10,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PUBLIC_BASE_URL
 from app.models import Notification, NotificationType, User
+
+# Per-type opt-out: every NotificationType maps to the boolean column on
+# ``User`` whose ``False`` value silences the email channel for that type
+# (in-app + WS push fire unconditionally). Adding a new type means one
+# more row here plus the matching User column - no branching elsewhere.
+_EMAIL_OPT_OUT_FLAG: dict[NotificationType, str] = {
+    NotificationType.BID_OUTBID:     "notify_outbid",
+    NotificationType.AUCTION_WON:    "notify_winning",
+    NotificationType.AUCTION_ENDING: "notify_ending",
+    NotificationType.AUCTION_SOLD:   "notify_sold",
+    NotificationType.BID_PLACED:     "notify_bid_received",
+    NotificationType.AUCTION_LOST:   "notify_lost",
+}
 from app.services.email import (
     build_notification_email_html,
     build_password_changed_email_html,
@@ -128,20 +141,8 @@ async def notify_user(
         })
 
     if user.email_notifications:
-        should_send_email = False
-
-        if notification_type == NotificationType.BID_OUTBID and user.notify_outbid:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_WON and user.notify_winning:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_ENDING and user.notify_ending:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_SOLD and user.notify_sold:
-            should_send_email = True
-        elif notification_type == NotificationType.BID_PLACED and user.notify_bid_received:
-            should_send_email = True
-        elif notification_type == NotificationType.AUCTION_LOST and user.notify_lost:
-            should_send_email = True
+        opt_out_flag = _EMAIL_OPT_OUT_FLAG.get(notification_type)
+        should_send_email = bool(opt_out_flag) and getattr(user, opt_out_flag, False)
 
         if should_send_email:
             html_content = build_notification_email_html(

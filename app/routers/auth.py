@@ -46,6 +46,11 @@ from app.utils.time import utcnow
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
+# Single generic message for both pre-check and IntegrityError branches in
+# /register - separate "username taken" vs "email taken" wording would let
+# an attacker enumerate registered usernames and emails by probing.
+_USER_EXISTS_DETAIL = "Пользователь с таким username или email уже существует"
+
 
 async def _invalidate_user_sessions(user: User) -> None:
     """Bump ``user.token_version`` and close every open notification WS
@@ -75,10 +80,7 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
         await db.execute(select(User.id).where(User.email == user.email))
     ).scalar_one_or_none()
     if username_taken or email_taken:
-        raise HTTPException(
-            status_code=400,
-            detail="Пользователь с таким username или email уже существует",
-        )
+        raise HTTPException(status_code=400, detail=_USER_EXISTS_DETAIL)
 
     db_user = User(
         username=user.username,
@@ -95,10 +97,7 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
         # see IntegrityError. Return the same generic 400 as the
         # pre-check so the response is timing- and message-stable.
         await db.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="Пользователь с таким username или email уже существует",
-        ) from None
+        raise HTTPException(status_code=400, detail=_USER_EXISTS_DETAIL) from None
     await db.refresh(db_user)
 
     # Kick off the verification email after the row is persistent so a
