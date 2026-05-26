@@ -340,19 +340,26 @@
   }
 
   async function placeBid() {
+    // Re-entrancy guard. Holding Enter (key-repeat) or rapid clicks
+    // fire ``placeBid`` again before the first call's POST returns;
+    // ``btn.disabled`` doesn't help since the keydown handler runs
+    // ``placeBid()`` directly and the disable is only set after the
+    // input-validity checks. Without the guard the server sees the
+    // same bid twice and the user sees a confusing double-toast.
+    if (placeBid._inflight) return;
     const raw=$('bidAmount').value, amount=Number(raw);
     if (!token) return showToast('Нужен вход','Войдите для участия в торгах.','warn');
     if (!isActive) return showToast('Закрыто','Аукцион уже завершён.','warn');
     if (isUserLeading()) return showToast('Вы уже лидируете','Дождитесь чужой ставки, прежде чем повышать.','warn');
     if (!raw||!Number.isFinite(amount)||amount<=0) return showToast('Некорректная ставка','Введите сумму больше нуля.','warn');
     const btn=$('bidBtn'),prev=btn.textContent;
-    btn.disabled=true; btn.textContent='Отправка…';
+    placeBid._inflight=true; btn.disabled=true; btn.textContent='Отправка…';
     try {
       const r=await apiFetch(`${API}/api/bids`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({auction_id:Number(auctionId),amount})});
       if (!r.ok) { let msg='Ставка не принята.'; try{msg=(await r.json()).detail||msg;}catch{} showToast('Ошибка',msg,'bad'); }
       else { $('bidAmount').value=''; showToast('Принято','Ваша ставка зарегистрирована!','ok'); await loadBids(); }
     } catch { showToast('Ошибка','Нет связи с сервером.','bad'); }
-    finally { btn.textContent=prev; refreshBidControls(); }
+    finally { placeBid._inflight=false; btn.textContent=prev; refreshBidControls(); }
   }
 
   function connectWS() {
