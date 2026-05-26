@@ -38,7 +38,7 @@ from app.services.auctions import (
     seller_commission,
     settle_bin_purchase,
 )
-from app.services.balance import lock_users_by_id
+from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.notifications import create_notification, notify_user
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
@@ -253,11 +253,25 @@ async def buy_now(
 
     locked_users = await lock_users_by_id(db, current_user.id, auction.created_by)
     creator = locked_users.get(auction.created_by)
-    if current_user.balance < auction.bin_price:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, у вас {current_user.balance:.2f} ₽",
+
+    # Subtract balance already committed as the top bidder on other active
+    # auctions: if those settle with this user as winner, the amount is debited
+    # at completion time, so it must still be available alongside the BIN
+    # payment. BIN lots themselves reject bids (see /bids handler), so the
+    # buyer can never have a prior commit on *this* auction to exclude.
+    committed_elsewhere = await get_committed_balance(db, current_user.id)
+    available = current_user.balance - committed_elsewhere
+    if available < auction.bin_price:
+        detail = (
+            f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, "
+            f"доступно {available:.2f} ₽"
         )
+        if committed_elsewhere > 0:
+            detail += (
+                f" ({committed_elsewhere:.2f} ₽ уже зарезервировано в других "
+                f"активных аукционах)"
+            )
+        raise HTTPException(status_code=400, detail=detail + ".")
 
     settle_bin_purchase(db, auction, current_user, creator)
     await db.commit()

@@ -137,6 +137,65 @@ async def test_withdraw_respects_committed_balance(client, registered_user, seco
     assert r_ok.json()["balance"] == 700.0
 
 
+async def test_buy_now_respects_committed_balance(
+    client, registered_user, second_user, third_user
+):
+    """A user leading on auction L1 has those funds locked. /buy-now on
+    a different lot L2 used to ignore that and could push the balance
+    negative once L1 settled - now it subtracts committed-balance from
+    the BIN-affordability check the same way /withdraw and /bids do."""
+    # carol lists two lots: a bid lot (L1) and a BIN lot (L2).
+    l1 = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "L1 bid lot",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bid",
+        },
+        headers=third_user["headers"],
+    )).json()
+    l2 = (await client.post(
+        "/api/auctions",
+        json={
+            "title": "L2 BIN lot",
+            "description": "...",
+            "starting_price": 100.0,
+            "duration_minutes": 60,
+            "auction_type": "bin",
+            "bin_price": 800.0,
+        },
+        headers=third_user["headers"],
+    )).json()
+
+    # bob has $1000, bids $700 on L1 - committed $700, available $300.
+    bid = await client.post(
+        "/api/bids",
+        json={"auction_id": l1["id"], "amount": 700.0},
+        headers=second_user["headers"],
+    )
+    assert bid.status_code == 200, bid.text
+
+    # /buy-now on L2 needs $800; only $300 is actually free. Used to succeed,
+    # then L1 settling would drop bob's balance to -$500.
+    r_blocked = await client.post(
+        f"/api/auctions/{l2['id']}/buy-now",
+        headers=second_user["headers"],
+    )
+    assert r_blocked.status_code == 400, r_blocked.text
+    detail = r_blocked.json()["detail"].lower()
+    assert "недостаточно" in detail
+    assert "зарезервиров" in detail
+
+    # bob's balance and L2 state unchanged.
+    bob = (await client.get("/api/me", headers=second_user["headers"])).json()
+    assert bob["balance"] == 1000.0
+    l2_after = (await client.get(f"/api/auctions/{l2['id']}")).json()
+    assert l2_after["is_active"] is True
+    assert l2_after["winner_id"] is None
+
+
 async def test_concurrent_deposits_all_apply(client, registered_user):
     """Two parallel /deposit calls on the same account must both apply.
     The row lock serialises the read-add-write so neither update is
