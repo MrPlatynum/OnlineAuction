@@ -11,7 +11,13 @@ def _check_image_url(value: str) -> str:
     which is the exact stored-XSS shape we already escape on the client,
     but defence-in-depth: don't accept hostile content in the first place.
     """
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str):
+        raise ValueError("URL must be a non-empty string")
+    # Trim surrounding whitespace - paste from clipboard (and several
+    # mobile keyboards) silently appends a trailing space that would
+    # otherwise fail the http(s) prefix check.
+    value = value.strip()
+    if not value:
         raise ValueError("URL must be a non-empty string")
     if value.startswith(("http://", "https://")):
         return value
