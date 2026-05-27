@@ -427,3 +427,26 @@ async def test_platform_endpoint_exposes_commission_rate(client):
     body = r.json()
     assert isinstance(body["commission_percent"], (int, float))
     assert body["commission_percent"] > 0
+
+
+async def test_deposit_rejects_sub_cent_amount(client, registered_user):
+    """A deposit / withdrawal / bid with more than two decimal places
+    used to be silently rounded HALF_UP by ``to_decimal`` - a request for
+    100.005 ₽ debited 100.01 ₽ from the user. Pydantic ``decimal_places=2``
+    now rejects the boundary value with a 422 so the user sees an
+    immediate validation error instead of paying a phantom cent."""
+    r = await client.post(
+        "/api/deposit",
+        json={"amount": 100.005},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 422, r.text
+
+
+async def test_withdraw_rejects_sub_cent_amount(client, registered_user):
+    r = await client.post(
+        "/api/withdraw",
+        json={"amount": 50.123},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 422, r.text

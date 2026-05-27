@@ -40,10 +40,11 @@ from app.services.auctions import (
     settle_bin_purchase,
 )
 from app.services.balance import get_committed_balance, lock_users_by_id
-from app.services.notifications import notify_user
+from app.services.notifications import notify_many, notify_user
 from app.services.websocket_manager import manager
+from app.utils.pagination import total_pages_for
 from app.utils.security import get_current_user, require_verified_user
-from app.utils.time import utcnow
+from app.utils.time import seconds_until, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +67,11 @@ def _empty_auctions_page(page: int, page_size: int) -> "PaginatedAuctionsRespons
 
 
 def _time_remaining(auction: Auction) -> int:
-    """Seconds left until ``end_time`` - single source of truth used by
-    every dict-builder in this module. Returns 0 for completed lots or
-    when ``end_time`` is somehow None (defensive: the column is NOT NULL
-    but a freshly-built ORM instance can briefly be unset)."""
-    if not auction.end_time or not auction.is_active:
-        return 0
-    return max(0, int((auction.end_time - utcnow()).total_seconds()))
+    """Thin shim onto the shared ``seconds_until`` helper - kept under
+    the local name so the dict-builder calls in this module read as
+    ``_time_remaining(auction)`` instead of leaking the kwarg shape
+    of the utility into every call."""
+    return seconds_until(auction.end_time, is_active=auction.is_active)
 
 
 def _participation_row(auction: Auction, my_amount) -> dict:
@@ -189,14 +188,17 @@ async def create_auction(
     if all_urls:
         await db.commit()
 
-    # Fan out NEW_LOT through notify_user so subscribers get the full
-    # three-channel delivery (in-app row + WS push + email), not just
-    # the in-app row. ``create_notification`` alone left this channel
-    # silent for everyone watching the bell and never produced an
-    # email, which made the "subscribe" feature feel broken.
-    # Notifications are best-effort: a single failed recipient must
-    # not abort the rest, and must not propagate up to roll back the
-    # create_auction commit that already persisted the row.
+    # Fan out NEW_LOT via the batched helper so subscribers get the
+    # three-channel delivery (in-app row + outbox email + WS push) in
+    # one commit instead of one per recipient. The previous per-
+    # iteration loop awaited notify_user per subscriber, each one
+    # committing the session mid-loop - which not only blocked the POST
+    # /auctions response for the duration of the slowest channel but
+    # also flushed the just-added AuctionImage rows on the first
+    # commit, so a later failure in the response builder couldn't
+    # transactionally undo them (the seller's UI showed "create failed"
+    # and a retry produced a duplicate listing with two NEW_LOT emails
+    # for every subscriber).
     subscribers = (
         await db.execute(
             select(User)
@@ -204,19 +206,31 @@ async def create_auction(
             .where(Subscription.seller_id == current_user.id)
         )
     ).scalars().all()
-    for subscriber in subscribers:
-        try:
-            await notify_user(
-                db, subscriber, NotificationType.NEW_LOT,
-                "Новый лот",
-                f"@{current_user.username} выставил новый лот: «{db_auction.title}»",
-                db_auction.id, db_auction.title, manager,
-            )
-        except Exception:
-            logger.exception(
-                "NEW_LOT dispatch failed for subscriber %s on auction %s",
-                subscriber.id, db_auction.id,
-            )
+    new_lot_body = (
+        f"@{current_user.username} выставил новый лот: «{db_auction.title}»"
+    )
+    try:
+        await notify_many(
+            db,
+            [
+                (subscriber, NotificationType.NEW_LOT, "Новый лот", new_lot_body)
+                for subscriber in subscribers
+            ],
+            auction_id=db_auction.id,
+            auction_title=db_auction.title,
+            manager=manager,
+        )
+    except Exception:
+        # The auction is already durable - a notification-side failure
+        # must not surface a 500 to the seller. Otherwise they retry,
+        # create a duplicate listing, and subscribers eventually receive
+        # two NEW_LOT payloads for what they perceive as one lot.
+        logger.exception(
+            "NEW_LOT fan-out failed for auction %s", db_auction.id
+        )
+        # Reset the session state so the response-building re-fetch
+        # below works on a clean session.
+        await db.rollback()
 
     # Re-fetch with relationships eager-loaded so the response goes through
     # the same shape as the listing - kept these dicts drifting apart before
@@ -387,7 +401,7 @@ async def get_auctions(
     total = await db.scalar(
         select(func.count()).select_from(query.subquery())
     )
-    total_pages = (total + page_size - 1) // page_size
+    total_pages = total_pages_for(total, page_size)
 
     if sort_by == "time":
         query = query.order_by(Auction.end_time.asc())

@@ -1506,12 +1506,11 @@ function buildPageList(current, total) {
                     clearInterval(ws.pingInterval);
                 }
 
-                // Don't reconnect on intentional close (page change,
-                // filter) or on server-side policy refusal (1008 - per-IP
-                // connection limit, 1011 - internal error). Otherwise a
-                // reconnect storm hammers the same limit.
+                // Skip reconnect on intentional close (page change,
+                // filter swap) or any final code from the shared
+                // allowlist.
                 if (ws.intentionallyClosed) return;
-                if (event && (event.code === 1000 || event.code === 1008 || event.code === 1011)) {
+                if (event && window.wsIsFinalCloseCode(event.code)) {
                     return;
                 }
 
@@ -1529,11 +1528,7 @@ function buildPageList(current, total) {
                     return;
                 }
 
-                // Exponential backoff with half-jitter: on a one-off
-                // server drop a hundred tabs don't all retry within one
-                // second - they spread over [base/2, base].
-                const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
-                const delay = base / 2 + Math.random() * (base / 2);
+                const delay = window.wsReconnectDelay(reconnectAttempts[auctionId]);
                 reconnectAttempts[auctionId]++;
                 setTimeout(() => {
                     const card = document.querySelector(`[data-auction-id="${auctionId}"]`);

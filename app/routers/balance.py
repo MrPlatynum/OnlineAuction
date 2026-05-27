@@ -16,6 +16,7 @@ from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.transactions import add_transaction
 from app.utils.money import money_to_float, to_decimal
+from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
 
@@ -113,12 +114,7 @@ async def get_transactions(
         "balance": money_to_float(current_user.balance),
         "total": total,
         "page": page,
-        # Match the convention used by bids.py / auctions.py: an
-        # empty result returns total_pages = 0, not 1. The previous
-        # max(1, ...) floor made the listing-page paginators
-        # inconsistent and forced the frontend to special-case the
-        # transactions ledger.
-        "total_pages": (total + page_size - 1) // page_size,
+        "total_pages": total_pages_for(total, page_size),
         "items": [
             {
                 "id": t.id,

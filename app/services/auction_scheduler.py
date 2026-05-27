@@ -12,6 +12,47 @@ table once and schedule everything still active.
 Single-process only: each uvicorn worker would schedule its own copy.
 That's fine for the development setup; for multi-worker, completion
 would need to be moved behind a DB-level advisory lock.
+
+Cancellation safety
+-------------------
+The two scheduler coroutines (``_wait_and_complete``,
+``_wait_and_notify_ending_soon``) are long-running background tasks
+whose cancellation paths are easy to get wrong. The conventions:
+
+* The top-level ``try`` body contains every ``await`` that touches
+  the DB. The ``except Exception`` arm wraps ``db.rollback()`` in
+  ``asyncio.shield`` so a ``shutdown_scheduler`` cancel that arrives
+  during the rollback cannot interrupt it; an interrupted rollback
+  returns the asyncpg connection to the pool with an unresolved
+  transaction and the next checkout fails with "another operation in
+  progress".
+
+* The ``except asyncio.CancelledError: raise`` arm propagates the
+  cancel out of the task so ``shutdown_scheduler`` (which awaits the
+  task) sees it complete cleanly.
+
+* The ``finally`` clause only removes the task from the registry when
+  the slot still references this task instance. A re-arm path may
+  have replaced the slot with a new task in the meantime; popping
+  unconditionally would orphan the replacement.
+
+* ``_arm_completion_task`` cancels the prior slot occupant *unless*
+  it is ``asyncio.current_task()``. Self-cancellation here would
+  propagate ``CancelledError`` into the surrounding ``session.close()``
+  and leak the FOR-UPDATE-held connection back to the pool. The
+  internal re-arm path inside ``_wait_and_complete`` triggers this
+  branch by construction.
+
+* ``cancel_auction`` and ``shutdown_scheduler`` only call ``task.cancel()``
+  (which is non-blocking); the awaiting site is ``shutdown_scheduler``'s
+  ``asyncio.gather(..., return_exceptions=True)`` at the lifespan tear-
+  down, where any CancelledError is collected and ignored.
+
+Request-handler paths do not need explicit shielding: cancellation
+arrives via FastAPI tearing down the dependency stack, and the
+``get_db`` async context manager rolls back on exit. The two settings
+that broke that contract (long-running settle + ending-soon tasks)
+both live in this module.
 """
 
 import asyncio
@@ -145,20 +186,19 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
                         auction_id,
                     )
                     return
-                # Mark the flag and commit *before* dispatching notifications.
-                # The handler calls notify_user per recipient and each one
-                # commits its own row, so a mid-fan-out failure (e.g. bidder
-                # 4 of 7 raises) used to leave the flag False while bidders
-                # 1-3 had already received their emails - on the next worker
-                # restart the task fires again and re-notifies them. Setting
-                # the flag first means a partial failure at worst drops the
-                # remaining notifications instead of duplicating the early
-                # ones; the anti-sniping path in /bids resets the flag if
-                # the deadline is extended, so a legitimate re-arm still
-                # fires a fresh warning ahead of the new end_time.
+                # Fan out *first*, then commit the short-circuit flag.
+                # The handler is now per-recipient idempotent (it skips
+                # any bidder who already has an AUCTION_ENDING row for
+                # this lot), so a partial-failure retry on the next
+                # tick re-sends only to the bidders who were missed.
+                # Committing the flag before the fan-out used to mean
+                # partial failure silently dropped the remainder with
+                # no path to recover; this order trades that for an
+                # opportunistic re-tick that the idempotency check
+                # bounds.
+                await _ending_soon_handler(auction, db)
                 auction.ending_soon_notified = True
                 await db.commit()
-                await _ending_soon_handler(auction, db)
             except Exception:
                 logger.exception(
                     "Error sending ending-soon for auction %s", auction_id
@@ -175,14 +215,26 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
 
 
 def _arm_completion_task(auction_id: int, end_time: datetime) -> None:
-    """Create the completion task and place it in the dict without
-    cancelling any existing slot. Used both by ``schedule_auction``
-    (after it has explicitly cancelled the prior task) and by the
-    internal re-arm inside ``_wait_and_complete`` - that re-arm path
-    cannot go through ``cancel_auction`` because doing so would
-    ``task.cancel()`` *this* task and propagate CancelledError into
-    the surrounding ``session.close()``, leaking the FOR-UPDATE-held
-    connection back to the pool in undefined state."""
+    """Create the completion task and place it in the dict, cancelling
+    whoever already sits in the slot **unless that occupant is the
+    current task** - cancelling self would propagate CancelledError into
+    the surrounding ``session.close()`` and leak a FOR-UPDATE-held
+    connection back to the pool in undefined state.
+
+    Used both by ``schedule_auction`` (where cancel_auction has already
+    cleared the slot, so the cancel-existing branch is a no-op) and by
+    the internal re-arm inside ``_wait_and_complete``. In the re-arm
+    path the slot can hold either ``current`` (no cancel) or a sibling
+    task armed by a concurrent external ``schedule_auction`` whose
+    cancel raced past the previous occupant - that sibling MUST be
+    cancelled before we overwrite, otherwise it stays pending,
+    unreachable from ``cancel_auction`` / ``shutdown_scheduler``, and
+    fires at its original deadline on stale state.
+    """
+    current = asyncio.current_task()
+    existing = _completion_tasks.get(auction_id)
+    if existing is not None and existing is not current and not existing.done():
+        existing.cancel()
     _completion_tasks[auction_id] = asyncio.create_task(
         _wait_and_complete(auction_id, end_time),
         name=f"auction-complete-{auction_id}",
@@ -192,12 +244,17 @@ def _arm_completion_task(auction_id: int, end_time: datetime) -> None:
 def _arm_ending_soon_task(auction: Auction) -> None:
     """Same as ``_arm_completion_task`` for the five-minute warning
     side. No-op when the flag is already set or the lead-time has
-    already passed."""
+    already passed. Cancels any prior occupant of the slot (it is
+    never the current task on this code path, so the self-cancel
+    pitfall doesn't apply)."""
     if auction.ending_soon_notified:
         return
     fire_at = auction.end_time - ENDING_SOON_LEAD
     if fire_at <= utcnow():
         return
+    existing = _ending_soon_tasks.get(auction.id)
+    if existing is not None and not existing.done():
+        existing.cancel()
     _ending_soon_tasks[auction.id] = asyncio.create_task(
         _wait_and_notify_ending_soon(auction.id, fire_at),
         name=f"auction-ending-soon-{auction.id}",

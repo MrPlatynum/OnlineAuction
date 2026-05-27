@@ -17,7 +17,7 @@ from app.models import Auction, Bid, User
 from app.schemas import NotificationSettings
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
-from app.utils.time import utcnow
+from app.utils.time import seconds_until
 
 router = APIRouter(prefix="/api", tags=["users"])
 
@@ -99,7 +99,6 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
     else:
         lost_count = 0
 
-    now = utcnow()
     auction_list = [
         {
             "id": a.id,
@@ -111,7 +110,7 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
             "end_time": a.end_time.isoformat(),
             "winner_id": a.winner_id,
             "image_url": a.image_url,
-            "time_remaining": max(0, int((a.end_time - now).total_seconds())) if a.is_active else 0,
+            "time_remaining": seconds_until(a.end_time, is_active=a.is_active),
         }
         for a in auctions
     ]

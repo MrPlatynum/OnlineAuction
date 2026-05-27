@@ -12,18 +12,19 @@ module stays a one-way upstream dependency.
 """
 
 import logging
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PLATFORM_COMMISSION_PERCENT
-from app.models import Auction, Bid, NotificationType, User
+from app.models import Auction, Bid, Notification, NotificationType, User
 from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
-from app.services.notifications import notify_user
+from app.services.notifications import notify_many
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
+from app.utils.money import quantize_money
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -31,12 +32,12 @@ logger = logging.getLogger(__name__)
 
 def seller_commission(gross_price: Decimal) -> Decimal:
     """Platform fee withheld from the seller's payout on every settled
-    sale. Rounded to two decimal places with HALF_UP so the two seller
+    sale. Routed through ``quantize_money`` so the two seller
     transaction rows (auction_sale gross + commission deduction) sum
-    cleanly to the net payout - banker's rounding would leave 0.005 ₽
-    drifts at scale."""
+    cleanly to the net payout - the rounding policy lives in one place
+    instead of being inlined per call site."""
     raw = gross_price * PLATFORM_COMMISSION_PERCENT / Decimal(100)
-    return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return quantize_money(raw)
 
 
 def _credit_seller(
@@ -54,13 +55,13 @@ def _credit_seller(
     distinct lines. Used by both the BIN and the bid settlement paths,
     which differ only in ``sale_description`` (BIN says "по цене BIN",
     bid says "лота")."""
-    # Quantize gross to 2 decimals before mutating the in-memory ORM
-    # balance. The DB column is Numeric(12, 2) - any caller passing a
-    # Decimal with >2 decimal places (in practice the per-row stored
-    # value already matches, but a future caller computing gross at
-    # higher precision could drift) would leave seller.balance and
-    # the audit row both un-quantized while Postgres rounds on store.
-    gross = gross.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Defensive quantize: callers pass values straight from Numeric(12,2)
+    # columns so the input already matches the grid, but a future caller
+    # computing gross at higher precision would otherwise leave
+    # seller.balance and the audit row un-quantized while Postgres
+    # rounds on store. Centralised via ``quantize_money`` so the policy
+    # lives in one place.
+    gross = quantize_money(gross)
     seller.balance += gross
     add_transaction(
         db, seller, "auction_sale", gross,
@@ -123,6 +124,11 @@ def _build_completion_notifications(
     ``complete_auction`` to keep that function's flow readable; the
     same shape is also easier to unit-test in isolation."""
     pending: list[tuple[User, NotificationType, str, str]] = []
+    # winner may be None if the leading bidder's account was deleted between
+    # bid placement and settle; loser-body must still render in that case so
+    # the whole completion path doesn't AttributeError mid-loop and roll back
+    # the financial commit.
+    winner_label = winner.username if winner else "другой участник"
     for user in bidders:
         if user.id == last_bid.user_id:
             pending.append((
@@ -134,7 +140,7 @@ def _build_completion_notifications(
             pending.append((
                 user, NotificationType.AUCTION_LOST,
                 "Аукцион завершён",
-                f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner.username}.",
+                f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner_label}.",
             ))
     if creator and creator.id != last_bid.user_id:
         commission = seller_commission(last_bid.amount)
@@ -207,6 +213,14 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     import time. The "winning / not winning" copy is tailored per recipient
     against the most recent bid - the current leader gets a "Вы лидируете"
     message, everyone else gets a "сделайте ставку" nudge.
+
+    Idempotent per recipient: any bidder who already has an
+    AUCTION_ENDING notification for this lot is skipped. The caller in
+    ``auction_scheduler._wait_and_notify_ending_soon`` only commits the
+    ``ending_soon_notified`` short-circuit flag after this helper
+    returns successfully, so a partial failure mid-fan-out can be
+    retried on the next tick without re-sending warnings to the
+    bidders who already received them.
     """
     last_bid = (
         await db.execute(
@@ -220,19 +234,40 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     users = await fetch_auction_bidders(db, auction.id)
     if not users:
         return
-    leader_id = last_bid.user_id if last_bid else None
 
-    for user in users:
+    already_notified_ids = set(
+        (
+            await db.execute(
+                select(Notification.user_id).where(
+                    Notification.auction_id == auction.id,
+                    Notification.type == NotificationType.AUCTION_ENDING.value,
+                )
+            )
+        ).scalars().all()
+    )
+    pending_users = [u for u in users if u.id not in already_notified_ids]
+    if not pending_users:
+        return
+
+    leader_id = last_bid.user_id if last_bid else None
+    payloads = []
+    for user in pending_users:
         is_winning = user.id == leader_id
         message = "Аукцион завершится через 5 минут! " + (
             "Вы лидируете! 🎉" if is_winning else "Сделайте ставку, чтобы выиграть!"
         )
-        await notify_user(
-            db, user, NotificationType.AUCTION_ENDING,
+        payloads.append((
+            user,
+            NotificationType.AUCTION_ENDING,
             "⏰ Аукцион скоро завершится",
             message,
-            auction.id, auction.title, manager,
-        )
+        ))
+
+    await notify_many(
+        db, payloads,
+        auction_id=auction.id, auction_title=auction.title,
+        manager=manager,
+    )
 
 
 async def complete_auction(auction_id: int, db: AsyncSession):
@@ -326,22 +361,18 @@ async def complete_auction(auction_id: int, db: AsyncSession):
     }, auction_id)
 
     # Notifications are best-effort once the financial side is committed.
-    # A single failed recipient (deleted user, transient DB drop on the
-    # commit inside create_notification, WS send error) used to abort the
-    # whole loop and leave later bidders un-notified - and propagate up
-    # to _wait_and_complete's except Exception, which rolled back the
-    # already-committed money side's session for no benefit.
-    for user, notif_type, title, message in pending_notifications:
-        try:
-            await notify_user(
-                db, user, notif_type, title, message,
-                auction.id, auction.title, manager,
-            )
-        except Exception:
-            logger.exception(
-                "Notification dispatch failed for user %s on auction %s",
-                user.id, auction_id,
-            )
+    # ``notify_many`` batches every in-app row into a single INSERT + commit
+    # and runs WS push + email outbox enqueue concurrently per recipient,
+    # so a 20-bidder settle pays one DB round-trip + the slowest channel
+    # latency instead of 20× serial commits. Per-recipient failures are
+    # logged and isolated inside the helper.
+    await notify_many(
+        db,
+        pending_notifications,
+        auction_id=auction.id,
+        auction_title=auction.title,
+        manager=manager,
+    )
 
 
 # Wire the scheduler's "settle this id" / "ending-soon" hooks to our

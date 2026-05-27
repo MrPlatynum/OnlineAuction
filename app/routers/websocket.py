@@ -20,7 +20,7 @@ from app.database import SessionLocal
 from app.models import Auction, User
 from app.services.websocket_manager import manager
 from app.utils.security import decode_token
-from app.utils.time import utcnow
+from app.utils.time import seconds_until
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +79,11 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
                         await db.execute(select(Auction).where(Auction.id == auction_id))
                     ).scalar_one_or_none()
                     if auction:
-                        time_remaining = int((auction.end_time - utcnow()).total_seconds())
                         await websocket.send_json({
                             "type": "time_update",
-                            "time_remaining": max(0, time_remaining),
+                            "time_remaining": seconds_until(
+                                auction.end_time, is_active=auction.is_active
+                            ),
                             "current_price": float(auction.current_price),
                         })
 

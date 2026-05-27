@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -32,14 +33,15 @@ class AuctionCreate(BaseModel):
     # Money fields are stored as Numeric(12, 2). Cap at MAX_USER_BALANCE
     # so an out-of-range starting / bin price 400s through Pydantic
     # instead of overflowing the DB column at commit and surfacing as
-    # an opaque 500.
-    starting_price: float = Field(gt=0, le=10_000_000)
+    # an opaque 500. decimal_places=2 rejects sub-cent values at the
+    # boundary rather than silently half-up rounding them downstream.
+    starting_price: Decimal = Field(gt=0, le=Decimal("10000000"), decimal_places=2)
     duration_minutes: int = Field(gt=0, le=10080)
     image_url: str | None = Field(default=None, max_length=2000)
     image_urls: list[str] | None = Field(default=None, max_length=10)
     category_id: int | None = None
     auction_type: Literal["bid", "bin"] = "bid"
-    bin_price: float | None = Field(default=None, gt=0, le=10_000_000)
+    bin_price: Decimal | None = Field(default=None, gt=0, le=Decimal("10000000"), decimal_places=2)
 
     @field_validator("image_url")
     @classmethod
@@ -58,8 +60,8 @@ class AuctionUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=300)
     description: str | None = Field(default=None, max_length=20000)
     category_id: int | None = None
-    starting_price: float | None = Field(default=None, gt=0, le=10_000_000)
-    bin_price: float | None = Field(default=None, gt=0, le=10_000_000)
+    starting_price: Decimal | None = Field(default=None, gt=0, le=Decimal("10000000"), decimal_places=2)
+    bin_price: Decimal | None = Field(default=None, gt=0, le=Decimal("10000000"), decimal_places=2)
     auction_type: Literal["bid", "bin"] | None = None
     extend_minutes: int | None = Field(default=None, ge=1, le=10080)
     image_urls: list[str] | None = Field(default=None, max_length=10)

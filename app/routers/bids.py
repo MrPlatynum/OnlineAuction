@@ -7,6 +7,8 @@ simultaneous bids by the same user on different lots can't both pass
 the available-balance check.
 """
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,9 +22,10 @@ from app.services.balance import effective_committed_balance, lock_users_by_id
 from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
+from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import require_verified_user
-from app.utils.time import utcnow
+from app.utils.time import seconds_until, utcnow
 
 router = APIRouter(prefix="/api", tags=["bids"])
 
@@ -49,8 +52,11 @@ def _build_bid_broadcast(
     }
     if extended:
         payload["extended_until"] = auction.end_time.isoformat()
-        payload["time_remaining"] = int(
-            (auction.end_time - utcnow()).total_seconds()
+        # Use the shared helper so a freshly-extended lot whose deadline
+        # the scheduler is about to settle never emits a negative
+        # value over WS - the clamp + is_active guard live in one place.
+        payload["time_remaining"] = seconds_until(
+            auction.end_time, is_active=auction.is_active
         )
     return payload
 
@@ -66,7 +72,7 @@ async def get_auction_bids(
     total = await db.scalar(
         select(func.count()).select_from(Bid).where(base_filter)
     )
-    total_pages = (total + page_size - 1) // page_size
+    total_pages = total_pages_for(total, page_size)
 
     offset = (page - 1) * page_size
     bids = (
@@ -188,7 +194,12 @@ async def place_bid(
     # full extension from "now". Resetting ending_soon_notified lets the
     # five-minute warning fire again ahead of the new deadline.
     extended = False
-    if auction.end_time - utcnow() < auction_scheduler.ANTISNIPING_WINDOW:
+    # Lower-clamp to a positive delta: if the bid slipped past the line-140
+    # expiry guard by microseconds (concurrent scheduler tick + FOR UPDATE
+    # serialisation), `end_time - utcnow()` is negative and would otherwise
+    # extend an auction that should have completed.
+    delta = auction.end_time - utcnow()
+    if timedelta(0) < delta < auction_scheduler.ANTISNIPING_WINDOW:
         auction.end_time = utcnow() + auction_scheduler.ANTISNIPING_EXTEND
         auction.ending_soon_notified = False
         extended = True

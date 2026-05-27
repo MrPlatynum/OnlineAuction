@@ -432,19 +432,15 @@
     };
     ws.onclose=(e)=>{
       if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}
-      // Policy / auth / internal codes - don't reconnect, otherwise the
-      // client would hammer the server every 1.5s on persistent refusal
-      // (e.g. per-IP connection limit hit).
-      if (e && (e.code === 1000 || e.code === 1008 || e.code === 1011)) {
+      // Final close codes from the shared allowlist (clean shutdown,
+      // policy refusal incl. per-IP cap, internal error, auth failure):
+      // a reconnect would just re-hit the wall.
+      if (e && window.wsIsFinalCloseCode(e.code)) {
         wsClosedByPolicy = true;
         return;
       }
-      // Exponential backoff with half-jitter: half random, half exponential
-      // so N clients after a server-wide drop don't hammer in one wave.
-      // Capped at 30s.
-      const attempt = ++wsReconnectAttempts;
-      const base = Math.min(30000, 500 * (2 ** Math.min(attempt, 6)));
-      const delay = base / 2 + Math.random() * (base / 2);
+      const attempt = wsReconnectAttempts++;
+      const delay = window.wsReconnectDelay(Math.min(attempt, 6), { start: 500 });
       setTimeout(connectWS, delay);
     };
   }

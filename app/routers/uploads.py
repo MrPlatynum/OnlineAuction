@@ -141,11 +141,25 @@ async def upload_image(
 ):
     sanitised, ext = await _accept_image(file)
     await _check_upload_quota(db, current_user.id, len(sanitised))
+    # Commit the quota bump *before* the disk write so a cancelled or
+    # failed write doesn't roll back the budget - otherwise an attacker
+    # can drop the connection mid-upload and recharge for free, defeating
+    # the rolling 24h cap. A successful quota commit + later disk failure
+    # is the correct trade-off: the user "paid" budget for a request that
+    # didn't land.
+    await db.commit()
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-    async with aiofiles.open(dst_path, "wb") as out:
-        await out.write(sanitised)
-    await db.commit()
+    try:
+        async with aiofiles.open(dst_path, "wb") as out:
+            await out.write(sanitised)
+    except BaseException:
+        # Best-effort cleanup of the partial file if the write was
+        # cancelled (client dropped) or raised mid-stream. The quota
+        # bump stays committed (see above) so the user did pay for the
+        # attempt - we just don't want orphan bytes on disk.
+        _safely_remove(dst_path)
+        raise
     return {"image_url": f"/static/uploads/{filename}"}
 
 
@@ -159,13 +173,22 @@ async def upload_avatar(
 ):
     sanitised, ext = await _accept_image(file)
     await _check_upload_quota(db, current_user.id, len(sanitised))
+    # Commit the quota bump before the disk write - see upload_image for
+    # the partial-write recharge attack this guards against.
+    await db.commit()
 
     _remove_avatar_file(current_user.avatar_url)
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-    async with aiofiles.open(dst_path, "wb") as out:
-        await out.write(sanitised)
+    try:
+        async with aiofiles.open(dst_path, "wb") as out:
+            await out.write(sanitised)
+    except BaseException:
+        # Drop the partial file if the write was cancelled / raised.
+        # See upload_image for the quota-vs-disk-cleanup rationale.
+        _safely_remove(dst_path)
+        raise
 
     avatar_url = f"/static/uploads/{filename}"
     current_user.avatar_url = avatar_url

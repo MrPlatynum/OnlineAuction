@@ -9,12 +9,12 @@ exposing the subscriber count for the seller's public profile.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Auction, Review, Subscription, User
+from app.utils.db import commit_or_409
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
@@ -157,15 +157,10 @@ async def subscribe(
     if exists:
         raise HTTPException(status_code=400, detail="Уже подписаны")
     db.add(Subscription(subscriber_id=current_user.id, seller_id=seller_id))
-    try:
-        await db.commit()
-    except IntegrityError:
-        # Two concurrent /subscribe calls with the same (subscriber, seller)
-        # pair both pass the pre-check (no row yet) and race to insert; the
-        # unique constraint makes the loser raise. Return the same 400 the
-        # pre-check would have produced so behaviour matches /register.
-        await db.rollback()
-        raise HTTPException(status_code=400, detail="Уже подписаны") from None
+    # Two concurrent /subscribe calls on the same (subscriber, seller)
+    # pair race the INSERT; the unique constraint surfaces the loser
+    # through the shared 400 path.
+    await commit_or_409(db, detail="Уже подписаны")
     count = await _subscriber_count(db, seller_id)
     return {"subscribed": True, "subscribers_count": count}
 
