@@ -145,20 +145,19 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
                         auction_id,
                     )
                     return
-                # Mark the flag and commit *before* dispatching notifications.
-                # The handler calls notify_user per recipient and each one
-                # commits its own row, so a mid-fan-out failure (e.g. bidder
-                # 4 of 7 raises) used to leave the flag False while bidders
-                # 1-3 had already received their emails - on the next worker
-                # restart the task fires again and re-notifies them. Setting
-                # the flag first means a partial failure at worst drops the
-                # remaining notifications instead of duplicating the early
-                # ones; the anti-sniping path in /bids resets the flag if
-                # the deadline is extended, so a legitimate re-arm still
-                # fires a fresh warning ahead of the new end_time.
+                # Fan out *first*, then commit the short-circuit flag.
+                # The handler is now per-recipient idempotent (it skips
+                # any bidder who already has an AUCTION_ENDING row for
+                # this lot), so a partial-failure retry on the next
+                # tick re-sends only to the bidders who were missed.
+                # Committing the flag before the fan-out used to mean
+                # partial failure silently dropped the remainder with
+                # no path to recover; this order trades that for an
+                # opportunistic re-tick that the idempotency check
+                # bounds.
+                await _ending_soon_handler(auction, db)
                 auction.ending_soon_notified = True
                 await db.commit()
-                await _ending_soon_handler(auction, db)
             except Exception:
                 logger.exception(
                     "Error sending ending-soon for auction %s", auction_id

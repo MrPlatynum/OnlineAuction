@@ -245,6 +245,82 @@ async def test_arm_ending_soon_cancels_previous_slot_occupant(registered_user):
     cancel_auction(auction.id)
 
 
+async def test_ending_soon_fan_out_is_idempotent_per_recipient(
+    client, registered_user, second_user, monkeypatch
+):
+    """``notify_auction_ending_soon`` must skip bidders who already
+    have an AUCTION_ENDING row for the lot. The
+    ``_wait_and_notify_ending_soon`` runner now commits the
+    short-circuit flag only after a successful fan-out, so a partial
+    failure on tick #1 (some recipients notified, others raised) is
+    retried on tick #2 - and the retry must re-notify only the
+    missed bidders, not double-send to the ones already covered."""
+    from app.models import Bid, Notification, NotificationType
+    from app.services import notifications as notif_mod
+    from app.services.auctions import notify_auction_ending_soon
+    from app.services.email_outbox import enqueue_email
+
+    # Bypass the conftest no-op so notify_many's outbox seam actually
+    # records calls; we'll capture per-recipient via a list-appending
+    # patch on the seam.
+    captured: list[str] = []
+
+    async def _capture(to, subj, html, *, db=None):
+        captured.append(to)
+        if db is not None:
+            await enqueue_email(to, subj, html, db=db)
+
+    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _capture)
+
+    auction = await _seed_auction(
+        registered_user["user"]["id"], end_in_seconds=600
+    )
+    async with _db_module.SessionLocal() as db:
+        db.add(Bid(amount=150, user_id=second_user["user"]["id"], auction_id=auction.id))
+        # Pre-seed a "tick 1 partially landed here" AUCTION_ENDING row
+        # for the bidder. The fan-out helper should treat them as already
+        # notified and not re-dispatch.
+        db.add(
+            Notification(
+                user_id=second_user["user"]["id"],
+                type=NotificationType.AUCTION_ENDING.value,
+                title="⏰ Аукцион скоро завершится",
+                message="старое уведомление с предыдущего тика",
+                auction_id=auction.id,
+                auction_title=auction.title,
+            )
+        )
+        await db.commit()
+
+    captured.clear()
+
+    async with _db_module.SessionLocal() as db:
+        auc = (
+            await db.execute(select(Auction).where(Auction.id == auction.id))
+        ).scalar_one()
+        await notify_auction_ending_soon(auc, db)
+
+    # The pre-notified bidder must NOT have received a second email.
+    assert second_user["user"]["email"] not in captured, (
+        f"per-recipient dedup failed - re-sent ending-soon to a bidder "
+        f"who already had a notification row (captured={captured})"
+    )
+
+    async with _db_module.SessionLocal() as db:
+        rows = (
+            await db.execute(
+                select(Notification).where(
+                    Notification.user_id == second_user["user"]["id"],
+                    Notification.auction_id == auction.id,
+                    Notification.type == NotificationType.AUCTION_ENDING.value,
+                )
+            )
+        ).scalars().all()
+        assert len(rows) == 1, (
+            f"per-recipient dedup did not prevent a duplicate row (rows={rows})"
+        )
+
+
 def test_build_completion_notifications_handles_missing_winner(
     registered_user, second_user
 ):

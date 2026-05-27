@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PLATFORM_COMMISSION_PERCENT
-from app.models import Auction, Bid, NotificationType, User
+from app.models import Auction, Bid, Notification, NotificationType, User
 from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_many, notify_user
@@ -212,6 +212,14 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     import time. The "winning / not winning" copy is tailored per recipient
     against the most recent bid - the current leader gets a "Вы лидируете"
     message, everyone else gets a "сделайте ставку" nudge.
+
+    Idempotent per recipient: any bidder who already has an
+    AUCTION_ENDING notification for this lot is skipped. The caller in
+    ``auction_scheduler._wait_and_notify_ending_soon`` only commits the
+    ``ending_soon_notified`` short-circuit flag after this helper
+    returns successfully, so a partial failure mid-fan-out can be
+    retried on the next tick without re-sending warnings to the
+    bidders who already received them.
     """
     last_bid = (
         await db.execute(
@@ -225,19 +233,40 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
     users = await fetch_auction_bidders(db, auction.id)
     if not users:
         return
-    leader_id = last_bid.user_id if last_bid else None
 
-    for user in users:
+    already_notified_ids = set(
+        (
+            await db.execute(
+                select(Notification.user_id).where(
+                    Notification.auction_id == auction.id,
+                    Notification.type == NotificationType.AUCTION_ENDING.value,
+                )
+            )
+        ).scalars().all()
+    )
+    pending_users = [u for u in users if u.id not in already_notified_ids]
+    if not pending_users:
+        return
+
+    leader_id = last_bid.user_id if last_bid else None
+    payloads = []
+    for user in pending_users:
         is_winning = user.id == leader_id
         message = "Аукцион завершится через 5 минут! " + (
             "Вы лидируете! 🎉" if is_winning else "Сделайте ставку, чтобы выиграть!"
         )
-        await notify_user(
-            db, user, NotificationType.AUCTION_ENDING,
+        payloads.append((
+            user,
+            NotificationType.AUCTION_ENDING,
             "⏰ Аукцион скоро завершится",
             message,
-            auction.id, auction.title, manager,
-        )
+        ))
+
+    await notify_many(
+        db, payloads,
+        auction_id=auction.id, auction_title=auction.title,
+        manager=manager,
+    )
 
 
 async def complete_auction(auction_id: int, db: AsyncSession):
