@@ -144,7 +144,7 @@ async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
 
     sent: list[tuple[str, str]] = []
 
-    async def fake_send(to_email, subject, html):
+    async def fake_send(to_email, subject, html, *, db=None):
         sent.append((to_email, subject))
 
     monkeypatch.setattr(notif_module, "_fire_and_forget_email", fake_send)
@@ -177,34 +177,26 @@ async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
         assert sent == []
 
 
-async def test_notify_many_batches_inserts_and_isolates_channel_failures(
-    registered_user, second_user, monkeypatch
+async def test_notify_many_persists_in_app_and_outbox_atomically(
+    registered_user, second_user
 ):
-    """``notify_many`` is the concurrent fan-out helper used by
+    """``notify_many`` is the batched fan-out helper used by
     ``complete_auction``. Contract:
 
-    1. Every payload's in-app row persists in a single batch commit -
-       no per-recipient round-trip.
-    2. Per-channel dispatch failures (email outbox enqueue raising for
-       one user) stay isolated; the rest of the fan-out completes and
-       every recipient still has their in-app row.
+    1. Every payload's in-app ``Notification`` row AND the corresponding
+       ``EmailOutbox`` row (when the recipient's email channel is on)
+       persist in a single ``db.commit()`` - one DB round-trip, atomic
+       across both channels. This is the durability boundary the outbox
+       pattern was supposed to provide: either both channels' records
+       land or neither does, no half-state.
+    2. WS push runs concurrently after the commit and is best-effort;
+       its failures don't unwind the durable channels.
     """
     from sqlalchemy import select
 
     from app import database as _db_module
-    from app.models import User
+    from app.models import EmailOutbox, User
     from app.services import notifications as notifications_service
-
-    boom_calls = {"n": 0}
-
-    async def boom(*args, **kwargs):
-        boom_calls["n"] += 1
-        raise RuntimeError("outbox enqueue failed")
-
-    # The email seam goes through _fire_and_forget_email. Patching it
-    # simulates a transient outbox-INSERT failure for every recipient
-    # whose email channel is enabled.
-    monkeypatch.setattr(notifications_service, "_fire_and_forget_email", boom)
 
     async with _db_module.SessionLocal() as db:
         users = (
@@ -217,21 +209,23 @@ async def test_notify_many_batches_inserts_and_isolates_channel_failures(
                 )
             )
         ).scalars().all()
+        # Both fixtures default to email_notifications=True and
+        # notify_lost=True, so every payload should produce an outbox row.
+        for u in users:
+            assert u.email_notifications and u.notify_lost
 
         payloads = [
             (u, NotificationType.AUCTION_LOST, "Аукцион завершён", "тело")
             for u in users
         ]
 
-        # Must NOT raise even though every email enqueue fails.
         await notifications_service.notify_many(
             db, payloads, auction_id=None, auction_title=None
         )
 
-    # In-app rows landed for every recipient despite the channel error.
     async with _db_module.SessionLocal() as db:
         for u in users:
-            rows = (
+            notif_rows = (
                 await db.execute(
                     select(Notification).where(
                         Notification.user_id == u.id,
@@ -239,11 +233,72 @@ async def test_notify_many_batches_inserts_and_isolates_channel_failures(
                     )
                 )
             ).scalars().all()
-            assert len(rows) == 1, (
-                f"notify_many lost the in-app row for user {u.id} on a "
-                f"channel-failure path (rows={rows})"
+            assert len(notif_rows) == 1, (
+                f"in-app row missing for user {u.id} (rows={notif_rows})"
+            )
+            outbox_rows = (
+                await db.execute(
+                    select(EmailOutbox).where(EmailOutbox.to_email == u.email)
+                )
+            ).scalars().all()
+            assert len(outbox_rows) == 1, (
+                f"outbox row missing for {u.email} - atomic batch failed "
+                f"(rows={outbox_rows})"
             )
 
-    # Every email dispatch attempt was made (i.e. gather ran them all,
-    # the first failure did not short-circuit the rest).
-    assert boom_calls["n"] == len(users)
+
+async def test_notify_many_isolates_ws_push_failures(
+    registered_user, second_user, monkeypatch
+):
+    """The WS channel is best-effort: per-recipient push failures must
+    not propagate out of notify_many. The durable channels (in-app +
+    outbox) commit BEFORE the WS gather runs, so a broken WS for one
+    user can't unwind the others' durable records either."""
+    from sqlalchemy import select
+
+    from app import database as _db_module
+    from app.models import User
+    from app.services import notifications as notifications_service
+
+    sends = {"n": 0}
+
+    class _ExplodingManager:
+        async def send_notification(self, *args, **kwargs):
+            sends["n"] += 1
+            raise RuntimeError("ws send failed")
+
+    async with _db_module.SessionLocal() as db:
+        users = (
+            await db.execute(
+                select(User).where(
+                    User.id.in_([
+                        registered_user["user"]["id"],
+                        second_user["user"]["id"],
+                    ])
+                )
+            )
+        ).scalars().all()
+        payloads = [
+            (u, NotificationType.AUCTION_LOST, "Аукцион завершён", "тело")
+            for u in users
+        ]
+
+        # Must NOT raise even though every WS push fails.
+        await notifications_service.notify_many(
+            db, payloads, auction_id=None, auction_title=None,
+            manager=_ExplodingManager(),
+        )
+
+    # gather attempted every push - the first failure did not
+    # short-circuit the rest.
+    assert sends["n"] == len(users)
+
+    # Durable channels still landed despite the WS errors.
+    async with _db_module.SessionLocal() as db:
+        for u in users:
+            rows = (
+                await db.execute(
+                    select(Notification).where(Notification.user_id == u.id)
+                )
+            ).scalars().all()
+            assert rows, f"in-app row lost for user {u.id} on WS-failure path"

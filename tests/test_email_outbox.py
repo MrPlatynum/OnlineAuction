@@ -215,8 +215,8 @@ async def test_register_flow_persists_through_outbox(client, monkeypatch):
     from app.services import email_outbox as ob_mod
     from app.services import notifications as notif_mod
 
-    async def _route_to_outbox(to, subj, html):
-        await ob_mod.enqueue_email(to, subj, html)
+    async def _route_to_outbox(to, subj, html, *, db=None):
+        await ob_mod.enqueue_email(to, subj, html, db=db)
 
     monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _route_to_outbox)
 

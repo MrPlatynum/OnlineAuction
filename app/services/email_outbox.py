@@ -23,6 +23,7 @@ import os
 from datetime import timedelta
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import database as _db_module
 from app.models import EmailOutbox
@@ -83,32 +84,45 @@ async def enqueue_email(
     html_body: str,
     *,
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+    db: AsyncSession | None = None,
 ) -> None:
-    """Persist one outbox row. Caller awaits the INSERT before
-    returning its HTTP response, so the row is durable on disk
-    before the user sees a 200 / 202 - an SIGKILL between the
-    response and a deferred INSERT (the previous create_task design)
-    no longer loses transactional mail.
+    """Persist one outbox row.
 
-    Failures are logged and swallowed: a register / password-reset
-    handler should not 500 just because the outbox table is briefly
-    unreachable. The user can retry; the bigger durability win was
-    making the *successful* path actually durable."""
+    Two modes depending on whether the caller already holds an open
+    session:
+
+    * ``db=None`` (default, used from paths without a request session in
+      scope): opens a fresh ``SessionLocal`` and commits immediately,
+      swallowing exceptions - a transient outbox-table outage must not
+      bubble into a 500 for whoever was on the request side at the time.
+
+    * ``db`` provided: adds the row to the caller's session WITHOUT
+      committing. The caller chooses when to commit, which is the only
+      way the outbox INSERT can be atomic with the domain mutation it
+      accompanies (register's user row, password-reset's tv bump, the
+      auction-settle notification batch). This also avoids checking out
+      a second pool connection per call, which was doubling pool
+      pressure on the bid/settle hot path.
+
+    In session-borrowing mode failures propagate; the caller's outer
+    try/except (or transactional rollback) decides what to do."""
+    row = EmailOutbox(
+        to_email=to_email,
+        subject=subject,
+        html_body=html_body,
+        status="pending",
+        attempts=0,
+        max_attempts=max_attempts,
+        next_attempt_at=utcnow(),
+        created_at=utcnow(),
+    )
+    if db is not None:
+        db.add(row)
+        return
     try:
-        async with _db_module.SessionLocal() as db:
-            db.add(
-                EmailOutbox(
-                    to_email=to_email,
-                    subject=subject,
-                    html_body=html_body,
-                    status="pending",
-                    attempts=0,
-                    max_attempts=max_attempts,
-                    next_attempt_at=utcnow(),
-                    created_at=utcnow(),
-                )
-            )
-            await db.commit()
+        async with _db_module.SessionLocal() as own_db:
+            own_db.add(row)
+            await own_db.commit()
     except Exception:
         logger.exception("Failed to enqueue email to %s", to_email)
 

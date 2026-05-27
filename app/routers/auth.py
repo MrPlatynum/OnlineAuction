@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
-from app.utils.db import commit_or_409
+from sqlalchemy.exc import IntegrityError
 from app.schemas import (
     ChangePasswordRequest,
     PasswordResetConfirmBody,
@@ -90,17 +90,23 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
         hashed_password=hash_password(user.password),
     )
     db.add(db_user)
-    # Two concurrent /register calls can both pass the pre-check (no row
-    # exists yet) and race to insert the same username or email - the
-    # unique constraint forces the loser through the shared 400 path.
-    await commit_or_409(db, detail=_USER_EXISTS_DETAIL)
+    # Flush populates db_user.id + token_version so create_email_verify_token
+    # has the fully-formed user row to sign, but no transaction has committed
+    # yet - the verify-email outbox row enrols in the same session and
+    # commits atomically with the user row below. A race-loser unique-
+    # constraint violation rolls back BOTH rows together, so we never mail a
+    # verification link to a user that doesn't exist (and we never persist a
+    # user without their verification mail enqueued). The unique violation
+    # may surface on either the flush (when the INSERT statement reaches PG)
+    # or the commit (deferred constraints), so the catch wraps both.
+    try:
+        await db.flush()
+        await send_verification_email(db_user, db=db)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=_USER_EXISTS_DETAIL) from None
     await db.refresh(db_user)
-
-    # Kick off the verification email after the row is persistent so a
-    # later rollback can't leave us mailing a non-existent user. The
-    # await covers only the outbox INSERT (sub-millisecond local DB
-    # call); actual SMTP delivery is handled by the background worker.
-    await send_verification_email(db_user)
 
     token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
@@ -145,6 +151,7 @@ async def verify_email(
 async def resend_verification_email(
     request: Request,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Auth-gated so an attacker can't burn another user's daily inbox
     by triggering resends against their email. Already-verified users
@@ -153,7 +160,12 @@ async def resend_verification_email(
         raise HTTPException(
             status_code=400, detail="Email уже подтверждён"
         )
-    await send_verification_email(current_user)
+    # Re-send verify-email: the user already exists, so the outbox row
+    # need not be atomic with anything - reuse the session for the
+    # INSERT (no separate connection acquisition) and let the commit
+    # land on its own.
+    await send_verification_email(current_user, db=db)
+    await db.commit()
     return {"message": "Письмо отправлено"}
 
 
@@ -311,9 +323,13 @@ async def password_reset_request(
         throttle = timedelta(seconds=PASSWORD_RESET_THROTTLE_SECONDS)
         if last is None or (now - last) >= throttle:
             user.password_reset_sent_at = now
+            # The reset-link outbox row commits together with the
+            # password_reset_sent_at bump, so a transient DB blip can't
+            # land the throttle update without the link being enqueued
+            # (or vice versa).
+            await send_password_reset_email(user, db=db)
             await db.commit()
             await db.refresh(user)
-            await send_password_reset_email(user)
     remaining = deadline - asyncio.get_running_loop().time()
     if remaining > 0:
         await asyncio.sleep(remaining)
@@ -357,7 +373,12 @@ async def password_reset_confirm(
     # token here: the user typed the new password into the reset
     # form, they should type it again at /login as a confirmation).
     await _invalidate_user_sessions(user)
+    # Password change + tv bump + "your password was changed" outbox
+    # row all commit together. A DB failure on the commit rolls back
+    # the password change AND drops the security-notice mail, which is
+    # the right pair: if the password didn't actually rotate we don't
+    # want to alarm the user, and if it did we never want them to miss
+    # the audit trail.
+    await send_password_changed_email(user, db=db)
     await db.commit()
-
-    await send_password_changed_email(user)
     return {"message": "Пароль успешно сброшен"}

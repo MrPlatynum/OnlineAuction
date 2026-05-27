@@ -88,7 +88,7 @@ def capture_emails(monkeypatch):
 
     calls: list[tuple[str, str, str]] = []
 
-    async def _capture(to, subj, html):
+    async def _capture(to, subj, html, *, db=None):
         calls.append((to, subj, html))
 
     monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _capture)

@@ -137,16 +137,16 @@ async def test_complete_auction_skips_when_end_time_extended(registered_user):
 async def test_complete_auction_isolates_notification_failures(
     client, registered_user, second_user, monkeypatch
 ):
-    """Per-channel dispatch failures inside ``notify_many`` are best-effort
-    once the financial state has been committed. A raise from any single
-    recipient (WS send error, outbox enqueue failure) must not abort the
-    rest of the fan-out and must not propagate up to _wait_and_complete -
-    the money has already moved, retrying complete_auction would not undo
-    it and would re-emit ``auction_ended`` to subscribers."""
+    """WS-push failures inside ``notify_many`` are best-effort once the
+    financial state has been committed. A raise from any single WS send
+    (broken socket, slow client) must not abort the rest of the fan-out
+    and must not propagate up to _wait_and_complete - the money has
+    already moved, retrying complete_auction would not undo it and
+    would re-emit ``auction_ended`` to subscribers."""
     from datetime import timedelta
 
     from app.models import Bid, User
-    from app.services import notifications as notifications_service
+    from app.services import auctions as auctions_service
     from app.services.auctions import complete_auction
 
     auction = await _seed_auction(
@@ -161,24 +161,24 @@ async def test_complete_auction_isolates_notification_failures(
 
     boom_calls = {"n": 0}
 
-    async def boom(*args, **kwargs):
-        boom_calls["n"] += 1
-        raise RuntimeError("email enqueue failed")
+    class _ExplodingManager:
+        async def broadcast(self, *args, **kwargs):
+            # Let the auction_ended fan-out fire normally - it's a
+            # different path from the per-recipient WS push.
+            pass
 
-    # Patch the email seam reachable from notify_many's per-recipient
-    # dispatcher. Every pending notification routes through this helper
-    # when the recipient hasn't muted the channel; a raise simulates a
-    # transient outbox/SMTP outage mid fan-out.
-    monkeypatch.setattr(notifications_service, "_fire_and_forget_email", boom)
+        async def send_notification(self, *args, **kwargs):
+            boom_calls["n"] += 1
+            raise RuntimeError("ws send failed")
 
-    # Must NOT raise. notify_many isolates per-recipient failures and
-    # logs them; the financial commit is already durable on disk.
+    monkeypatch.setattr(auctions_service, "manager", _ExplodingManager())
+
+    # Must NOT raise. notify_many isolates per-recipient WS failures
+    # and logs them; the financial commit is already durable on disk.
     async with _db_module.SessionLocal() as db:
         await complete_auction(auction.id, db)
 
-    # Every channel dispatch attempt that hit the email branch raised -
-    # both the bidder (AUCTION_LOST loser body) and the seller
-    # (AUCTION_SOLD) have email channels enabled by default.
+    # Every per-recipient WS push was attempted (bidder + seller).
     assert boom_calls["n"] >= 1
 
     async with _db_module.SessionLocal() as db:
