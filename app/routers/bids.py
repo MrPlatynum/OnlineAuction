@@ -20,6 +20,7 @@ from app.schemas import BidCreate, BidResponse, PaginatedBidsResponse
 from app.services import auction_scheduler
 from app.services.balance import effective_committed_balance, lock_users_by_id
 from app.services.notifications import notify_user
+from app.utils.pagination import total_pages_for
 from app.utils.time import seconds_until
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
@@ -72,7 +73,7 @@ async def get_auction_bids(
     total = await db.scalar(
         select(func.count()).select_from(Bid).where(base_filter)
     )
-    total_pages = (total + page_size - 1) // page_size
+    total_pages = total_pages_for(total, page_size)
 
     offset = (page - 1) * page_size
     bids = (

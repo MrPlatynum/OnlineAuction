@@ -43,6 +43,7 @@ from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.notifications import notify_many, notify_user
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
+from app.utils.pagination import total_pages_for
 from app.utils.time import seconds_until, utcnow
 
 logger = logging.getLogger(__name__)
@@ -400,7 +401,7 @@ async def get_auctions(
     total = await db.scalar(
         select(func.count()).select_from(query.subquery())
     )
-    total_pages = (total + page_size - 1) // page_size
+    total_pages = total_pages_for(total, page_size)
 
     if sort_by == "time":
         query = query.order_by(Auction.end_time.asc())
