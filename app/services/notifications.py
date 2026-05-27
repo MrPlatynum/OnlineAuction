@@ -6,10 +6,15 @@ is fire-and-forget via the persistent outbox queue so an SMTP
 hiccup doesn't take down the request that triggered the notify.
 """
 
+import asyncio
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PUBLIC_BASE_URL
 from app.models import Notification, NotificationType, User
+
+logger = logging.getLogger(__name__)
 from app.services.email import (
     build_notification_email_html,
     build_password_changed_email_html,
@@ -159,12 +164,103 @@ async def notify_user(
             },
         })
 
-    if user.email_notifications:
-        opt_out_flag = _EMAIL_OPT_OUT_FLAG.get(notification_type)
-        should_send_email = bool(opt_out_flag) and getattr(user, opt_out_flag, False)
+    await _maybe_send_email(user, notification_type, title, message, auction_id, auction_title)
 
-        if should_send_email:
-            html_content = build_notification_email_html(
-                notification_type.value, title, message, auction_id, auction_title
+
+def _email_enabled(user: User, notification_type: NotificationType) -> bool:
+    if not user.email_notifications:
+        return False
+    opt_out_flag = _EMAIL_OPT_OUT_FLAG.get(notification_type)
+    return bool(opt_out_flag) and getattr(user, opt_out_flag, False)
+
+
+async def _maybe_send_email(
+    user: User,
+    notification_type: NotificationType,
+    title: str,
+    message: str,
+    auction_id: int | None,
+    auction_title: str | None,
+) -> None:
+    if _email_enabled(user, notification_type):
+        html_content = build_notification_email_html(
+            notification_type.value, title, message, auction_id, auction_title
+        )
+        await _fire_and_forget_email(user.email, title, html_content)
+
+
+async def notify_many(
+    db: AsyncSession,
+    payloads: list[tuple[User, NotificationType, str, str]],
+    *,
+    auction_id: int | None = None,
+    auction_title: str | None = None,
+    manager=None,
+) -> None:
+    """Concurrent fan-out for a batch of recipients. Persists every
+    in-app row in a single INSERT + commit (one DB round-trip instead
+    of one per recipient), then dispatches WS pushes and outbox-email
+    enqueues concurrently via ``asyncio.gather``. Per-recipient failures
+    are logged and isolated so one broken channel doesn't take down the
+    rest of the fan-out - the financial commit has already landed by the
+    time the caller reaches this helper, so notifications are best-effort
+    by design.
+
+    Preferred over a ``for ... await notify_user`` loop on any path that
+    touches more than a handful of recipients (auction completion, new
+    lot subscriber broadcast); single-recipient sites still use
+    ``notify_user`` directly because the batching gains zero benefit.
+    """
+    if not payloads:
+        return
+
+    rows = [
+        Notification(
+            user_id=user.id,
+            type=notif_type.value,
+            title=title,
+            message=message,
+            auction_id=auction_id,
+            auction_title=auction_title,
+        )
+        for user, notif_type, title, message in payloads
+    ]
+    db.add_all(rows)
+    await db.commit()
+    for row in rows:
+        await db.refresh(row)
+
+    async def _dispatch_channels(
+        user: User,
+        notif_type: NotificationType,
+        title: str,
+        message: str,
+        row: Notification,
+    ) -> None:
+        try:
+            if manager:
+                await manager.send_notification(user.id, {
+                    "type": "notification",
+                    "notification": {
+                        "id": row.id,
+                        "type": notif_type.value,
+                        "title": title,
+                        "message": message,
+                        "auction_id": auction_id,
+                        "auction_title": auction_title,
+                        "created_at": row.created_at.isoformat(),
+                    },
+                })
+            await _maybe_send_email(
+                user, notif_type, title, message, auction_id, auction_title
             )
-            await _fire_and_forget_email(user.email, title, html_content)
+        except Exception:
+            logger.exception(
+                "Notification dispatch failed for user %s (type=%s)",
+                user.id, notif_type.value,
+            )
+
+    await asyncio.gather(*(
+        _dispatch_channels(user, notif_type, title, message, row)
+        for (user, notif_type, title, message), row in zip(payloads, rows)
+    ))

@@ -137,16 +137,16 @@ async def test_complete_auction_skips_when_end_time_extended(registered_user):
 async def test_complete_auction_isolates_notification_failures(
     client, registered_user, second_user, monkeypatch
 ):
-    """notify_user is best-effort once the financial state has been
-    committed. A raise from any single recipient (deleted user, transient
-    DB drop on its own commit, WS send error) must not abort the rest of
-    the fan-out and must not propagate up to _wait_and_complete - the
-    money has already moved, retrying complete_auction would not undo it
-    and would re-emit ``auction_ended`` to subscribers."""
+    """Per-channel dispatch failures inside ``notify_many`` are best-effort
+    once the financial state has been committed. A raise from any single
+    recipient (WS send error, outbox enqueue failure) must not abort the
+    rest of the fan-out and must not propagate up to _wait_and_complete -
+    the money has already moved, retrying complete_auction would not undo
+    it and would re-emit ``auction_ended`` to subscribers."""
     from datetime import timedelta
 
     from app.models import Bid, User
-    from app.services import auctions as auctions_service
+    from app.services import notifications as notifications_service
     from app.services.auctions import complete_auction
 
     auction = await _seed_auction(
@@ -163,18 +163,23 @@ async def test_complete_auction_isolates_notification_failures(
 
     async def boom(*args, **kwargs):
         boom_calls["n"] += 1
-        raise RuntimeError("notification dispatch failed")
+        raise RuntimeError("email enqueue failed")
 
-    monkeypatch.setattr(auctions_service, "notify_user", boom)
+    # Patch the email seam reachable from notify_many's per-recipient
+    # dispatcher. Every pending notification routes through this helper
+    # when the recipient hasn't muted the channel; a raise simulates a
+    # transient outbox/SMTP outage mid fan-out.
+    monkeypatch.setattr(notifications_service, "_fire_and_forget_email", boom)
 
-    # Must NOT raise. The handler swallows per-recipient failures and
+    # Must NOT raise. notify_many isolates per-recipient failures and
     # logs them; the financial commit is already durable on disk.
     async with _db_module.SessionLocal() as db:
         await complete_auction(auction.id, db)
 
-    # Fan-out attempted every pending notification despite each one
-    # raising - one bidder + one seller = at least two attempts.
-    assert boom_calls["n"] >= 2
+    # Every channel dispatch attempt that hit the email branch raised -
+    # both the bidder (AUCTION_LOST loser body) and the seller
+    # (AUCTION_SOLD) have email channels enabled by default.
+    assert boom_calls["n"] >= 1
 
     async with _db_module.SessionLocal() as db:
         settled = (

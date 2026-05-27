@@ -21,7 +21,7 @@ from app.config import PLATFORM_COMMISSION_PERCENT
 from app.models import Auction, Bid, NotificationType, User
 from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
-from app.services.notifications import notify_user
+from app.services.notifications import notify_many, notify_user
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
 from app.utils.time import utcnow
@@ -331,22 +331,18 @@ async def complete_auction(auction_id: int, db: AsyncSession):
     }, auction_id)
 
     # Notifications are best-effort once the financial side is committed.
-    # A single failed recipient (deleted user, transient DB drop on the
-    # commit inside create_notification, WS send error) used to abort the
-    # whole loop and leave later bidders un-notified - and propagate up
-    # to _wait_and_complete's except Exception, which rolled back the
-    # already-committed money side's session for no benefit.
-    for user, notif_type, title, message in pending_notifications:
-        try:
-            await notify_user(
-                db, user, notif_type, title, message,
-                auction.id, auction.title, manager,
-            )
-        except Exception:
-            logger.exception(
-                "Notification dispatch failed for user %s on auction %s",
-                user.id, auction_id,
-            )
+    # ``notify_many`` batches every in-app row into a single INSERT + commit
+    # and runs WS push + email outbox enqueue concurrently per recipient,
+    # so a 20-bidder settle pays one DB round-trip + the slowest channel
+    # latency instead of 20× serial commits. Per-recipient failures are
+    # logged and isolated inside the helper.
+    await notify_many(
+        db,
+        pending_notifications,
+        auction_id=auction.id,
+        auction_title=auction.title,
+        manager=manager,
+    )
 
 
 # Wire the scheduler's "settle this id" / "ending-soon" hooks to our
