@@ -125,6 +125,56 @@ async def test_upload_quota_blocks_after_window_exhausted(
     assert "лимит" in r.json()["detail"].lower()
 
 
+async def test_upload_quota_persists_when_disk_write_fails(
+    client, registered_user, monkeypatch
+):
+    """A failed (or cancelled) disk write used to roll the quota bump
+    back together with the rest of the session because db.commit() ran
+    *after* aiofiles.open(...).write(). An attacker dropping TCP
+    mid-write could therefore recharge their budget for free, defeating
+    the rolling 24h byte cap. The fix commits the quota first; this
+    test asserts the bump survives a disk-side failure.
+    """
+    import aiofiles
+
+    from sqlalchemy import select
+
+    from app import database as _db_module
+    from app.models import User
+
+    headers = registered_user["headers"]
+    user_id = registered_user["user"]["id"]
+
+    # Force aiofiles.open to raise so the handler bails after _check_upload_quota
+    # has mutated upload_bytes_window but before the second mutation (avatar
+    # URL) or the response. With the pre-fix ordering, no commit would have
+    # run and the quota bump would have rolled back via get_db's teardown.
+    def _boom(*args, **kwargs):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(aiofiles, "open", _boom)
+
+    files = {"file": ("a.png", _png_bytes((32, 32)), "image/png")}
+    # The OSError propagates out of the route - TestClient re-raises it
+    # by default. Either outcome (re-raise or 500) leaves the same state
+    # behind: get_db's teardown closed the session. The fix's contract is
+    # that the quota was committed *before* the disk write, so closing
+    # the session does not unwind the bump.
+    import pytest
+
+    with pytest.raises(OSError):
+        await client.post("/api/upload-image", files=files, headers=headers)
+
+    async with _db_module.SessionLocal() as db:
+        user = (
+            await db.execute(select(User).where(User.id == user_id))
+        ).scalar_one()
+        assert user.upload_bytes_window and user.upload_bytes_window > 0, (
+            f"quota bump was rolled back by the disk failure "
+            f"(upload_bytes_window={user.upload_bytes_window}) - attacker can recharge"
+        )
+
+
 async def test_decompression_bomb_rejected(client, registered_user, monkeypatch):
     """A valid PNG header with declared dimensions above
     Image.MAX_IMAGE_PIXELS must be refused instead of decoded - the

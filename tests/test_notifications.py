@@ -175,3 +175,75 @@ async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
             "Auction lost", "You lost", auction_id=None, auction_title=None,
         )
         assert sent == []
+
+
+async def test_notify_many_batches_inserts_and_isolates_channel_failures(
+    registered_user, second_user, monkeypatch
+):
+    """``notify_many`` is the concurrent fan-out helper used by
+    ``complete_auction``. Contract:
+
+    1. Every payload's in-app row persists in a single batch commit -
+       no per-recipient round-trip.
+    2. Per-channel dispatch failures (email outbox enqueue raising for
+       one user) stay isolated; the rest of the fan-out completes and
+       every recipient still has their in-app row.
+    """
+    from sqlalchemy import select
+
+    from app import database as _db_module
+    from app.models import User
+    from app.services import notifications as notifications_service
+
+    boom_calls = {"n": 0}
+
+    async def boom(*args, **kwargs):
+        boom_calls["n"] += 1
+        raise RuntimeError("outbox enqueue failed")
+
+    # The email seam goes through _fire_and_forget_email. Patching it
+    # simulates a transient outbox-INSERT failure for every recipient
+    # whose email channel is enabled.
+    monkeypatch.setattr(notifications_service, "_fire_and_forget_email", boom)
+
+    async with _db_module.SessionLocal() as db:
+        users = (
+            await db.execute(
+                select(User).where(
+                    User.id.in_([
+                        registered_user["user"]["id"],
+                        second_user["user"]["id"],
+                    ])
+                )
+            )
+        ).scalars().all()
+
+        payloads = [
+            (u, NotificationType.AUCTION_LOST, "Аукцион завершён", "тело")
+            for u in users
+        ]
+
+        # Must NOT raise even though every email enqueue fails.
+        await notifications_service.notify_many(
+            db, payloads, auction_id=None, auction_title=None
+        )
+
+    # In-app rows landed for every recipient despite the channel error.
+    async with _db_module.SessionLocal() as db:
+        for u in users:
+            rows = (
+                await db.execute(
+                    select(Notification).where(
+                        Notification.user_id == u.id,
+                        Notification.type == NotificationType.AUCTION_LOST.value,
+                    )
+                )
+            ).scalars().all()
+            assert len(rows) == 1, (
+                f"notify_many lost the in-app row for user {u.id} on a "
+                f"channel-failure path (rows={rows})"
+            )
+
+    # Every email dispatch attempt was made (i.e. gather ran them all,
+    # the first failure did not short-circuit the rest).
+    assert boom_calls["n"] == len(users)

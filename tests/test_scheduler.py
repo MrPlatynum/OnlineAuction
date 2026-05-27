@@ -203,6 +203,39 @@ async def test_complete_auction_isolates_notification_failures(
         assert seller.balance == 1232.50
 
 
+def test_build_completion_notifications_handles_missing_winner(
+    registered_user, second_user
+):
+    """The settle path's lock_users_by_id may return no entry for
+    ``last_bid.user_id`` if FK behaviour ever permits a deleted winner
+    (or if a deploy reshuffles ON DELETE semantics). The type signature
+    declares ``winner: User | None`` and the loser-body must render
+    cleanly without raising AttributeError - otherwise the whole loop
+    aborts mid-iteration and rolls back the financial commit, stranding
+    the lot."""
+    from app.models import Bid, NotificationType, User
+    from app.services.auctions import _build_completion_notifications
+
+    bidder = User(id=second_user["user"]["id"], username="loser")
+    last_bid = Bid(user_id=999, amount=250, auction_id=1)
+    seller = User(id=registered_user["user"]["id"], username="seller")
+
+    pending = _build_completion_notifications(
+        auction=Auction(id=1, title="lot"),
+        last_bid=last_bid,
+        winner=None,
+        creator=seller,
+        bidders=[bidder],
+    )
+
+    # Loser body still rendered with a fallback label - the exact crash
+    # condition (winner.username on None) no longer fires.
+    loser_entry = next(p for p in pending if p[1] is NotificationType.AUCTION_LOST)
+    assert "Победитель" in loser_entry[3]
+    # Sanity: the AUCTION_SOLD entry for the seller still goes through.
+    assert any(p[1] is NotificationType.AUCTION_SOLD for p in pending)
+
+
 async def test_extended_during_tick_keeps_new_task_tracked(registered_user):
     """When _wait_and_complete wakes and sees the lot was extended, it
     calls schedule_auction itself to re-arm the tick. The original task
