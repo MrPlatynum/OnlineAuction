@@ -288,11 +288,14 @@ async def get_current_user(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-    # Tokens issued before a password change carry the old token_version
-    # and must be rejected. Old tokens missing the claim default to 0,
-    # which matches the column default - so pre-migration tokens stay
-    # valid for their original 24 h lifetime instead of every existing
-    # user being kicked the moment this PR ships.
+    # Tokens issued before a password change / reset carry the old
+    # ``token_version``. ``/password-reset/confirm`` and the change-
+    # password flow bump the column under a row lock so every JWT
+    # signed off the old value (still-active browser sessions, queued
+    # email links) decodes here, mismatches, and 401s. The ``payload.get``
+    # default exists so a future migration that introduces ``tv`` on
+    # already-signed tokens doesn't 500 on a missing key - in practice
+    # ``create_access_token`` always writes the claim.
     token_version = payload.get("tv", 0)
     if token_version != user.token_version:
         raise HTTPException(status_code=401, detail="Token invalidated")
