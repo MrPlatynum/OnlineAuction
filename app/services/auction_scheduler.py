@@ -12,6 +12,47 @@ table once and schedule everything still active.
 Single-process only: each uvicorn worker would schedule its own copy.
 That's fine for the development setup; for multi-worker, completion
 would need to be moved behind a DB-level advisory lock.
+
+Cancellation safety
+-------------------
+The two scheduler coroutines (``_wait_and_complete``,
+``_wait_and_notify_ending_soon``) are long-running background tasks
+whose cancellation paths are easy to get wrong. The conventions:
+
+* The top-level ``try`` body contains every ``await`` that touches
+  the DB. The ``except Exception`` arm wraps ``db.rollback()`` in
+  ``asyncio.shield`` so a ``shutdown_scheduler`` cancel that arrives
+  during the rollback cannot interrupt it; an interrupted rollback
+  returns the asyncpg connection to the pool with an unresolved
+  transaction and the next checkout fails with "another operation in
+  progress".
+
+* The ``except asyncio.CancelledError: raise`` arm propagates the
+  cancel out of the task so ``shutdown_scheduler`` (which awaits the
+  task) sees it complete cleanly.
+
+* The ``finally`` clause only removes the task from the registry when
+  the slot still references this task instance. A re-arm path may
+  have replaced the slot with a new task in the meantime; popping
+  unconditionally would orphan the replacement.
+
+* ``_arm_completion_task`` cancels the prior slot occupant *unless*
+  it is ``asyncio.current_task()``. Self-cancellation here would
+  propagate ``CancelledError`` into the surrounding ``session.close()``
+  and leak the FOR-UPDATE-held connection back to the pool. The
+  internal re-arm path inside ``_wait_and_complete`` triggers this
+  branch by construction.
+
+* ``cancel_auction`` and ``shutdown_scheduler`` only call ``task.cancel()``
+  (which is non-blocking); the awaiting site is ``shutdown_scheduler``'s
+  ``asyncio.gather(..., return_exceptions=True)`` at the lifespan tear-
+  down, where any CancelledError is collected and ignored.
+
+Request-handler paths do not need explicit shielding: cancellation
+arrives via FastAPI tearing down the dependency stack, and the
+``get_db`` async context manager rolls back on exit. The two settings
+that broke that contract (long-running settle + ending-soon tasks)
+both live in this module.
 """
 
 import asyncio

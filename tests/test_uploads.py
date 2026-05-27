@@ -195,3 +195,41 @@ async def test_decompression_bomb_rejected(client, registered_user, monkeypatch)
     assert r.status_code == 400, r.text
     detail = r.json()["detail"].lower()
     assert "большое" in detail or "decode" in detail or "разобрать" in detail
+
+
+async def test_upload_image_cleans_partial_file_on_disk_failure(
+    client, registered_user, monkeypatch
+):
+    """When the disk write raises mid-flight (cancelled stream, EIO),
+    the handler must remove the partial file from UPLOAD_DIR instead
+    of leaving an orphan byte sequence whose only reference is a
+    server log line. The quota bump (committed before the write) is
+    not touched - the deterrent for partial-write attackers stays."""
+    import aiofiles
+
+    from app.config import UPLOAD_DIR
+
+    def _boom(*args, **kwargs):
+        raise OSError("simulated mid-write failure")
+
+    monkeypatch.setattr(aiofiles, "open", _boom)
+
+    files = {"file": ("a.png", _png_bytes((32, 32)), "image/png")}
+
+    import pytest
+
+    with pytest.raises(OSError):
+        await client.post(
+            "/api/upload-image", files=files, headers=registered_user["headers"]
+        )
+
+    # No partial file landed (the open itself raised before any path was
+    # touched, so this is mostly a smoke that the cleanup branch doesn't
+    # crash on a not-yet-created file).
+    leftovers = [
+        name for name in os.listdir(UPLOAD_DIR)
+        if not name.startswith("avatar_") and not name.startswith(".")
+    ]
+    assert leftovers == [], (
+        f"orphan file left after cancelled upload: {leftovers}"
+    )

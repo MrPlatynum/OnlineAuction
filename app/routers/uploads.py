@@ -150,8 +150,16 @@ async def upload_image(
     await db.commit()
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-    async with aiofiles.open(dst_path, "wb") as out:
-        await out.write(sanitised)
+    try:
+        async with aiofiles.open(dst_path, "wb") as out:
+            await out.write(sanitised)
+    except BaseException:
+        # Best-effort cleanup of the partial file if the write was
+        # cancelled (client dropped) or raised mid-stream. The quota
+        # bump stays committed (see above) so the user did pay for the
+        # attempt - we just don't want orphan bytes on disk.
+        _safely_remove(dst_path)
+        raise
     return {"image_url": f"/static/uploads/{filename}"}
 
 
@@ -173,8 +181,14 @@ async def upload_avatar(
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
-    async with aiofiles.open(dst_path, "wb") as out:
-        await out.write(sanitised)
+    try:
+        async with aiofiles.open(dst_path, "wb") as out:
+            await out.write(sanitised)
+    except BaseException:
+        # Drop the partial file if the write was cancelled / raised.
+        # See upload_image for the quota-vs-disk-cleanup rationale.
+        _safely_remove(dst_path)
+        raise
 
     avatar_url = f"/static/uploads/{filename}"
     current_user.avatar_url = avatar_url
