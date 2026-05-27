@@ -20,6 +20,7 @@ from app.schemas import BidCreate, BidResponse, PaginatedBidsResponse
 from app.services import auction_scheduler
 from app.services.balance import effective_committed_balance, lock_users_by_id
 from app.services.notifications import notify_user
+from app.utils.time import seconds_until
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
 from app.utils.rate_limit import limiter
@@ -51,8 +52,11 @@ def _build_bid_broadcast(
     }
     if extended:
         payload["extended_until"] = auction.end_time.isoformat()
-        payload["time_remaining"] = int(
-            (auction.end_time - utcnow()).total_seconds()
+        # Use the shared helper so a freshly-extended lot whose deadline
+        # the scheduler is about to settle never emits a negative
+        # value over WS - the clamp + is_active guard live in one place.
+        payload["time_remaining"] = seconds_until(
+            auction.end_time, is_active=auction.is_active
         )
     return payload
 

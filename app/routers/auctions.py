@@ -43,7 +43,7 @@ from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.notifications import notify_many, notify_user
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
-from app.utils.time import utcnow
+from app.utils.time import seconds_until, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +66,11 @@ def _empty_auctions_page(page: int, page_size: int) -> "PaginatedAuctionsRespons
 
 
 def _time_remaining(auction: Auction) -> int:
-    """Seconds left until ``end_time`` - single source of truth used by
-    every dict-builder in this module. Returns 0 for completed lots or
-    when ``end_time`` is somehow None (defensive: the column is NOT NULL
-    but a freshly-built ORM instance can briefly be unset)."""
-    if not auction.end_time or not auction.is_active:
-        return 0
-    return max(0, int((auction.end_time - utcnow()).total_seconds()))
+    """Thin shim onto the shared ``seconds_until`` helper - kept under
+    the local name so the dict-builder calls in this module read as
+    ``_time_remaining(auction)`` instead of leaking the kwarg shape
+    of the utility into every call."""
+    return seconds_until(auction.end_time, is_active=auction.is_active)
 
 
 def _participation_row(auction: Auction, my_amount) -> dict:
