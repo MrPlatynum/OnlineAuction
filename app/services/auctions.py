@@ -123,6 +123,11 @@ def _build_completion_notifications(
     ``complete_auction`` to keep that function's flow readable; the
     same shape is also easier to unit-test in isolation."""
     pending: list[tuple[User, NotificationType, str, str]] = []
+    # winner may be None if the leading bidder's account was deleted between
+    # bid placement and settle; loser-body must still render in that case so
+    # the whole completion path doesn't AttributeError mid-loop and roll back
+    # the financial commit.
+    winner_label = winner.username if winner else "другой участник"
     for user in bidders:
         if user.id == last_bid.user_id:
             pending.append((
@@ -134,7 +139,7 @@ def _build_completion_notifications(
             pending.append((
                 user, NotificationType.AUCTION_LOST,
                 "Аукцион завершён",
-                f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner.username}.",
+                f"К сожалению, вы не выиграли этот аукцион. Победитель: {winner_label}.",
             ))
     if creator and creator.id != last_bid.user_id:
         commission = seller_commission(last_bid.amount)

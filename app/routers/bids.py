@@ -7,6 +7,8 @@ simultaneous bids by the same user on different lots can't both pass
 the available-balance check.
 """
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -188,7 +190,12 @@ async def place_bid(
     # full extension from "now". Resetting ending_soon_notified lets the
     # five-minute warning fire again ahead of the new deadline.
     extended = False
-    if auction.end_time - utcnow() < auction_scheduler.ANTISNIPING_WINDOW:
+    # Lower-clamp to a positive delta: if the bid slipped past the line-140
+    # expiry guard by microseconds (concurrent scheduler tick + FOR UPDATE
+    # serialisation), `end_time - utcnow()` is negative and would otherwise
+    # extend an auction that should have completed.
+    delta = auction.end_time - utcnow()
+    if timedelta(0) < delta < auction_scheduler.ANTISNIPING_WINDOW:
         auction.end_time = utcnow() + auction_scheduler.ANTISNIPING_EXTEND
         auction.ending_soon_notified = False
         extended = True
