@@ -178,7 +178,7 @@ async def test_auction_lost_email_respects_notify_lost_pref(monkeypatch):
 
 
 async def test_notify_many_persists_in_app_and_outbox_atomically(
-    registered_user, second_user
+    registered_user, second_user, monkeypatch
 ):
     """``notify_many`` is the batched fan-out helper used by
     ``complete_auction``. Contract:
@@ -197,6 +197,14 @@ async def test_notify_many_persists_in_app_and_outbox_atomically(
     from app import database as _db_module
     from app.models import EmailOutbox, User
     from app.services import notifications as notifications_service
+    from app.services.email_outbox import enqueue_email
+
+    # Lift the conftest autouse no-op so the email path actually inserts
+    # outbox rows; this test asserts the atomic-batch contract.
+    async def _real_fire(to, subj, html, *, db=None):
+        await enqueue_email(to, subj, html, db=db)
+
+    monkeypatch.setattr(notifications_service, "_fire_and_forget_email", _real_fire)
 
     async with _db_module.SessionLocal() as db:
         users = (

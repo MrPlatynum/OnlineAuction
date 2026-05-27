@@ -40,7 +40,7 @@ from app.services.auctions import (
     settle_bin_purchase,
 )
 from app.services.balance import get_committed_balance, lock_users_by_id
-from app.services.notifications import notify_user
+from app.services.notifications import notify_many, notify_user
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
@@ -189,14 +189,17 @@ async def create_auction(
     if all_urls:
         await db.commit()
 
-    # Fan out NEW_LOT through notify_user so subscribers get the full
-    # three-channel delivery (in-app row + WS push + email), not just
-    # the in-app row. ``create_notification`` alone left this channel
-    # silent for everyone watching the bell and never produced an
-    # email, which made the "subscribe" feature feel broken.
-    # Notifications are best-effort: a single failed recipient must
-    # not abort the rest, and must not propagate up to roll back the
-    # create_auction commit that already persisted the row.
+    # Fan out NEW_LOT via the batched helper so subscribers get the
+    # three-channel delivery (in-app row + outbox email + WS push) in
+    # one commit instead of one per recipient. The previous per-
+    # iteration loop awaited notify_user per subscriber, each one
+    # committing the session mid-loop - which not only blocked the POST
+    # /auctions response for the duration of the slowest channel but
+    # also flushed the just-added AuctionImage rows on the first
+    # commit, so a later failure in the response builder couldn't
+    # transactionally undo them (the seller's UI showed "create failed"
+    # and a retry produced a duplicate listing with two NEW_LOT emails
+    # for every subscriber).
     subscribers = (
         await db.execute(
             select(User)
@@ -204,19 +207,31 @@ async def create_auction(
             .where(Subscription.seller_id == current_user.id)
         )
     ).scalars().all()
-    for subscriber in subscribers:
-        try:
-            await notify_user(
-                db, subscriber, NotificationType.NEW_LOT,
-                "Новый лот",
-                f"@{current_user.username} выставил новый лот: «{db_auction.title}»",
-                db_auction.id, db_auction.title, manager,
-            )
-        except Exception:
-            logger.exception(
-                "NEW_LOT dispatch failed for subscriber %s on auction %s",
-                subscriber.id, db_auction.id,
-            )
+    new_lot_body = (
+        f"@{current_user.username} выставил новый лот: «{db_auction.title}»"
+    )
+    try:
+        await notify_many(
+            db,
+            [
+                (subscriber, NotificationType.NEW_LOT, "Новый лот", new_lot_body)
+                for subscriber in subscribers
+            ],
+            auction_id=db_auction.id,
+            auction_title=db_auction.title,
+            manager=manager,
+        )
+    except Exception:
+        # The auction is already durable - a notification-side failure
+        # must not surface a 500 to the seller. Otherwise they retry,
+        # create a duplicate listing, and subscribers eventually receive
+        # two NEW_LOT payloads for what they perceive as one lot.
+        logger.exception(
+            "NEW_LOT fan-out failed for auction %s", db_auction.id
+        )
+        # Reset the session state so the response-building re-fetch
+        # below works on a clean session.
+        await db.rollback()
 
     # Re-fetch with relationships eager-loaded so the response goes through
     # the same shape as the listing - kept these dicts drifting apart before

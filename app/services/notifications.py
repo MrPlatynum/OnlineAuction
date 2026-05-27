@@ -269,9 +269,12 @@ async def notify_many(
         html_content = build_notification_email_html(
             notif_type.value, title, message, auction_id, auction_title
         )
-        # db keyword path: enqueue_email enrols the row in this session
+        # Goes through the documented _fire_and_forget_email seam so
+        # tests that monkeypatch it for capture/noop still observe every
+        # email this path enqueues. The seam forwards db=db to
+        # enqueue_email, which enrols the row in the current session
         # without committing; the batch commit below covers it.
-        await enqueue_email(user.email, title, html_content, db=db)
+        await _fire_and_forget_email(user.email, title, html_content, db=db)
     await db.commit()
     for row in notif_rows:
         await db.refresh(row)
