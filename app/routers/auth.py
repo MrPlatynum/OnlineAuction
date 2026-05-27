@@ -11,11 +11,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
+from app.utils.db import commit_or_409
 from app.schemas import (
     ChangePasswordRequest,
     PasswordResetConfirmBody,
@@ -90,16 +90,10 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
         hashed_password=hash_password(user.password),
     )
     db.add(db_user)
-    try:
-        await db.commit()
-    except IntegrityError:
-        # Two concurrent /register calls can both pass the pre-check
-        # (no row exists yet) and race to insert the same username or
-        # email - Postgres unique-constraint enforcement makes the loser
-        # see IntegrityError. Return the same generic 400 as the
-        # pre-check so the response is timing- and message-stable.
-        await db.rollback()
-        raise HTTPException(status_code=400, detail=_USER_EXISTS_DETAIL) from None
+    # Two concurrent /register calls can both pass the pre-check (no row
+    # exists yet) and race to insert the same username or email - the
+    # unique constraint forces the loser through the shared 400 path.
+    await commit_or_409(db, detail=_USER_EXISTS_DETAIL)
     await db.refresh(db_user)
 
     # Kick off the verification email after the row is persistent so a
