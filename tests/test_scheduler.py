@@ -203,6 +203,48 @@ async def test_complete_auction_isolates_notification_failures(
         assert seller.balance == 1232.50
 
 
+async def test_arm_ending_soon_cancels_previous_slot_occupant(registered_user):
+    """The internal re-arm path (``_arm_ending_soon_task`` called from
+    inside ``_wait_and_complete``) used to overwrite the dict slot
+    without cancelling the prior occupant. If a concurrent external
+    ``schedule_auction`` had already armed a sibling task while the
+    completion task was running, that sibling would survive the
+    overwrite as an orphan: still pending, unreachable from
+    ``cancel_auction`` / ``shutdown_scheduler``, set to fire on stale
+    state. The fix asserts the previous task is cancelled before the
+    new one takes its place."""
+    from app.services.auction_scheduler import (
+        _arm_ending_soon_task,
+        _ending_soon_tasks,
+    )
+
+    auction = await _seed_auction(
+        registered_user["user"]["id"], end_in_seconds=600
+    )
+    # First arming installs a task; ``ending_soon_notified`` is False by
+    # default so the helper actually creates one (not the early-return
+    # path).
+    _arm_ending_soon_task(auction)
+    first = _ending_soon_tasks[auction.id]
+    assert not first.done()
+
+    # Second arming on the same id simulates the orphan scenario - the
+    # previous occupant must be cancelled, not silently overwritten.
+    _arm_ending_soon_task(auction)
+    second = _ending_soon_tasks[auction.id]
+
+    assert second is not first
+    # task.cancel() only sets a flag; the cancellation propagates on the
+    # next event-loop tick. Yield so the first task can transition to
+    # cancelled before we assert.
+    await asyncio.gather(first, return_exceptions=True)
+    assert first.cancelled(), (
+        "previous ending-soon task survived the overwrite as an orphan"
+    )
+
+    cancel_auction(auction.id)
+
+
 def test_build_completion_notifications_handles_missing_winner(
     registered_user, second_user
 ):

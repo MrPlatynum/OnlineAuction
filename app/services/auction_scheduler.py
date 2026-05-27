@@ -175,14 +175,26 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
 
 
 def _arm_completion_task(auction_id: int, end_time: datetime) -> None:
-    """Create the completion task and place it in the dict without
-    cancelling any existing slot. Used both by ``schedule_auction``
-    (after it has explicitly cancelled the prior task) and by the
-    internal re-arm inside ``_wait_and_complete`` - that re-arm path
-    cannot go through ``cancel_auction`` because doing so would
-    ``task.cancel()`` *this* task and propagate CancelledError into
-    the surrounding ``session.close()``, leaking the FOR-UPDATE-held
-    connection back to the pool in undefined state."""
+    """Create the completion task and place it in the dict, cancelling
+    whoever already sits in the slot **unless that occupant is the
+    current task** - cancelling self would propagate CancelledError into
+    the surrounding ``session.close()`` and leak a FOR-UPDATE-held
+    connection back to the pool in undefined state.
+
+    Used both by ``schedule_auction`` (where cancel_auction has already
+    cleared the slot, so the cancel-existing branch is a no-op) and by
+    the internal re-arm inside ``_wait_and_complete``. In the re-arm
+    path the slot can hold either ``current`` (no cancel) or a sibling
+    task armed by a concurrent external ``schedule_auction`` whose
+    cancel raced past the previous occupant - that sibling MUST be
+    cancelled before we overwrite, otherwise it stays pending,
+    unreachable from ``cancel_auction`` / ``shutdown_scheduler``, and
+    fires at its original deadline on stale state.
+    """
+    current = asyncio.current_task()
+    existing = _completion_tasks.get(auction_id)
+    if existing is not None and existing is not current and not existing.done():
+        existing.cancel()
     _completion_tasks[auction_id] = asyncio.create_task(
         _wait_and_complete(auction_id, end_time),
         name=f"auction-complete-{auction_id}",
@@ -192,12 +204,17 @@ def _arm_completion_task(auction_id: int, end_time: datetime) -> None:
 def _arm_ending_soon_task(auction: Auction) -> None:
     """Same as ``_arm_completion_task`` for the five-minute warning
     side. No-op when the flag is already set or the lead-time has
-    already passed."""
+    already passed. Cancels any prior occupant of the slot (it is
+    never the current task on this code path, so the self-cancel
+    pitfall doesn't apply)."""
     if auction.ending_soon_notified:
         return
     fire_at = auction.end_time - ENDING_SOON_LEAD
     if fire_at <= utcnow():
         return
+    existing = _ending_soon_tasks.get(auction.id)
+    if existing is not None and not existing.done():
+        existing.cancel()
     _ending_soon_tasks[auction.id] = asyncio.create_task(
         _wait_and_notify_ending_soon(auction.id, fire_at),
         name=f"auction-ending-soon-{auction.id}",
