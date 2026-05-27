@@ -141,11 +141,17 @@ async def upload_image(
 ):
     sanitised, ext = await _accept_image(file)
     await _check_upload_quota(db, current_user.id, len(sanitised))
+    # Commit the quota bump *before* the disk write so a cancelled or
+    # failed write doesn't roll back the budget - otherwise an attacker
+    # can drop the connection mid-upload and recharge for free, defeating
+    # the rolling 24h cap. A successful quota commit + later disk failure
+    # is the correct trade-off: the user "paid" budget for a request that
+    # didn't land.
+    await db.commit()
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
     async with aiofiles.open(dst_path, "wb") as out:
         await out.write(sanitised)
-    await db.commit()
     return {"image_url": f"/static/uploads/{filename}"}
 
 
@@ -159,6 +165,9 @@ async def upload_avatar(
 ):
     sanitised, ext = await _accept_image(file)
     await _check_upload_quota(db, current_user.id, len(sanitised))
+    # Commit the quota bump before the disk write - see upload_image for
+    # the partial-write recharge attack this guards against.
+    await db.commit()
 
     _remove_avatar_file(current_user.avatar_url)
 
