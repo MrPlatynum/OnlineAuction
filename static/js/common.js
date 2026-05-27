@@ -102,6 +102,38 @@
     });
   };
 
+  // Reconnect backoff for WebSockets. Three per-page sockets (notifications
+  // bell here in common.js, the index card grid, the auction-detail room)
+  // had each grown their own copy of "exponential + half-jitter, cap 30s,
+  // skip these close codes". The values drifted (auction.js capped at 8
+  // attempts implicitly via 500*2^N, index.js had an explicit attempt
+  // ceiling, common.js had neither) and the close-code allowlists grew
+  // independently. Pull both knobs into one helper so a future tweak to
+  // the cap or the policy-code list lands in one place.
+  //
+  // wsReconnectDelay(attempt, {start, cap}) returns a half-jittered delay
+  // in ms for the given attempt number (0-indexed). Half-jitter keeps the
+  // worst-case ceiling at `base` while still desynchronising N clients
+  // that all dropped on the same server tick.
+  window.wsReconnectDelay = function(attempt, opts) {
+    const o = opts || {};
+    const start = o.start || 1000;
+    const cap = o.cap || 30000;
+    const base = Math.min(start * Math.pow(2, attempt), cap);
+    return base / 2 + Math.random() * (base / 2);
+  };
+
+  // wsIsFinalCloseCode(code) returns true for any close code where a
+  // reconnect attempt would just hit the same wall (clean shutdown,
+  // policy violation incl. tv-bump invalidation, internal error, auth
+  // failure / forbidden on the protected sockets). Treat the union of
+  // every per-socket allowlist as final - none of the codes apply on a
+  // socket where they shouldn't, and unifying them prevents the drift.
+  window.wsIsFinalCloseCode = function(code) {
+    return code === 1000 || code === 1008 || code === 1011 ||
+           code === 4001 || code === 4003;
+  };
+
   window.apiFetch = function(url, opts = {}) {
     const headers = { ...(opts.headers || {}) };
     const tk = getToken();
@@ -307,7 +339,7 @@
     let isOpen = false;
     let wsNotif = null;
     let currentUserId = null;
-    let reconnectDelay = 1500;
+    let notifReconnectAttempts = 0;
     // Handle for the 60s unread-count poll. Held so cross-tab token
     // changes (each one re-runs ``start()``) don't stack a new
     // setInterval on top of the previous - without this the polling
@@ -450,7 +482,7 @@
       // lands in URLs (proxy access logs, browser history). Server echoes
       // back 'bearer' on accept.
       wsNotif = new WebSocket(`${window.WS_BASE}/ws/notifications/${userId}`, ['bearer', tk]);
-      wsNotif.onopen = () => { reconnectDelay = 1500; };
+      wsNotif.onopen = () => { notifReconnectAttempts = 0; };
       wsNotif.onmessage = e => {
         try {
           const d = JSON.parse(e.data);
@@ -465,20 +497,15 @@
         }
       };
       wsNotif.onclose = (e) => {
-        // Server-side refusal codes: auth-failure (4001), forbidden (4003),
-        // policy violation (1008, includes tv-bump after change-password),
-        // clean shutdown (1000). Any of them means a reconnect with the
-        // same token will also be rejected - without this guard the client
-        // would hammer the server every 1.5s forever.
-        if (e && (e.code === 1000 || e.code === 1008 || e.code === 4001 || e.code === 4003)) {
+        // Skip reconnect on final-codes (clean shutdown, auth-failure,
+        // tv-bump invalidation) - retrying the same token would just
+        // re-hit the wall.
+        if (e && window.wsIsFinalCloseCode(e.code)) {
           return;
         }
-        // Half-jitter on the exponential backoff: if the server drops
-        // every connection at once (deploy, restart) clients reconnect
-        // spread across [delay/2, delay] instead of all on the same tick.
-        const jittered = reconnectDelay / 2 + Math.random() * (reconnectDelay / 2);
+        const jittered = window.wsReconnectDelay(notifReconnectAttempts, { start: 1500 });
+        notifReconnectAttempts++;
         setTimeout(() => { if (currentUserId) connectNotifWS(currentUserId); }, jittered);
-        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
       };
     }
 
