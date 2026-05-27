@@ -2,7 +2,11 @@
   'use strict';
 
   const auctionId = new URLSearchParams(location.search).get('id');
-  const token     = localStorage.getItem('token');
+  // Read the token at each use site via this thin wrapper (see common.js
+  // comment near getToken). Capturing the value at module load would go
+  // stale after an in-tab login/logout - the page would keep using the
+  // prior identity (or behave like a guest) until a full reload.
+  const token = () => window.getToken();
   let currentPriceValue = null;
   let remainingSec      = null;
   let isActive          = null;
@@ -112,7 +116,7 @@
 
   function refreshBidControls() {
     const leading = isUserLeading();
-    const disabled = !token || !isActive || leading;
+    const disabled = !token() || !isActive || leading;
     $('bidBtn').disabled = disabled;
     $('bidAmount').disabled = disabled;
     document.querySelectorAll('.bid-quick-btn, .bid-num-btn').forEach(b => { b.disabled = disabled; });
@@ -121,7 +125,7 @@
 
   function updateBidHint() {
     const hint=$('bidHint');
-    if (!token) return void(hint.textContent='Войдите, чтобы делать ставки.');
+    if (!token()) return void(hint.textContent='Войдите, чтобы делать ставки.');
     if (!isActive) return void(hint.textContent='Аукцион завершён - ставки закрыты.');
     if (isUserLeading()) return void(hint.textContent='Вы уже лидируете в этом аукционе - дождитесь чужой ставки.');
     const min=currentPriceValue!==null?currentPriceValue+0.01:null;
@@ -142,7 +146,7 @@
 
   function setAuthUI(user) {
     const profile=$('userProfile'), authBtn=$('authBtn');
-    if (!token) { profile.style.display='none'; return; }
+    if (!token()) { profile.style.display='none'; return; }
     if (!user) return;
     $('avatar').textContent=(user.username?.[0]||'?').toUpperCase();
     if (user.avatar_url) {
@@ -156,13 +160,13 @@
   }
 
   function goAuth() {
-    if (!token) { location.href='index.html'; return; }
+    if (!token()) { location.href='index.html'; return; }
     localStorage.removeItem('token'); location.href='index.html';
   }
 
 
   async function loadMe() {
-    if (!token) return null;
+    if (!token()) return null;
     try { const r=await apiFetch(API+'/api/me'); return r.ok?r.json():null; } catch { return null; }
   }
 
@@ -281,7 +285,7 @@
     // Quick-bid buttons are only visible to logged-in users on active bid lots.
     const quick=$('bidQuick');
     if (quick) {
-      quick.style.display = (token && a.is_active && a.auction_type !== 'bin') ? 'flex' : 'none';
+      quick.style.display = (token() && a.is_active && a.auction_type !== 'bin') ? 'flex' : 'none';
     }
 
     return a;
@@ -330,29 +334,50 @@
   }
 
   async function loadBids() {
+    // Burst of new_bid WS frames during a hot auction fires several
+    // loadBids() calls in quick succession. Without per-call
+    // cancellation the responses can resolve out of order and the
+    // last-to-paint wins, even if it's not the freshest server state.
+    // Cancel any in-flight request first; the abort surfaces as a
+    // DOMException the catch swallows, so the only request that
+    // reaches renderBids is the one that wasn't superseded.
+    if (loadBids._ctl) loadBids._ctl.abort();
+    const ctl = new AbortController();
+    loadBids._ctl = ctl;
     try {
-      const r=await fetch(`${API}/api/auctions/${encodeURIComponent(auctionId)}/bids?page=1&page_size=20`);
+      const r=await fetch(`${API}/api/auctions/${encodeURIComponent(auctionId)}/bids?page=1&page_size=20`,{signal:ctl.signal});
       if (!r.ok) throw new Error();
       const d=await r.json();
+      if (loadBids._ctl !== ctl) return; // a newer call superseded us
       renderBids(d.items||[]);
       if (d.total!==undefined) { syncEl('bidsCount',d.total); syncEl('bidsCount2',d.total); }
-    } catch { $('bidsList').innerHTML='<div class="bids-empty" style="color:var(--red)">Не удалось загрузить ставки</div>'; }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      $('bidsList').innerHTML='<div class="bids-empty" style="color:var(--red)">Не удалось загрузить ставки</div>';
+    }
   }
 
   async function placeBid() {
+    // Re-entrancy guard. Holding Enter (key-repeat) or rapid clicks
+    // fire ``placeBid`` again before the first call's POST returns;
+    // ``btn.disabled`` doesn't help since the keydown handler runs
+    // ``placeBid()`` directly and the disable is only set after the
+    // input-validity checks. Without the guard the server sees the
+    // same bid twice and the user sees a confusing double-toast.
+    if (placeBid._inflight) return;
     const raw=$('bidAmount').value, amount=Number(raw);
-    if (!token) return showToast('Нужен вход','Войдите для участия в торгах.','warn');
+    if (!token()) return showToast('Нужен вход','Войдите для участия в торгах.','warn');
     if (!isActive) return showToast('Закрыто','Аукцион уже завершён.','warn');
     if (isUserLeading()) return showToast('Вы уже лидируете','Дождитесь чужой ставки, прежде чем повышать.','warn');
     if (!raw||!Number.isFinite(amount)||amount<=0) return showToast('Некорректная ставка','Введите сумму больше нуля.','warn');
     const btn=$('bidBtn'),prev=btn.textContent;
-    btn.disabled=true; btn.textContent='Отправка…';
+    placeBid._inflight=true; btn.disabled=true; btn.textContent='Отправка…';
     try {
       const r=await apiFetch(`${API}/api/bids`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({auction_id:Number(auctionId),amount})});
       if (!r.ok) { let msg='Ставка не принята.'; try{msg=(await r.json()).detail||msg;}catch{} showToast('Ошибка',msg,'bad'); }
       else { $('bidAmount').value=''; showToast('Принято','Ваша ставка зарегистрирована!','ok'); await loadBids(); }
     } catch { showToast('Ошибка','Нет связи с сервером.','bad'); }
-    finally { btn.textContent=prev; refreshBidControls(); }
+    finally { placeBid._inflight=false; btn.textContent=prev; refreshBidControls(); }
   }
 
   function connectWS() {
@@ -513,7 +538,13 @@
       const r=await fetch(`${API}/api/users/${encodeURIComponent(username)}`);
       if (r.ok) {
         const d=await r.json();
-        syncEl('sellerMeta',`С нами с ${new Date(d.user?.created_at+'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`);
+        // Guard ``created_at`` against a null value: ``new Date('nullZ')``
+        // returns Invalid Date and ``toLocaleDateString`` then renders the
+        // literal string "Invalid Date" inside the seller card.
+        const createdAt = d.user?.created_at;
+        syncEl('sellerMeta', createdAt
+          ? `С нами с ${new Date(createdAt + 'Z').toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`
+          : 'С нами недавно');
         syncEl('sellerLots',d.stats?.created_count??'-');
         if (d.user?.avatar_url&&!$('sellerAvatar').querySelector('img')) {
           const img=document.createElement('img');img.src=resolveAvatarUrl(d.user.avatar_url);img.alt=username;$('sellerAvatar').appendChild(img);
@@ -533,7 +564,7 @@
         $('reviewsSection').style.display = 'block';
       }
     } catch {}
-    if (token) {
+    if (token()) {
       try {
         const r=await apiFetch(`${API}/api/sellers/${id}/subscription`);
         if (r.ok) {
@@ -570,7 +601,7 @@
   }
 
   async function toggleSubscription() {
-    if (!token || !sellerId) return;
+    if (!token() || !sellerId) return;
     try {
       const method = isSubscribed ? 'DELETE' : 'POST';
       const r = await apiFetch(`${API}/api/sellers/${sellerId}/subscribe`, { method });
@@ -1016,7 +1047,7 @@
   }
 
   async function buyNow() {
-    if (!token) {
+    if (!token()) {
       showToast('Ошибка', 'Войдите в аккаунт', 'bad');
       return;
     }
@@ -1187,13 +1218,18 @@
     $('lbImg').classList.remove('dragging');
   });
 
-  // Expose handlers for inline onclick="..." in auction.html
+  // Expose handlers for inline onclick="..." in auction.html and
+  // for handlers we render inline into innerHTML strings (thumbnail
+  // strip via updateThumbs, review delete button via deleteReview).
+  // The closure-local references are not on window by default, so
+  // clicks would otherwise throw ReferenceError.
   Object.assign(window, {
-    buyNow, bumpBid, closeEditModal, closeLightbox, filterReviewsByRating,
-    goAuth, lbSlide, lbZoom, lbZoomReset: lbResetZoom,
-    lotGoTo, lotSlide, openEditModal, openLightbox, placeBid, removeEditImg,
-    saveEdit, setExtend, submitReview, switchLotTab, toggleSubscription,
-    toggleThisLotOnly, updateReviewCounter,
+    buyNow, bumpBid, closeEditModal, closeLightbox, deleteReview,
+    filterReviewsByRating, goAuth, lbSlide, lbZoom,
+    lbZoomReset: lbResetZoom, lotGoTo, lotSlide, openEditModal,
+    openLightbox, placeBid, removeEditImg, saveEdit, setExtend,
+    submitReview, switchLotTab, toggleSubscription, toggleThisLotOnly,
+    updateReviewCounter, updateThumbs,
   });
 
   // Deep-link: auction.html?id=...#reviews opens the Reviews tab on load.

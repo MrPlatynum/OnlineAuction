@@ -22,10 +22,9 @@ from app.utils.time import utcnow
 
 
 async def _insert(to_email: str = "to@example.com", **overrides) -> int:
-    """Helper that bypasses ``enqueue_email``'s ``create_task`` so the
-    INSERT is awaited directly. Removes race against the worker tick
-    and keeps the tests deterministic."""
-    await email_outbox._insert_outbox_row(
+    """Helper that awaits ``enqueue_email`` directly so a test can
+    assert on the persisted row without racing the worker tick."""
+    await email_outbox.enqueue_email(
         to_email=to_email,
         subject=overrides.get("subject", "Subject"),
         html_body=overrides.get("html_body", "<p>body</p>"),
@@ -216,11 +215,10 @@ async def test_register_flow_persists_through_outbox(client, monkeypatch):
     from app.services import email_outbox as ob_mod
     from app.services import notifications as notif_mod
 
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: ob_mod.enqueue_email(to, subj, html),
-    )
+    async def _route_to_outbox(to, subj, html):
+        await ob_mod.enqueue_email(to, subj, html)
+
+    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _route_to_outbox)
 
     r = await client.post("/api/register", json={
         "username": "outboxer",
@@ -229,13 +227,9 @@ async def test_register_flow_persists_through_outbox(client, monkeypatch):
     })
     assert r.status_code == 200, r.text
 
-    # ``enqueue_email`` schedules the INSERT as a fire-and-forget
-    # asyncio task. Drain in-flight inserts before reading the table
-    # so we don't race the worker against the test.
-    import asyncio
-    if ob_mod._insert_tasks:
-        await asyncio.gather(*list(ob_mod._insert_tasks), return_exceptions=True)
-
+    # enqueue_email now awaits the INSERT inline, so the row is on
+    # disk by the time /register returned its 200 - no draining of
+    # in-flight tasks needed.
     async with SessionLocal() as db:
         rows = (
             await db.execute(

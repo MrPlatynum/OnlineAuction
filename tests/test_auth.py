@@ -12,6 +12,29 @@ async def test_register_creates_user_and_returns_token(client):
     assert body["user"]["balance"] == 1000.0
 
 
+async def test_register_rejects_html_in_username(client):
+    """Defence-in-depth: usernames flow into Notification.message and
+    listing pages. The frontend escapes through esc() everywhere, but
+    constraining the source means a future render-path regression
+    that calls innerHTML directly on a username can't be exploited."""
+    r = await client.post("/api/register", json={
+        "username": "<img src=x onerror=alert(1)>",
+        "email": "evil@example.com",
+        "password": "secret123",
+    })
+    assert r.status_code == 422, r.text
+
+
+async def test_register_accepts_cyrillic_username(client):
+    r = await client.post("/api/register", json={
+        "username": "Алиса",
+        "email": "alisa@example.com",
+        "password": "secret123",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["username"] == "Алиса"
+
+
 async def test_register_duplicate_username_or_email_indistinguishable(
     client, registered_user
 ):
@@ -47,6 +70,66 @@ async def test_login_with_wrong_password_returns_401(client, registered_user):
         "password": "wrong-password",
     })
     assert response.status_code == 401
+
+
+async def test_login_locks_account_after_five_failures(client, registered_user):
+    """Per-account credential-stuffing defence: after 5 consecutive
+    bad-password attempts the account is locked for a minute and even
+    a correct-password attempt during the window returns the generic
+    401, so the lock-state isn't a username-enumeration oracle."""
+    username = registered_user["user"]["username"]
+    for _ in range(5):
+        r = await client.post(
+            "/api/login",
+            json={"username": username, "password": "wrong"},
+        )
+        assert r.status_code == 401, r.text
+
+    # 6th attempt - correct password - still rejected because the
+    # account is locked.
+    r_locked = await client.post(
+        "/api/login",
+        json={"username": username, "password": registered_user["password"]},
+    )
+    assert r_locked.status_code == 401, r_locked.text
+
+
+async def test_successful_login_clears_failure_streak(
+    client, registered_user
+):
+    """One or two bad attempts don't lock the account, and a
+    successful login zeroes the counter so the next bad attempt
+    starts from zero again rather than landing immediately at the
+    5-failure threshold."""
+    username = registered_user["user"]["username"]
+    pw = registered_user["password"]
+
+    for _ in range(4):
+        r = await client.post(
+            "/api/login",
+            json={"username": username, "password": "wrong"},
+        )
+        assert r.status_code == 401
+
+    # Successful login resets the streak.
+    r_ok = await client.post(
+        "/api/login", json={"username": username, "password": pw}
+    )
+    assert r_ok.status_code == 200, r_ok.text
+
+    # Four more wrong attempts then a fifth would have locked the
+    # account if the reset didn't fire; the fifth here is still ok.
+    for _ in range(4):
+        r = await client.post(
+            "/api/login",
+            json={"username": username, "password": "wrong"},
+        )
+        assert r.status_code == 401
+
+    r_still_ok = await client.post(
+        "/api/login", json={"username": username, "password": pw}
+    )
+    assert r_still_ok.status_code == 200, r_still_ok.text
 
 
 async def test_login_oversized_password_rejected_at_schema(client, registered_user):

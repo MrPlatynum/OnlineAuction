@@ -83,7 +83,19 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
                 if not auction or not auction.is_active:
                     return
                 if auction.end_time > utcnow():
-                    schedule_auction(auction)
+                    # Anti-sniping / PATCH extend moved the deadline
+                    # while we slept. Re-arm via the no-cancel helpers
+                    # instead of schedule_auction - the latter would
+                    # call cancel_auction which finds *this* task in
+                    # _completion_tasks and task.cancel()s it. Once
+                    # cancelled, the next ``await`` (the ``async with``
+                    # exit's session.close()) raises CancelledError
+                    # mid-shutdown and the FOR-UPDATE-held connection
+                    # is returned to the pool in undefined state. The
+                    # finally clause below leaves the new task in the
+                    # dict because ``is current`` is False for it.
+                    _arm_completion_task(auction_id, auction.end_time)
+                    _arm_ending_soon_task(auction)
                     return
                 if _settle_handler is None:
                     logger.error(
@@ -94,7 +106,11 @@ async def _wait_and_complete(auction_id: int, expected_end: datetime) -> None:
                 await _settle_handler(auction_id, db)
             except Exception:
                 logger.exception("Error completing auction %s", auction_id)
-                await db.rollback()
+                # Shield the rollback so a shutdown cancel arriving mid-
+                # await doesn't leave the session in a half-rolled state
+                # (open tx still held on the connection, returned to the
+                # pool in undefined state).
+                await asyncio.shield(db.rollback())
     except asyncio.CancelledError:
         raise
     finally:
@@ -129,14 +145,28 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
                         auction_id,
                     )
                     return
-                await _ending_soon_handler(auction, db)
+                # Mark the flag and commit *before* dispatching notifications.
+                # The handler calls notify_user per recipient and each one
+                # commits its own row, so a mid-fan-out failure (e.g. bidder
+                # 4 of 7 raises) used to leave the flag False while bidders
+                # 1-3 had already received their emails - on the next worker
+                # restart the task fires again and re-notifies them. Setting
+                # the flag first means a partial failure at worst drops the
+                # remaining notifications instead of duplicating the early
+                # ones; the anti-sniping path in /bids resets the flag if
+                # the deadline is extended, so a legitimate re-arm still
+                # fires a fresh warning ahead of the new end_time.
                 auction.ending_soon_notified = True
                 await db.commit()
+                await _ending_soon_handler(auction, db)
             except Exception:
                 logger.exception(
                     "Error sending ending-soon for auction %s", auction_id
                 )
-                await db.rollback()
+                # Same shield rationale as _wait_and_complete above:
+                # don't let a shutdown cancel interrupt the rollback and
+                # leave the session half-torn-down.
+                await asyncio.shield(db.rollback())
     except asyncio.CancelledError:
         raise
     finally:
@@ -144,27 +174,55 @@ async def _wait_and_notify_ending_soon(auction_id: int, fire_at: datetime) -> No
             _ending_soon_tasks.pop(auction_id, None)
 
 
+def _arm_completion_task(auction_id: int, end_time: datetime) -> None:
+    """Create the completion task and place it in the dict without
+    cancelling any existing slot. Used both by ``schedule_auction``
+    (after it has explicitly cancelled the prior task) and by the
+    internal re-arm inside ``_wait_and_complete`` - that re-arm path
+    cannot go through ``cancel_auction`` because doing so would
+    ``task.cancel()`` *this* task and propagate CancelledError into
+    the surrounding ``session.close()``, leaking the FOR-UPDATE-held
+    connection back to the pool in undefined state."""
+    _completion_tasks[auction_id] = asyncio.create_task(
+        _wait_and_complete(auction_id, end_time),
+        name=f"auction-complete-{auction_id}",
+    )
+
+
+def _arm_ending_soon_task(auction: Auction) -> None:
+    """Same as ``_arm_completion_task`` for the five-minute warning
+    side. No-op when the flag is already set or the lead-time has
+    already passed."""
+    if auction.ending_soon_notified:
+        return
+    fire_at = auction.end_time - ENDING_SOON_LEAD
+    if fire_at <= utcnow():
+        return
+    _ending_soon_tasks[auction.id] = asyncio.create_task(
+        _wait_and_notify_ending_soon(auction.id, fire_at),
+        name=f"auction-ending-soon-{auction.id}",
+    )
+
+
 def schedule_auction(auction: Auction) -> None:
     """Schedule (or re-schedule) completion + ending-soon for ``auction``.
 
     Safe to call multiple times - any pre-existing tasks for the same id
     are cancelled first. No-op for inactive auctions.
+
+    Intentionally synchronous (no ``await``). The dict mutations below
+    rely on asyncio's run-to-completion semantics: with no yield point
+    inside the function body, two concurrent callers cannot interleave
+    a cancel from one with a create_task from the other. Adding an
+    ``await`` here breaks that invariant - either restructure to keep
+    it sync, or wrap the body in an ``asyncio.Lock`` to restore
+    serialisation.
     """
     cancel_auction(auction.id)
     if not auction.is_active:
         return
-
-    _completion_tasks[auction.id] = asyncio.create_task(
-        _wait_and_complete(auction.id, auction.end_time),
-        name=f"auction-complete-{auction.id}",
-    )
-    if not auction.ending_soon_notified:
-        fire_at = auction.end_time - ENDING_SOON_LEAD
-        if fire_at > utcnow():
-            _ending_soon_tasks[auction.id] = asyncio.create_task(
-                _wait_and_notify_ending_soon(auction.id, fire_at),
-                name=f"auction-ending-soon-{auction.id}",
-            )
+    _arm_completion_task(auction.id, auction.end_time)
+    _arm_ending_soon_task(auction)
 
 
 def cancel_auction(auction_id: int) -> None:

@@ -10,10 +10,12 @@ placed, win/lose counts, the seller's recent listings) consumed by
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Auction, Bid, User
 from app.schemas import NotificationSettings
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 from app.utils.time import utcnow
 
@@ -21,7 +23,9 @@ router = APIRouter(prefix="/api", tags=["users"])
 
 
 @router.put("/notification-settings")
+@limiter.limit("30/minute")
 async def update_notification_settings(
+    request: Request,
     settings: NotificationSettings,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -79,13 +83,17 @@ async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
     )
 
     if bid_auction_ids:
+        # SQL NULL semantics: ``winner_id != user.id`` evaluates to NULL
+        # (and is therefore filtered out) for completed lots that ended
+        # with no winner. Those lots still count as "not won by this
+        # user", so OR-in the NULL case explicitly.
         lost_count = await db.scalar(
             select(func.count())
             .select_from(Auction)
             .where(
                 Auction.id.in_(bid_auction_ids),
                 Auction.is_completed.is_(True),
-                Auction.winner_id != user.id,
+                (Auction.winner_id != user.id) | Auction.winner_id.is_(None),
             )
         )
     else:

@@ -103,9 +103,10 @@ async def register(request: Request, user: UserCreate, db: AsyncSession = Depend
     await db.refresh(db_user)
 
     # Kick off the verification email after the row is persistent so a
-    # later rollback can't leave us mailing a non-existent user; the
-    # send itself is fire-and-forget so /register doesn't block on SMTP.
-    send_verification_email(db_user)
+    # later rollback can't leave us mailing a non-existent user. The
+    # await covers only the outbox INSERT (sub-millisecond local DB
+    # call); actual SMTP delivery is handled by the background worker.
+    await send_verification_email(db_user)
 
     token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
@@ -158,28 +159,74 @@ async def resend_verification_email(
         raise HTTPException(
             status_code=400, detail="Email уже подтверждён"
         )
-    send_verification_email(current_user)
+    await send_verification_email(current_user)
     return {"message": "Письмо отправлено"}
+
+
+_LOGIN_LOCKOUT_TIERS: tuple[tuple[int, timedelta], ...] = (
+    (20, timedelta(hours=1)),
+    (15, timedelta(minutes=15)),
+    (10, timedelta(minutes=5)),
+    (5,  timedelta(minutes=1)),
+)
+
+
+def _lockout_for_failures(count: int) -> timedelta | None:
+    """Per-account credential-stuffing defence. The slowapi limiter caps
+    /login at 10/min per IP, but a botnet can amortise that across a /16
+    and still grind one specific username. Stack an exponential per-
+    *account* lockout on top: 5 failures → 1 min, 10 → 5 min, 15 → 15
+    min, 20+ → 1 hour. Successful login resets the count."""
+    for threshold, window in _LOGIN_LOCKOUT_TIERS:
+        if count >= threshold:
+            return window
+    return None
 
 
 @router.post("/login", response_model=dict)
 @limiter.limit("10/minute")
 async def login(request: Request, user: UserLogin, db: AsyncSession = Depends(get_db)):
     db_user = (
-        await db.execute(select(User).where(User.username == user.username))
+        await db.execute(
+            select(User)
+            .where(User.username == user.username)
+            .with_for_update()
+        )
     ).scalar_one_or_none()
     if db_user is None:
         # Burn the same CPU a real verify would so we don't leak
         # "username exists" via response timing.
         consume_password_verify_time(user.password)
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    if not verify_password(user.password, db_user.hashed_password):
+
+    now = utcnow()
+    if db_user.locked_until and db_user.locked_until > now:
+        # Don't reveal exactly when the lock expires - that gives an
+        # attacker a precise retry signal. Same generic 401 the
+        # bad-password path returns so the locked-state isn't a
+        # username-enumeration oracle either.
+        consume_password_verify_time(user.password)
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+
+    if not verify_password(user.password, db_user.hashed_password):
+        db_user.failed_login_count = (db_user.failed_login_count or 0) + 1
+        window = _lockout_for_failures(db_user.failed_login_count)
+        if window is not None:
+            db_user.locked_until = now + window
+        await db.commit()
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+
+    # Successful login - clear the failure streak so the next bad
+    # attempt starts from zero again.
+    if db_user.failed_login_count or db_user.locked_until:
+        db_user.failed_login_count = 0
+        db_user.locked_until = None
 
     if needs_rehash(db_user.hashed_password):
         db_user.hashed_password = hash_password(user.password)
-        await db.commit()
-        await db.refresh(db_user)
+
+    await db.commit()
+    await db.refresh(db_user)
 
     token = create_user_access_token(db_user)
     return {"token": token, "user": UserResponse.model_validate(db_user)}
@@ -200,15 +247,32 @@ async def change_password(
 ):
     if not verify_password(data.current_password, current_user.hashed_password):
         raise HTTPException(status_code=400, detail="Неверный текущий пароль")
-    current_user.hashed_password = hash_password(data.new_password)
+    # Take a row-level lock on the user before mutating credentials. A
+    # concurrent /ws/notifications handshake reads the user row to
+    # validate the JWT's tv claim against the persisted token_version;
+    # without this lock the handshake's read can land between our
+    # pre-bump read (via get_current_user) and the commit below, so
+    # the new socket sees the old tv, accepts a stolen JWT, and
+    # survives the credential rotation. ``populate_existing`` refreshes
+    # the existing ORM copy so subsequent attribute writes target the
+    # locked row.
+    locked = (
+        await db.execute(
+            select(User)
+            .where(User.id == current_user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+    locked.hashed_password = hash_password(data.new_password)
     # Bump tv + close in-flight WS in one step. The caller still has
     # *this* request's token in their browser - return a fresh one so
     # they don't get kicked out of the very session they used to
     # change the password.
-    await _invalidate_user_sessions(current_user)
+    await _invalidate_user_sessions(locked)
     await db.commit()
 
-    new_token = create_user_access_token(current_user)
+    new_token = create_user_access_token(locked)
     return {"message": "Пароль успешно изменён", "token": new_token}
 
 
@@ -255,7 +319,7 @@ async def password_reset_request(
             user.password_reset_sent_at = now
             await db.commit()
             await db.refresh(user)
-            send_password_reset_email(user)
+            await send_password_reset_email(user)
     remaining = deadline - asyncio.get_running_loop().time()
     if remaining > 0:
         await asyncio.sleep(remaining)
@@ -301,5 +365,5 @@ async def password_reset_confirm(
     await _invalidate_user_sessions(user)
     await db.commit()
 
-    send_password_changed_email(user)
+    await send_password_changed_email(user)
     return {"message": "Пароль успешно сброшен"}

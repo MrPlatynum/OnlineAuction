@@ -591,10 +591,19 @@ function renderTimeline(data) {
 /* ---- Avatar crop & upload ---- */
 let cropper = null;
 
+// Matches the server's MAX_UPLOAD_SIZE (8 MB). FileReader will happily
+// load a 50 MB photo fully into memory before the cropper / network
+// rejects it - bail at the boundary instead.
+const _AVATAR_MAX_BYTES = 8 * 1024 * 1024;
+
 function uploadAvatar(input) {
   const file = input.files[0];
   if (!file) return;
   input.value = ''; // reset so the same file can be picked again
+  if (file.size > _AVATAR_MAX_BYTES) {
+    showToast?.('Слишком большой файл', 'Максимум 8 МБ.', 'bad');
+    return;
+  }
 
   const reader = new FileReader();
   reader.onload = e => openCropModal(e.target.result);
@@ -799,7 +808,7 @@ async function loadBalance(reset = true) {
             <div class="tx-date">${date}</div>
           </div>
           <div class="tx-right">
-            <div class="tx-amount ${cls}">${sign}${Number(t.amount).toFixed(2)} ₽</div>
+            <div class="tx-amount ${cls}">${sign}${Math.abs(Number(t.amount)).toFixed(2)} ₽</div>
             <div class="tx-balance">Остаток: ${Number(t.balance_after).toFixed(2)} ₽</div>
           </div>
         </div>`;

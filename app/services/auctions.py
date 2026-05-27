@@ -54,6 +54,13 @@ def _credit_seller(
     distinct lines. Used by both the BIN and the bid settlement paths,
     which differ only in ``sale_description`` (BIN says "по цене BIN",
     bid says "лота")."""
+    # Quantize gross to 2 decimals before mutating the in-memory ORM
+    # balance. The DB column is Numeric(12, 2) - any caller passing a
+    # Decimal with >2 decimal places (in practice the per-row stored
+    # value already matches, but a future caller computing gross at
+    # higher precision could drift) would leave seller.balance and
+    # the audit row both un-quantized while Postgres rounds on store.
+    gross = gross.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     seller.balance += gross
     add_transaction(
         db, seller, "auction_sale", gross,
@@ -161,7 +168,10 @@ async def count_bids_by_auction(
             .group_by(Bid.auction_id)
         )
     ).all()
-    return {aid: cnt for aid, cnt in rows}
+    # ``func.count`` returns ``int`` on asyncpg but ``Decimal`` on
+    # other drivers. Coerce at the boundary so downstream callers and
+    # response schemas don't have to.
+    return {aid: int(cnt) for aid, cnt in rows}
 
 
 async def fetch_auction_bidders(
@@ -303,18 +313,35 @@ async def complete_auction(auction_id: int, db: AsyncSession):
 
     await db.commit()
 
-    for user, notif_type, title, message in pending_notifications:
-        await notify_user(
-            db, user, notif_type, title, message,
-            auction.id, auction.title, manager,
-        )
-
+    # Broadcast the "auction ended" frame before the per-recipient fan-out:
+    # it doesn't touch the DB and benefits every subscribed client (whether
+    # they bid or not). If a later notify_user raises, the broadcast has
+    # already gone out, so the listing card stops counting down even if
+    # individual notifications drop.
     await manager.broadcast({
         "type": "auction_ended",
         "auction_id": auction_id,
         "winner_id": auction.winner_id,
         "final_price": float(auction.current_price),
     }, auction_id)
+
+    # Notifications are best-effort once the financial side is committed.
+    # A single failed recipient (deleted user, transient DB drop on the
+    # commit inside create_notification, WS send error) used to abort the
+    # whole loop and leave later bidders un-notified - and propagate up
+    # to _wait_and_complete's except Exception, which rolled back the
+    # already-committed money side's session for no benefit.
+    for user, notif_type, title, message in pending_notifications:
+        try:
+            await notify_user(
+                db, user, notif_type, title, message,
+                auction.id, auction.title, manager,
+            )
+        except Exception:
+            logger.exception(
+                "Notification dispatch failed for user %s on auction %s",
+                user.id, auction_id,
+            )
 
 
 # Wire the scheduler's "settle this id" / "ending-soon" hooks to our

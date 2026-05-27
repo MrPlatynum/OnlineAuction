@@ -18,7 +18,21 @@ if not SECRET_KEY or SECRET_KEY == _PLACEHOLDER_SECRET:
     )
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+# Auth-token lifetime. Lower than 24 h means a leaked JWT (XSS,
+# logged URL, careless screenshot) burns out the same day it was
+# stolen rather than giving an attacker a full working day. No
+# refresh-token flow yet - users on long-lived sessions get a
+# silent re-auth prompt every ~2 h, which is the accepted UX
+# trade-off until refresh tokens land.
+ACCESS_TOKEN_EXPIRE_HOURS = 2
+
+# Defence-in-depth claims on every JWT this app issues. ``iss``
+# stops a token signed for some future sibling service from being
+# accepted here; ``aud`` flags which API the token is meant for so
+# the same key can't be reused to authorise calls against an
+# unrelated audience.
+JWT_ISSUER = "lotus"
+JWT_AUDIENCE = "lotus-api"
 
 _raw_url = os.getenv(
     "DATABASE_URL",

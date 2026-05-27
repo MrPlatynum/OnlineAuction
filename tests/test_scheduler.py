@@ -11,7 +11,6 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Union
 
-import pytest
 from sqlalchemy import select
 
 from app import database as _db_module
@@ -135,16 +134,15 @@ async def test_complete_auction_skips_when_end_time_extended(registered_user):
         cancel_auction(auction.id)
 
 
-async def test_complete_auction_commits_money_before_notifying(
+async def test_complete_auction_isolates_notification_failures(
     client, registered_user, second_user, monkeypatch
 ):
-    """notify_user → create_notification used to commit the session
-    mid-completion, so a raise during the second notify left only a
-    partial set of notifications. Worse, if the *first* notify raised
-    before its own commit the entire financial state (balances,
-    transactions, is_completed) was rolled back. After the refactor
-    notifications run only after a single final commit - even if every
-    one of them blows up, the money has already moved."""
+    """notify_user is best-effort once the financial state has been
+    committed. A raise from any single recipient (deleted user, transient
+    DB drop on its own commit, WS send error) must not abort the rest of
+    the fan-out and must not propagate up to _wait_and_complete - the
+    money has already moved, retrying complete_auction would not undo it
+    and would re-emit ``auction_ended`` to subscribers."""
     from datetime import timedelta
 
     from app.models import Bid, User
@@ -161,14 +159,22 @@ async def test_complete_auction_commits_money_before_notifying(
         auc.end_time = utcnow() - timedelta(seconds=10)
         await db.commit()
 
+    boom_calls = {"n": 0}
+
     async def boom(*args, **kwargs):
+        boom_calls["n"] += 1
         raise RuntimeError("notification dispatch failed")
 
     monkeypatch.setattr(auctions_service, "notify_user", boom)
 
-    with pytest.raises(RuntimeError):
-        async with _db_module.SessionLocal() as db:
-            await complete_auction(auction.id, db)
+    # Must NOT raise. The handler swallows per-recipient failures and
+    # logs them; the financial commit is already durable on disk.
+    async with _db_module.SessionLocal() as db:
+        await complete_auction(auction.id, db)
+
+    # Fan-out attempted every pending notification despite each one
+    # raising - one bidder + one seller = at least two attempts.
+    assert boom_calls["n"] >= 2
 
     async with _db_module.SessionLocal() as db:
         settled = (

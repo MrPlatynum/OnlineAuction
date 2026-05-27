@@ -6,6 +6,7 @@ the BIN ``/buy-now`` settle path, and the personal-history aggregations
 mutations on the user balance live in ``balance.py``.
 """
 
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,11 +39,13 @@ from app.services.auctions import (
     seller_commission,
     settle_bin_purchase,
 )
-from app.services.balance import lock_users_by_id
-from app.services.notifications import create_notification, notify_user
+from app.services.balance import get_committed_balance, lock_users_by_id
+from app.services.notifications import notify_user
 from app.services.websocket_manager import manager
 from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["auctions"])
 
@@ -186,21 +189,34 @@ async def create_auction(
     if all_urls:
         await db.commit()
 
+    # Fan out NEW_LOT through notify_user so subscribers get the full
+    # three-channel delivery (in-app row + WS push + email), not just
+    # the in-app row. ``create_notification`` alone left this channel
+    # silent for everyone watching the bell and never produced an
+    # email, which made the "subscribe" feature feel broken.
+    # Notifications are best-effort: a single failed recipient must
+    # not abort the rest, and must not propagate up to roll back the
+    # create_auction commit that already persisted the row.
     subscribers = (
         await db.execute(
-            select(Subscription).where(Subscription.seller_id == current_user.id)
+            select(User)
+            .join(Subscription, Subscription.subscriber_id == User.id)
+            .where(Subscription.seller_id == current_user.id)
         )
     ).scalars().all()
-    for sub in subscribers:
-        await create_notification(
-            db=db,
-            user_id=sub.subscriber_id,
-            notification_type=NotificationType.NEW_LOT,
-            title="Новый лот",
-            message=f"@{current_user.username} выставил новый лот: «{db_auction.title}»",
-            auction_id=db_auction.id,
-            auction_title=db_auction.title,
-        )
+    for subscriber in subscribers:
+        try:
+            await notify_user(
+                db, subscriber, NotificationType.NEW_LOT,
+                "Новый лот",
+                f"@{current_user.username} выставил новый лот: «{db_auction.title}»",
+                db_auction.id, db_auction.title, manager,
+            )
+        except Exception:
+            logger.exception(
+                "NEW_LOT dispatch failed for subscriber %s on auction %s",
+                subscriber.id, db_auction.id,
+            )
 
     # Re-fetch with relationships eager-loaded so the response goes through
     # the same shape as the listing - kept these dicts drifting apart before
@@ -253,11 +269,25 @@ async def buy_now(
 
     locked_users = await lock_users_by_id(db, current_user.id, auction.created_by)
     creator = locked_users.get(auction.created_by)
-    if current_user.balance < auction.bin_price:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, у вас {current_user.balance:.2f} ₽",
+
+    # Subtract balance already committed as the top bidder on other active
+    # auctions: if those settle with this user as winner, the amount is debited
+    # at completion time, so it must still be available alongside the BIN
+    # payment. BIN lots themselves reject bids (see /bids handler), so the
+    # buyer can never have a prior commit on *this* auction to exclude.
+    committed_elsewhere = await get_committed_balance(db, current_user.id)
+    available = current_user.balance - committed_elsewhere
+    if available < auction.bin_price:
+        detail = (
+            f"Недостаточно средств. Нужно {auction.bin_price:.2f} ₽, "
+            f"доступно {available:.2f} ₽"
         )
+        if committed_elsewhere > 0:
+            detail += (
+                f" ({committed_elsewhere:.2f} ₽ уже зарезервировано в других "
+                f"активных аукционах)"
+            )
+        raise HTTPException(status_code=400, detail=detail + ".")
 
     settle_bin_purchase(db, auction, current_user, creator)
     await db.commit()
@@ -422,7 +452,7 @@ async def get_auction(auction_id: int, db: AsyncSession = Depends(get_db)):
 async def update_auction(
     auction_id: int,
     data: AuctionUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     # FOR UPDATE so concurrent place_bid / complete_auction can't mutate
@@ -477,6 +507,18 @@ async def update_auction(
             db.add(AuctionImage(auction_id=auction_id, url=url, order=i))
         auction.image_url = data.image_urls[0] if data.image_urls else None
 
+    # A BIN listing without a price is meaningless: /buy-now would 400
+    # on every request, and the DB CheckConstraint
+    # ``ck_auctions_bin_requires_price`` would otherwise fire at commit
+    # time and surface as an opaque 500. Catch both cases here -
+    # explicitly nulling bin_price on a bin lot, and switching the type
+    # to bin without supplying a price.
+    if auction.auction_type == "bin" and auction.bin_price is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Для лота с фиксированной ценой обязательно указать bin_price",
+        )
+
     # BIN is a fixed-price listing - bin_price IS the displayed/charged
     # price. If the seller edits it (or switches the lot to BIN), drag
     # starting_price / current_price along so the listing card and
@@ -499,7 +541,7 @@ async def update_auction(
 @router.delete("/auctions/{auction_id}")
 async def delete_auction(
     auction_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     # FOR UPDATE so scheduler._wait_and_complete can't settle the lot
@@ -518,11 +560,28 @@ async def delete_auction(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
 
-    if auction.is_active and bids_count > 0:
-        raise HTTPException(status_code=400, detail="Нельзя удалить активный лот со ставками")
+    # Bid.auction_id has no ON DELETE rule, and Review.auction_id is the
+    # same shape; deleting an auction with any referencing row falls
+    # into a FK violation at commit and surfaces as a 500. Reject
+    # outright when bids exist regardless of active/completed state -
+    # the prior check missed a completed lot with bids but NULL
+    # winner_id (a half-settled lot from an interrupted complete_auction
+    # tick), which previously crashed at the FK.
+    if bids_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя удалить лот, на который уже делали ставки",
+        )
 
-    if auction.is_completed and auction.winner_id:
-        raise HTTPException(status_code=400, detail="Нельзя удалить лот с победителем")
+    # No-bid completed lots are still a finalised historical record;
+    # rather than deciding what "deletable" means for those, block all
+    # completed lots so /delete is unambiguous - "you can only delete a
+    # lot that nobody touched yet".
+    if auction.is_completed:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя удалить завершённый лот",
+        )
 
     await db.delete(auction)
     await db.commit()

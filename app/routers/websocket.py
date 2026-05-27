@@ -13,7 +13,7 @@ import logging
 import time
 from collections import deque
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from app.database import SessionLocal
@@ -109,17 +109,18 @@ async def websocket_endpoint(websocket: WebSocket, auction_id: int):
 
 
 @router.websocket("/ws/notifications/{user_id}")
-async def notifications_websocket(
-    websocket: WebSocket, user_id: int, token: str | None = Query(None)
-):
-    # Token preferred via Sec-WebSocket-Protocol subprotocol - clients send
+async def notifications_websocket(websocket: WebSocket, user_id: int):
+    # Token rides as a Sec-WebSocket-Protocol subprotocol - clients send
     #   new WebSocket(url, ['bearer', '<jwt>'])
-    # - so the JWT never lands in URLs (proxy/access logs / browser history).
-    # Query-string fallback retained for backward compat; will be removed
-    # once all clients are on the subprotocol scheme.
+    # - so the JWT never lands in URLs (proxy/access logs / browser
+    # history). The query-string fallback that used to accept
+    # ?token=<jwt> was dropped: every shipping JS client uses the
+    # subprotocol path, and keeping the fallback alive leaked the
+    # token into access logs whenever a stale tab reconnected.
     accepted_protocol: str | None = None
     sub = websocket.headers.get("sec-websocket-protocol", "")
     parts = [p.strip() for p in sub.split(",") if p.strip()]
+    token: str | None = None
     if len(parts) == 2 and parts[0] == "bearer":
         token = parts[1]
         accepted_protocol = "bearer"

@@ -2,9 +2,20 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+# Username charset: Latin + Cyrillic letters, digits, underscore,
+# hyphen. Defence-in-depth against stored-XSS: the username flows
+# into Notification.message ("@<user> выставил новый лот: …") and
+# auction listings; the frontend escapes through esc() everywhere
+# today, but constraining the source means a future render-path
+# regression that calls innerHTML directly on a username can't be
+# exploited. Auction titles intentionally remain unrestricted -
+# sellers need quotes / punctuation - so titles stay covered by
+# the render-side escape discipline.
+_USERNAME_PATTERN = r"^[A-Za-zА-Яа-яЁё0-9_-]+$"
+
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=32)
+    username: str = Field(min_length=3, max_length=32, pattern=_USERNAME_PATTERN)
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
 

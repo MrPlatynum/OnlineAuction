@@ -39,7 +39,12 @@
   // tweak doesn't have to chase them all.
   window.resolveAvatarUrl = function(url) {
     if (!url) return null;
-    return url.startsWith('http') ? url : window.API + url;
+    // Require the full ``://`` so a value like ``"httpfoo"`` or a
+    // malformed scheme can't slip past as "looks absolute". An attacker
+    // can't pick avatar URLs today (server-set on upload), but the
+    // predicate is the kind of thing that bites the second a path
+    // changes upstream.
+    return /^https?:\/\//i.test(url) ? url : window.API + url;
   };
 
   // Single logout entry point. Per-page scripts that need to tear down their own
@@ -303,6 +308,11 @@
     let wsNotif = null;
     let currentUserId = null;
     let reconnectDelay = 1500;
+    // Handle for the 60s unread-count poll. Held so cross-tab token
+    // changes (each one re-runs ``start()``) don't stack a new
+    // setInterval on top of the previous - without this the polling
+    // count grows linearly with the number of cross-tab logins.
+    let pollHandle = null;
 
     const ICONS = {
       bid_outbid:     '⚡',
@@ -487,7 +497,8 @@
         // /me fails → WebSocket stays off. Polling below still keeps
         // the badge up to date until the user logs in again.
       }
-      setInterval(fetchCount, 60000);
+      if (pollHandle !== null) clearInterval(pollHandle);
+      pollHandle = setInterval(fetchCount, 60000);
     }
 
     setTimeout(start, 800);

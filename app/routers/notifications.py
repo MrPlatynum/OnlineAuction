@@ -9,10 +9,12 @@ only owns the recipient-side read API.
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Notification, User
 from app.schemas import NotificationResponse
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
@@ -48,7 +50,9 @@ async def get_unread_count(
 
 
 @router.post("/{notification_id}/read")
+@limiter.limit("120/minute")
 async def mark_notification_read(
+    request: Request,
     notification_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -71,7 +75,9 @@ async def mark_notification_read(
 
 
 @router.post("/mark-all-read")
+@limiter.limit("30/minute")
 async def mark_all_read(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -88,7 +94,9 @@ async def mark_all_read(
 
 
 @router.delete("/{notification_id}")
+@limiter.limit("120/minute")
 async def delete_notification(
+    request: Request,
     notification_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

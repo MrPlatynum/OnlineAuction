@@ -12,10 +12,12 @@ import asyncio
 import logging
 import os
 import uuid
+from datetime import timedelta
 from pathlib import PurePosixPath
 
 import aiofiles
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ALLOWED_IMAGE_TYPES, MAX_UPLOAD_SIZE, UPLOAD_DIR
@@ -24,10 +26,55 @@ from app.models import User
 from app.utils.images import validate_and_normalise_image
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
+# Per-user rolling cap on accepted bytes. 50 MB / 24 h is generous
+# for legitimate sellers uploading lot photos (5 MB × 10 lots) but
+# stops the 8 MB × 20/min worst case ramp from filling the disk.
+_UPLOAD_QUOTA_BYTES = 50 * 1024 * 1024
+_UPLOAD_QUOTA_WINDOW = timedelta(hours=24)
+
 router = APIRouter(prefix="/api", tags=["uploads"])
+
+
+async def _check_upload_quota(db: AsyncSession, user_id: int, size: int) -> None:
+    """Enforce the per-user rolling 24h upload-byte cap.
+
+    Reads + mutates the user row under a row lock so two concurrent
+    /upload-image calls can't both observe pre-charge state and slip
+    past the cap. Resets the window when the prior start drifted out
+    of range. Caller still needs to commit the session so the bump
+    sticks even if the file write later fails - that's intentional:
+    a partial-write attacker shouldn't be able to recharge their
+    budget by cancelling the request mid-upload.
+    """
+    user = (
+        await db.execute(
+            select(User)
+            .where(User.id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+
+    now = utcnow()
+    start = user.upload_window_start
+    if start is None or now - start >= _UPLOAD_QUOTA_WINDOW:
+        user.upload_window_start = now
+        user.upload_bytes_window = 0
+
+    projected = (user.upload_bytes_window or 0) + size
+    if projected > _UPLOAD_QUOTA_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "Превышен суточный лимит загрузок "
+                f"({_UPLOAD_QUOTA_BYTES // (1024 * 1024)} МБ)."
+            ),
+        )
+    user.upload_bytes_window = projected
 
 
 def _safely_remove(path: str) -> None:
@@ -90,12 +137,15 @@ async def upload_image(
     request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(require_verified_user),
+    db: AsyncSession = Depends(get_db),
 ):
     sanitised, ext = await _accept_image(file)
+    await _check_upload_quota(db, current_user.id, len(sanitised))
     filename = f"{uuid.uuid4().hex}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
     async with aiofiles.open(dst_path, "wb") as out:
         await out.write(sanitised)
+    await db.commit()
     return {"image_url": f"/static/uploads/{filename}"}
 
 
@@ -108,6 +158,7 @@ async def upload_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     sanitised, ext = await _accept_image(file)
+    await _check_upload_quota(db, current_user.id, len(sanitised))
 
     _remove_avatar_file(current_user.avatar_url)
 

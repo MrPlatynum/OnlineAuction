@@ -15,7 +15,7 @@ import jwt
 import pytest
 from sqlalchemy import select
 
-from app.config import ALGORITHM, SECRET_KEY
+from app.config import ALGORITHM, JWT_AUDIENCE, JWT_ISSUER, SECRET_KEY
 from app.database import SessionLocal
 from app.models import User
 from app.utils.security import (
@@ -49,6 +49,8 @@ def _make_token(
         "tv": tv,
         "purpose": purpose,
         "exp": utcnow() + exp_delta,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -186,9 +188,11 @@ async def test_confirm_concurrent_same_token_only_one_wins(
     """Fire two concurrent /confirm calls with the same valid token. The
     user-row ``SELECT ... FOR UPDATE`` must serialise them so only the
     first commit wins; the second sees the bumped tv and gets a 400."""
+    async def _noop(*_a, **_kw):
+        return None
+
     monkeypatch.setattr(
-        "app.services.notifications._fire_and_forget_email",
-        lambda *_a, **_kw: None,
+        "app.services.notifications._fire_and_forget_email", _noop
     )
 
     from sqlalchemy import select

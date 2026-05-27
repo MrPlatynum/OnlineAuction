@@ -13,7 +13,14 @@
 #   - Postgres reachable at DATABASE_URL (see below)
 #   - alembic upgrade head already applied
 #   - At least a few seeded auctions (e.g. AUCTION_ENV=test python -m scripts.seed_demo_auctions)
-set -u
+# ``-e`` aborts on the first non-zero exit so a failed worker start
+# doesn't quietly produce a 0.0-MB result row. ``-o pipefail`` extends
+# that to piped commands (``ps | awk`` and friends) - without it, a
+# crashed ``ps`` is masked by a successful ``awk`` and the script
+# reports bogus memory numbers. Cleanup commands (kill -9 the worker
+# pids) are postfixed with ``|| true`` where a non-zero exit is
+# expected.
+set -euo pipefail
 
 # --- config ----------------------------------------------------------------
 : "${DATABASE_URL:=postgresql+asyncpg://auction:auction_dev_password@localhost:5433/auction_test}"
@@ -51,8 +58,10 @@ asyncio.run(_())
 
 kill_workers() {
   # Match only the venv-launched servers - not the script itself.
+  # ``grep`` exits 1 when no match is found; under set -e that
+  # aborts the cleanup, so guard the whole pipeline with ``|| true``.
   ps -ef | grep -E "\.venv/bin/(gunicorn|uvicorn)" | grep -v grep \
-    | awk '{print $2}' | xargs -r kill -9 2>/dev/null
+    | awk '{print $2}' | xargs -r kill -9 2>/dev/null || true
   sleep 1
 }
 

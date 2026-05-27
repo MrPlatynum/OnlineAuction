@@ -14,11 +14,17 @@
     msg.className = 'pw-reset-msg';
     msg.textContent = '';
 
+    // No bearer token on this endpoint, so we use raw ``fetch`` rather
+    // than ``apiFetch`` - but mirror its 15s abort so a stalled
+    // connection doesn't leave the "Отправка…" button hanging forever.
+    const ctl = new AbortController();
+    const timeout = setTimeout(() => ctl.abort(), 15000);
     try {
       const r = await fetch(`${window.API}/api/password-reset/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+        signal: ctl.signal,
       });
       if (r.ok) {
         const data = await r.json();
@@ -41,6 +47,7 @@
       msg.className = 'pw-reset-msg err';
       msg.textContent = 'Нет связи с сервером. Попробуйте позже.';
     } finally {
+      clearTimeout(timeout);
       btn.disabled = false;
       btn.textContent = original;
     }

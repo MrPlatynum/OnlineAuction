@@ -1,8 +1,11 @@
-const token = localStorage.getItem('token');
-
+// Read the token at each use site instead of capturing it at module
+// load. After an in-tab logout/login the localStorage value changes
+// but a module-level ``const`` would keep the old reference, so the
+// page would behave like the previous identity (or like a guest)
+// until a full reload.
 /* ---- Auth UI ---- */
 async function initAuth() {
-  if (!token) {
+  if (!window.getToken()) {
     document.getElementById('guestBtn').style.display = 'flex';
     return null;
   }
@@ -228,7 +231,7 @@ function switchTab(tab) {
 async function init() {
   const main = document.getElementById('mainContent');
 
-  if (!token) {
+  if (!window.getToken()) {
     main.innerHTML = `
       <div class="auth-wall">
         <div class="auth-wall-icon">🔐</div>

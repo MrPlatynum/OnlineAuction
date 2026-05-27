@@ -106,6 +106,25 @@ async def test_upload_image_authed_succeeds(client, registered_user):
     assert r.json()["image_url"].startswith("/static/uploads/")
 
 
+async def test_upload_quota_blocks_after_window_exhausted(
+    client, registered_user, monkeypatch
+):
+    """A user pushing past the rolling-24h byte cap is rejected with
+    413; the surrounding /upload-image rate limit only meters frequency,
+    not total volume, so without the byte quota a verified user could
+    fill the disk indefinitely with 8 MB images at 20/min."""
+    from app.routers import uploads as uploads_mod
+
+    # Shrink the quota to 1 byte - any upload at all crosses it.
+    monkeypatch.setattr(uploads_mod, "_UPLOAD_QUOTA_BYTES", 1)
+
+    headers = registered_user["headers"]
+    files = {"file": ("a.png", _png_bytes((48, 48)), "image/png")}
+    r = await client.post("/api/upload-image", files=files, headers=headers)
+    assert r.status_code == 413, r.text
+    assert "лимит" in r.json()["detail"].lower()
+
+
 async def test_decompression_bomb_rejected(client, registered_user, monkeypatch):
     """A valid PNG header with declared dimensions above
     Image.MAX_IMAGE_PIXELS must be refused instead of decoded - the

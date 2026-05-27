@@ -72,6 +72,14 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
     msg['Subject'] = subject
     msg.attach(MIMEText(html_content, 'html'))
 
+    # Without an explicit timeout, a misbehaving MX that accepts the
+    # TCP connection but never responds to STARTTLS / DATA blocks the
+    # await forever. Inside the outbox worker that stalls the whole
+    # tick (up to WORKER_BATCH_SIZE rows under FOR UPDATE), and on
+    # graceful shutdown the asyncio cancel races aiosmtplib's
+    # non-cancel-safe socket ops. Cap each phase at 10s; aiosmtplib
+    # raises ``SMTPTimeoutError`` on expiry, which the outbox
+    # converts to the standard retry path.
     await aiosmtplib.send(
         msg,
         hostname=SMTP_SERVER,
@@ -79,6 +87,7 @@ async def send_email_notification(to_email: str, subject: str, html_content: str
         start_tls=True,
         username=SMTP_USERNAME or None,
         password=SMTP_PASSWORD or None,
+        timeout=10,
     )
 
     logger.info("Email sent to %s: %s", to_email, subject)

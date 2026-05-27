@@ -1203,23 +1203,33 @@ function buildPageList(current, total) {
         }
 
         function attachAuctionWsObserver() {
-            if (!auctionWsObserver) {
-                auctionWsObserver = new IntersectionObserver((entries) => {
-                    entries.forEach((entry) => {
-                        const id = +entry.target.dataset.auctionId;
-                        if (!id) return;
-                        if (entry.isIntersecting) {
-                            refreshAuctionPrice(id);
-                            if (token && !websockets[id]) connectWebSocket(id);
-                        } else {
-                            const ws = websockets[id];
-                            if (!ws) return;
-                            safeCloseWs(ws);
-                            delete websockets[id];
-                        }
-                    });
-                }, { rootMargin: '200px' });
+            // displayAuctions wipes ``auctionsContainer.innerHTML`` and
+            // re-renders on every pagination / filter change. Without
+            // disconnecting the observer first, it keeps observing the
+            // detached card nodes from the prior render and holds their
+            // DOM references alive; after ~20 page changes that's
+            // hundreds of detached nodes pinned in memory. Tear it down
+            // and re-create so the observer's internal target set
+            // tracks only the live cards.
+            if (auctionWsObserver) {
+                auctionWsObserver.disconnect();
+                auctionWsObserver = null;
             }
+            auctionWsObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const id = +entry.target.dataset.auctionId;
+                    if (!id) return;
+                    if (entry.isIntersecting) {
+                        refreshAuctionPrice(id);
+                        if (token && !websockets[id]) connectWebSocket(id);
+                    } else {
+                        const ws = websockets[id];
+                        if (!ws) return;
+                        safeCloseWs(ws);
+                        delete websockets[id];
+                    }
+                });
+            }, { rootMargin: '200px' });
             const container = document.getElementById('auctionsContainer');
             if (!container) return;
             container.querySelectorAll('[data-auction-id]').forEach((el) => {
@@ -1262,6 +1272,10 @@ function buildPageList(current, total) {
             Object.values(timers).forEach(t => clearInterval(t));
             Object.keys(timers).forEach(k => delete timers[k]);
             Object.keys(reconnectAttempts).forEach(k => delete reconnectAttempts[k]);
+            // Drop the per-auction refresh-throttle entries too: long
+            // browsing sessions otherwise grow this map by every id ever
+            // observed. Cheap per entry but unbounded in principle.
+            Object.keys(lastPriceRefresh).forEach(k => delete lastPriceRefresh[k]);
         }
 
         function displayAuctions(auctions) {
@@ -1345,8 +1359,8 @@ function buildPageList(current, total) {
                 return `
                     <div class="auction-card" data-auction-id="${auction.id}"
                        data-title="${safeTitle}"
-                       data-price="${isBinType ? '⚡ ' : ''}${auction.current_price.toFixed(2)} ₽"
-                       data-start="от ${auction.starting_price.toFixed(2)} ₽"
+                       data-price="${isBinType ? '⚡ ' : ''}${Number(auction.current_price ?? 0).toFixed(2)} ₽"
+                       data-start="от ${Number(auction.starting_price ?? 0).toFixed(2)} ₽"
                        data-bids="${bidsCount !== '' ? '💬 ' + bidsCount : ''}"
                        data-creator="${creatorName ? '@' + safeCreator : ''}"
                        data-category="${catLabel}"
@@ -1371,7 +1385,7 @@ function buildPageList(current, total) {
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
                                 <div class="auction-title">${safeTitle}</div>
                             </a>
-                            <div class="auction-price">${auction.current_price.toFixed(2)} ₽</div>
+                            <div class="auction-price">${Number(auction.current_price ?? 0).toFixed(2)} ₽</div>
                             ${!isEnded
                                 ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
                                 : `<div class="auction-start">Завершён · от ${auction.starting_price.toFixed(2)} ₽</div>`}
@@ -1461,9 +1475,27 @@ function buildPageList(current, total) {
             };
 
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+                // Ignore non-JSON frames (some proxies echo 'pong' for our
+                // 'ping' keepalive; future server-side heartbeats follow the
+                // same shape). auction.js and common.js already wrap this in
+                // try/catch - keep the listing-grid handler consistent.
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    return;
+                }
                 if (data.type === 'new_bid') {
                     updatePrice(auctionId, data.current_price);
+                    // Anti-sniping extension: a bid inside the closing window
+                    // pushes end_time forward. Without restarting the
+                    // per-card timer from the server-provided remaining
+                    // seconds, the local countdown keeps ticking to 0, flips
+                    // the card to 'Завершён' on screen, and the user sees a
+                    // closed listing while the lot is still actually live.
+                    if (Number.isFinite(data.time_remaining)) {
+                        startTimer(auctionId, data.time_remaining);
+                    }
                 }
             };
 
@@ -1483,10 +1515,23 @@ function buildPageList(current, total) {
                     return;
                 }
 
+                // Hard cap on reconnect attempts. A persistent abnormal
+                // close (1006: server unreachable, proxy down) would
+                // otherwise spin the backoff loop forever as long as
+                // the card stays in the viewport - the 30s ceiling
+                // bounds the rate but not the total. Stop at 8 attempts
+                // (~3min of cumulative backoff) and let the user
+                // refresh; the card's price still polls via
+                // refreshAuctionPrice on next intersection.
+                if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
+                if (reconnectAttempts[auctionId] >= 8) {
+                    console.warn(`[auction ${auctionId}] giving up on WS reconnect after 8 attempts`);
+                    return;
+                }
+
                 // Exponential backoff with half-jitter: on a one-off
                 // server drop a hundred tabs don't all retry within one
                 // second - they spread over [base/2, base].
-                if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
                 const base = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
                 const delay = base / 2 + Math.random() * (base / 2);
                 reconnectAttempts[auctionId]++;

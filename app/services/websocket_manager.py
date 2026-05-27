@@ -59,8 +59,14 @@ class ConnectionManager:
         bucket = registry.get(key)
         if not bucket:
             return
+        # Snapshot the bucket: each ``await send_json`` below yields to the
+        # event loop, and a concurrent ``disconnect`` calling ``bucket.remove``
+        # would shift list indices under the live iterator and silently skip a
+        # live socket. Iterating a copy is safe; pruning still mutates the
+        # original below.
+        snapshot = list(bucket)
         dead: list[WebSocket] = []
-        for connection in bucket:
+        for connection in snapshot:
             try:
                 await connection.send_json(message)
             except Exception as exc:

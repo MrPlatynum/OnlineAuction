@@ -71,9 +71,10 @@ def _suppress_outbox_enqueue(monkeypatch):
     before invoking the worker."""
     from app.services import notifications as notif_mod
 
-    monkeypatch.setattr(
-        notif_mod, "_fire_and_forget_email", lambda *_a, **_kw: None
-    )
+    async def _noop(*_a, **_kw):
+        return None
+
+    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _noop)
 
 
 @pytest_asyncio.fixture
@@ -86,11 +87,11 @@ def capture_emails(monkeypatch):
     from app.services import notifications as notif_mod
 
     calls: list[tuple[str, str, str]] = []
-    monkeypatch.setattr(
-        notif_mod,
-        "_fire_and_forget_email",
-        lambda to, subj, html: calls.append((to, subj, html)),
-    )
+
+    async def _capture(to, subj, html):
+        calls.append((to, subj, html))
+
+    monkeypatch.setattr(notif_mod, "_fire_and_forget_email", _capture)
     return calls
 
 
@@ -115,6 +116,25 @@ async def reset_db():
     await seed_categories()
     yield
     await engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+def _reset_websocket_manager():
+    """The process-wide ConnectionManager (``app.services.websocket_manager.
+    manager``) keeps its registries between tests. Tests that inject
+    ``_StubWebSocket`` instances directly into ``manager.user_connections``
+    (see test_bids.py, test_auth.py, test_password_reset.py) used to leak
+    those stubs into the next test - if a fixture user re-used the same
+    id, an unrelated broadcast in the next test could hit a stub left
+    over from the prior one. ``reset_db`` only clears DB state; the
+    in-memory registry needs its own reset."""
+    from app.services.websocket_manager import manager
+
+    manager.active_connections.clear()
+    manager.user_connections.clear()
+    yield
+    manager.active_connections.clear()
+    manager.user_connections.clear()
 
 
 @pytest_asyncio.fixture
