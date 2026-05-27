@@ -12,7 +12,9 @@ module stays a one-way upstream dependency.
 """
 
 import logging
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
+
+from app.utils.money import quantize_money
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 def seller_commission(gross_price: Decimal) -> Decimal:
     """Platform fee withheld from the seller's payout on every settled
-    sale. Rounded to two decimal places with HALF_UP so the two seller
+    sale. Routed through ``quantize_money`` so the two seller
     transaction rows (auction_sale gross + commission deduction) sum
-    cleanly to the net payout - banker's rounding would leave 0.005 ₽
-    drifts at scale."""
+    cleanly to the net payout - the rounding policy lives in one place
+    instead of being inlined per call site."""
     raw = gross_price * PLATFORM_COMMISSION_PERCENT / Decimal(100)
-    return raw.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return quantize_money(raw)
 
 
 def _credit_seller(
@@ -54,13 +56,13 @@ def _credit_seller(
     distinct lines. Used by both the BIN and the bid settlement paths,
     which differ only in ``sale_description`` (BIN says "по цене BIN",
     bid says "лота")."""
-    # Quantize gross to 2 decimals before mutating the in-memory ORM
-    # balance. The DB column is Numeric(12, 2) - any caller passing a
-    # Decimal with >2 decimal places (in practice the per-row stored
-    # value already matches, but a future caller computing gross at
-    # higher precision could drift) would leave seller.balance and
-    # the audit row both un-quantized while Postgres rounds on store.
-    gross = gross.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Defensive quantize: callers pass values straight from Numeric(12,2)
+    # columns so the input already matches the grid, but a future caller
+    # computing gross at higher precision would otherwise leave
+    # seller.balance and the audit row un-quantized while Postgres
+    # rounds on store. Centralised via ``quantize_money`` so the policy
+    # lives in one place.
+    gross = quantize_money(gross)
     seller.balance += gross
     add_transaction(
         db, seller, "auction_sale", gross,
