@@ -11,7 +11,6 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Union
 
-import pytest
 from sqlalchemy import select
 
 from app import database as _db_module
