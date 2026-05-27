@@ -136,7 +136,6 @@ async def test_upload_quota_persists_when_disk_write_fails(
     test asserts the bump survives a disk-side failure.
     """
     import aiofiles
-
     from sqlalchemy import select
 
     from app import database as _db_module

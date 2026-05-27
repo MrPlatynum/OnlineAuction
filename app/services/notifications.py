@@ -13,8 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import PUBLIC_BASE_URL
 from app.models import Notification, NotificationType, User
-
-logger = logging.getLogger(__name__)
 from app.services.email import (
     build_notification_email_html,
     build_password_changed_email_html,
@@ -23,6 +21,8 @@ from app.services.email import (
 )
 from app.services.email_outbox import enqueue_email
 from app.utils.security import create_email_verify_token, create_password_reset_token
+
+logger = logging.getLogger(__name__)
 
 # Per-type opt-out: every NotificationType maps to the boolean column on
 # ``User`` whose ``False`` value silences the email channel for that type
@@ -305,5 +305,5 @@ async def notify_many(
 
     await asyncio.gather(*(
         _push_ws(user, notif_type, title, message, row)
-        for (user, notif_type, title, message), row in zip(payloads, notif_rows)
+        for (user, notif_type, title, message), row in zip(payloads, notif_rows, strict=True)
     ))

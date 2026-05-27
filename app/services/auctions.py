@@ -14,8 +14,6 @@ module stays a one-way upstream dependency.
 import logging
 from decimal import Decimal
 
-from app.utils.money import quantize_money
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,9 +21,10 @@ from app.config import PLATFORM_COMMISSION_PERCENT
 from app.models import Auction, Bid, Notification, NotificationType, User
 from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
-from app.services.notifications import notify_many, notify_user
+from app.services.notifications import notify_many
 from app.services.transactions import add_transaction
 from app.services.websocket_manager import manager
+from app.utils.money import quantize_money
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)

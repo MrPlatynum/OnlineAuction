@@ -20,7 +20,7 @@ from app.database import SessionLocal
 from app.models import Auction, User
 from app.services.websocket_manager import manager
 from app.utils.security import decode_token
-from app.utils.time import seconds_until, utcnow
+from app.utils.time import seconds_until
 
 logger = logging.getLogger(__name__)
 

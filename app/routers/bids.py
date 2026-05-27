@@ -20,13 +20,12 @@ from app.schemas import BidCreate, BidResponse, PaginatedBidsResponse
 from app.services import auction_scheduler
 from app.services.balance import effective_committed_balance, lock_users_by_id
 from app.services.notifications import notify_user
-from app.utils.pagination import total_pages_for
-from app.utils.time import seconds_until
 from app.services.websocket_manager import manager
 from app.utils.money import to_decimal
+from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import require_verified_user
-from app.utils.time import utcnow
+from app.utils.time import seconds_until, utcnow
 
 router = APIRouter(prefix="/api", tags=["bids"])
 

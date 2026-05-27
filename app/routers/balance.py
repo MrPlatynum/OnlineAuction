@@ -15,8 +15,8 @@ from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.transactions import add_transaction
-from app.utils.pagination import total_pages_for
 from app.utils.money import money_to_float, to_decimal
+from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
 

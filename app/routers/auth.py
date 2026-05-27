@@ -11,11 +11,11 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import User
-from sqlalchemy.exc import IntegrityError
 from app.schemas import (
     ChangePasswordRequest,
     PasswordResetConfirmBody,

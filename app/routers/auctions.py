@@ -42,8 +42,8 @@ from app.services.auctions import (
 from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.notifications import notify_many, notify_user
 from app.services.websocket_manager import manager
-from app.utils.security import get_current_user, require_verified_user
 from app.utils.pagination import total_pages_for
+from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import seconds_until, utcnow
 
 logger = logging.getLogger(__name__)
