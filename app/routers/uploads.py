@@ -177,7 +177,13 @@ async def upload_avatar(
     # the partial-write recharge attack this guards against.
     await db.commit()
 
-    _remove_avatar_file(current_user.avatar_url)
+    # ``to_thread`` so the sync os.remove / os.path.exists inside
+    # ``_remove_avatar_file`` doesn't stall the event loop. The cleanup
+    # path inside the ``except BaseException`` below stays sync because
+    # the same cancellation that triggered it would propagate through
+    # any await we put there - blocking briefly on os.remove inside a
+    # cancel handler is the safer trade.
+    await asyncio.to_thread(_remove_avatar_file, current_user.avatar_url)
 
     filename = f"avatar_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
     dst_path = os.path.join(UPLOAD_DIR, filename)
@@ -202,7 +208,7 @@ async def delete_avatar(
     db: AsyncSession = Depends(get_db),
 ):
     if current_user.avatar_url:
-        _remove_avatar_file(current_user.avatar_url)
+        await asyncio.to_thread(_remove_avatar_file, current_user.avatar_url)
         current_user.avatar_url = None
         await db.commit()
     return {"ok": True}
