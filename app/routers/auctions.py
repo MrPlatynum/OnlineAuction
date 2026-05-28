@@ -304,9 +304,14 @@ async def buy_now(
         raise HTTPException(status_code=400, detail=detail + ".")
 
     settle_bin_purchase(db, auction, current_user, creator)
-    await db.commit()
-
+    # Cancel the scheduler's pending completion task BEFORE committing
+    # the BIN settlement. If cancel ran after commit, the scheduler tick
+    # could fire in the gap, observe the lot as settled, and re-enter
+    # complete_auction redundantly. The cancel is sync and only touches
+    # the in-process task registry, so it's safe to run before the DB
+    # write durably lands.
     cancel_auction(auction_id)
+    await db.commit()
 
     if creator:
         commission = seller_commission(auction.bin_price)
@@ -403,12 +408,18 @@ async def get_auctions(
     )
     total_pages = total_pages_for(total, page_size)
 
+    # The Auction.id tiebreaker is load-bearing: end_time / current_price
+    # are not unique (bulk-listed lots share an end_time; lots stuck at
+    # starting_price share current_price), and Postgres pagination over
+    # a non-unique ORDER BY is officially undefined - rows can be
+    # skipped or duplicated across ?page=2/?page=3 requests. The bug
+    # surfaces to buyers as "lots randomly disappear when I click Next".
     if sort_by == "time":
-        query = query.order_by(Auction.end_time.asc())
+        query = query.order_by(Auction.end_time.asc(), Auction.id.asc())
     elif sort_by == "price_asc":
-        query = query.order_by(Auction.current_price.asc())
+        query = query.order_by(Auction.current_price.asc(), Auction.id.asc())
     elif sort_by == "price_desc":
-        query = query.order_by(Auction.current_price.desc())
+        query = query.order_by(Auction.current_price.desc(), Auction.id.asc())
 
     offset = (page - 1) * page_size
     auctions = (
@@ -487,13 +498,17 @@ async def update_auction(
     has_bids = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
-    # Once there are bids, the only safe edit is extending the deadline:
-    # changing title/price/category after a bidder has committed money is
-    # bait-and-switch.
-    if has_bids and fields - {"extend_minutes"}:
+    # Once there are bids, all edits are frozen - including deadline
+    # extension. The previous carve-out for extend_minutes let a seller
+    # repeatedly push end_time forward and indefinitely freeze the
+    # leader bidder's committed_balance. The anti-sniping path in
+    # routers/bids.py still extends end_time on a late bid (driven by
+    # the bidder, not the seller), so reasonable last-second activity
+    # remains supported.
+    if has_bids and fields:
         raise HTTPException(
             status_code=400,
-            detail="На лоте уже есть ставки - можно только продлить срок (extend_minutes)",
+            detail="На лоте уже есть ставки - редактирование заблокировано",
         )
 
     if "title" in fields and data.title:
