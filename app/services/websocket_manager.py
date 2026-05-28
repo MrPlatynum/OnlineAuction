@@ -33,8 +33,17 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections.setdefault(auction_id, []).append(websocket)
 
-    async def connect_user(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
+    async def connect_user(
+        self, websocket: WebSocket, user_id: int, *, subprotocol: str | None = None
+    ):
+        # ``subprotocol`` echo is required by RFC 6455 §1.9 when the
+        # client offered one - the notifications handshake passes
+        # ``"bearer"`` so the JWT can ride as a subprotocol header
+        # instead of leaking into URL access logs. Accept-side and
+        # registry-write are funneled through this one helper so the
+        # subprotocol path can't drift from the non-subprotocol path
+        # (and any future bookkeeping added here applies to both).
+        await websocket.accept(subprotocol=subprotocol)
         self.user_connections.setdefault(user_id, []).append(websocket)
 
     def disconnect(self, websocket: WebSocket, auction_id: int):

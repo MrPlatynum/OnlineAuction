@@ -165,14 +165,13 @@ async def notifications_websocket(websocket: WebSocket, user_id: int):
         await websocket.close(code=1008)
         return
 
-    # ``connect_user`` calls accept() - propagate the subprotocol echo so the
-    # browser handshake completes (per RFC 6455 §1.9 server must echo one
-    # of the offered subprotocols).
-    if accepted_protocol:
-        await websocket.accept(subprotocol=accepted_protocol)
-        manager.user_connections.setdefault(user_id, []).append(websocket)
-    else:
-        await manager.connect_user(websocket, user_id)
+    # Single registry-write path: ``connect_user`` now accepts the
+    # optional subprotocol echo so the bearer-token path and the
+    # plain handshake go through the same helper. Any future
+    # bookkeeping on connect (metrics, last-seen) applies to both.
+    await manager.connect_user(
+        websocket, user_id, subprotocol=accepted_protocol
+    )
     try:
         while True:
             try:

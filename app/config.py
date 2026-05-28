@@ -91,7 +91,10 @@ def _load_commission_percent() -> Decimal:
         raise RuntimeError(
             f"PLATFORM_COMMISSION_PERCENT={value} is out of range [0, 100]"
         )
-    return value
+    # ``normalize`` strips trailing zeros so an env value of "7.00"
+    # renders as "7%" in transaction descriptions / notification copy
+    # instead of "7.00%". Mathematically identical, but cleaner.
+    return value.normalize()
 
 
 PLATFORM_COMMISSION_PERCENT = _load_commission_percent()
