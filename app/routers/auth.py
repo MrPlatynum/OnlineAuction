@@ -251,16 +251,14 @@ async def change_password(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if not verify_password(data.current_password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Неверный текущий пароль")
-    # Take a row-level lock on the user before mutating credentials. A
-    # concurrent /ws/notifications handshake reads the user row to
-    # validate the JWT's tv claim against the persisted token_version;
-    # without this lock the handshake's read can land between our
-    # pre-bump read (via get_current_user) and the commit below, so
-    # the new socket sees the old tv, accepts a stolen JWT, and
-    # survives the credential rotation. ``populate_existing`` refreshes
-    # the existing ORM copy so subsequent attribute writes target the
+    # Take the row-level lock BEFORE the credential check so two
+    # concurrent /change-password requests can't both pass verify
+    # against the unlocked, pre-rotation hash and then race the
+    # write. Verifying against the locked copy is also the only way
+    # to make sure a freshly-set password (committed by a parallel
+    # request that won the lock first) is what we're checking
+    # against. ``populate_existing`` refreshes the existing ORM copy
+    # so the verify and subsequent attribute writes target the
     # locked row.
     locked = (
         await db.execute(
@@ -270,6 +268,8 @@ async def change_password(
             .execution_options(populate_existing=True)
         )
     ).scalar_one()
+    if not verify_password(data.current_password, locked.hashed_password):
+        raise HTTPException(status_code=400, detail="Неверный текущий пароль")
     locked.hashed_password = hash_password(data.new_password)
     # Bump tv + close in-flight WS in one step. The caller still has
     # *this* request's token in their browser - return a fresh one so

@@ -13,34 +13,58 @@ from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Notification, User
-from app.schemas import NotificationResponse
+from app.schemas import PaginatedNotificationsResponse
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
-@router.get("", response_model=list[NotificationResponse])
+@router.get("", response_model=PaginatedNotificationsResponse)
 async def get_notifications(
     limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     unread_only: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Notification).where(Notification.user_id == current_user.id)
+    # Envelope + offset so older notifications past the first page are
+    # actually reachable - the prior shape returned a bare list capped
+    # at `limit` with no way to fetch anything older. The `Notification.id`
+    # tiebreaker keeps pagination stable when multiple rows share a
+    # `created_at` (batched fan-out on auction settle stamps the same
+    # timestamp across all recipients' notifications).
+    base = select(Notification).where(Notification.user_id == current_user.id)
     if unread_only:
-        query = query.where(Notification.is_read.is_(False))
+        base = base.where(Notification.is_read.is_(False))
 
-    return (
-        await db.execute(query.order_by(Notification.created_at.desc()).limit(limit))
+    total = await db.scalar(
+        select(func.count()).select_from(base.subquery())
+    )
+
+    items = (
+        await db.execute(
+            base
+            .order_by(Notification.created_at.desc(), Notification.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
     ).scalars().all()
+
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/unread-count")
+@limiter.limit("120/minute")
 async def get_unread_count(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # The bell badge polls this endpoint - one tab at a 5s cadence is
+    # 12/min, multiple tabs multiply linearly. The cap is generous
+    # enough for normal use (six tabs at 5s = 72/min) but bounds a
+    # misbehaving client to a sane budget.
     count = await db.scalar(
         select(func.count())
         .select_from(Notification)

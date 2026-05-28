@@ -78,6 +78,17 @@ ENDING_SOON_LEAD = timedelta(minutes=5)
 ANTISNIPING_WINDOW = timedelta(seconds=120)
 ANTISNIPING_EXTEND = timedelta(seconds=120)
 
+# Cap on how many times anti-sniping can extend the same lot. Without
+# this, two coordinated bidders ping-ponging late bids could keep the
+# lot open indefinitely, freezing the leader's committed_balance and
+# never giving the scheduler a fixed point to close on. 30 extensions
+# at ANTISNIPING_EXTEND = 2 min each tops the chain out at one hour of
+# additional lifetime, generous for any realistic last-minute auction
+# while still bounded. Past the cap, late bids are accepted (bidder is
+# not punished for participating) but no longer extend the deadline -
+# the lot closes at the current end_time and the scheduler settles.
+MAX_ANTISNIPING_EXTENSIONS = 30
+
 _completion_tasks: dict[int, asyncio.Task] = {}
 _ending_soon_tasks: dict[int, asyncio.Task] = {}
 

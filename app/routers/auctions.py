@@ -153,6 +153,18 @@ async def create_auction(
     start_time = utcnow()
     end_time = start_time + timedelta(minutes=auction.duration_minutes)
 
+    # Validate category_id up-front. Without this, an unknown id flows
+    # straight into the INSERT, Postgres raises a foreign-key violation
+    # at commit, and the client sees an opaque 500 instead of a clean
+    # 400 with the actual reason. Same shape applied below in
+    # update_auction.
+    if auction.category_id is not None:
+        exists = await db.scalar(
+            select(Category.id).where(Category.id == auction.category_id)
+        )
+        if not exists:
+            raise HTTPException(status_code=400, detail="Категория не найдена")
+
     auction_type = auction.auction_type or "bid"
     # BIN is a fixed-price listing - starting_price is meaningless there
     # and would let the UI show "$10" on a lot the buyer actually pays
@@ -304,9 +316,14 @@ async def buy_now(
         raise HTTPException(status_code=400, detail=detail + ".")
 
     settle_bin_purchase(db, auction, current_user, creator)
-    await db.commit()
-
+    # Cancel the scheduler's pending completion task BEFORE committing
+    # the BIN settlement. If cancel ran after commit, the scheduler tick
+    # could fire in the gap, observe the lot as settled, and re-enter
+    # complete_auction redundantly. The cancel is sync and only touches
+    # the in-process task registry, so it's safe to run before the DB
+    # write durably lands.
     cancel_auction(auction_id)
+    await db.commit()
 
     if creator:
         commission = seller_commission(auction.bin_price)
@@ -322,9 +339,17 @@ async def buy_now(
             auction.id, auction.title, manager,
         )
 
-    # Notify everyone who placed a real bid before the BIN-purchase that
-    # the auction ended without them. complete_auction does this on the
-    # timer path; /buy-now used to silently leave them in the dark.
+    # Defensive notify-the-losers loop. In the current model the loop
+    # is dead by construction: /buy-now only accepts BIN lots, and the
+    # /bids handler rejects every bid on a BIN lot (see bids.py:133),
+    # so ``losers`` is always empty here. The block is kept so that if
+    # ``auction_type`` ever gains a hybrid mode (BIN with concurrent
+    # bids accepted up to the BIN price), losers get notified the same
+    # way complete_auction does on the timer path - otherwise they
+    # would silently miss the end-of-lot event. If hybrid mode lands,
+    # swap the loop for ``notify_many`` so the fan-out stays a single
+    # commit + concurrent WS broadcast (mirrors the complete_auction
+    # path; see § 4.3.5 microbench).
     losers = await fetch_auction_bidders(
         db, auction_id, exclude_user_ids=(current_user.id,)
     )
@@ -373,8 +398,13 @@ async def get_auctions(
         query = query.where(Auction.current_price <= max_price)
 
     if created_by:
+        # Usernames are stored lowercase; mirror the normalisation so
+        # ?created_by=Alice and ?created_by=alice resolve to the same
+        # filter without two seq-scans.
         creator_user = (
-            await db.execute(select(User).where(User.username == created_by))
+            await db.execute(
+                select(User).where(User.username == created_by.lower())
+            )
         ).scalar_one_or_none()
         if creator_user is None:
             return _empty_auctions_page(page, page_size)
@@ -403,12 +433,18 @@ async def get_auctions(
     )
     total_pages = total_pages_for(total, page_size)
 
+    # The Auction.id tiebreaker is load-bearing: end_time / current_price
+    # are not unique (bulk-listed lots share an end_time; lots stuck at
+    # starting_price share current_price), and Postgres pagination over
+    # a non-unique ORDER BY is officially undefined - rows can be
+    # skipped or duplicated across ?page=2/?page=3 requests. The bug
+    # surfaces to buyers as "lots randomly disappear when I click Next".
     if sort_by == "time":
-        query = query.order_by(Auction.end_time.asc())
+        query = query.order_by(Auction.end_time.asc(), Auction.id.asc())
     elif sort_by == "price_asc":
-        query = query.order_by(Auction.current_price.asc())
+        query = query.order_by(Auction.current_price.asc(), Auction.id.asc())
     elif sort_by == "price_desc":
-        query = query.order_by(Auction.current_price.desc())
+        query = query.order_by(Auction.current_price.desc(), Auction.id.asc())
 
     offset = (page - 1) * page_size
     auctions = (
@@ -487,13 +523,17 @@ async def update_auction(
     has_bids = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
     )
-    # Once there are bids, the only safe edit is extending the deadline:
-    # changing title/price/category after a bidder has committed money is
-    # bait-and-switch.
-    if has_bids and fields - {"extend_minutes"}:
+    # Once there are bids, all edits are frozen - including deadline
+    # extension. The previous carve-out for extend_minutes let a seller
+    # repeatedly push end_time forward and indefinitely freeze the
+    # leader bidder's committed_balance. The anti-sniping path in
+    # routers/bids.py still extends end_time on a late bid (driven by
+    # the bidder, not the seller), so reasonable last-second activity
+    # remains supported.
+    if has_bids and fields:
         raise HTTPException(
             status_code=400,
-            detail="На лоте уже есть ставки - можно только продлить срок (extend_minutes)",
+            detail="На лоте уже есть ставки - редактирование заблокировано",
         )
 
     if "title" in fields and data.title:
@@ -501,6 +541,16 @@ async def update_auction(
     if "description" in fields and data.description is not None:
         auction.description = data.description.strip()
     if "category_id" in fields:
+        # Mirror the create-side pre-check: an unknown id would otherwise
+        # surface as a 500 from the FK violation at commit instead of
+        # a clean 400. ``None`` resets the category, which is allowed
+        # (the column is nullable).
+        if data.category_id is not None:
+            exists = await db.scalar(
+                select(Category.id).where(Category.id == data.category_id)
+            )
+            if not exists:
+                raise HTTPException(status_code=400, detail="Категория не найдена")
         auction.category_id = data.category_id
     if "starting_price" in fields and data.starting_price is not None:
         auction.starting_price = data.starting_price
@@ -568,7 +618,7 @@ async def delete_auction(
     if not auction:
         raise HTTPException(status_code=404, detail="Аукцион не найден")
     if auction.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Нельзя удалить чужой лот")
+        raise HTTPException(status_code=403, detail="Это не ваш лот")
 
     bids_count = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
@@ -629,11 +679,20 @@ async def get_my_participation(
         .distinct(Bid.auction_id)
         .subquery()
     )
+    # Cap each bucket at a fixed window. Power users (bots, test
+    # fixtures) with thousands of placed bids would otherwise serialise
+    # the whole history into one JSON response every dashboard hit,
+    # competing with the bid hot-path for the same connection-pool
+    # slot. ``stats.total_bids`` still reflects the true count, so the
+    # UI shows the real number even when the per-bucket list is
+    # truncated.
+    _PARTICIPATION_BUCKET_LIMIT = 200
     participating_rows = (
         await db.execute(
             select(Auction, my_last_bids_sub.c.my_amount)
             .join(my_last_bids_sub, my_last_bids_sub.c.auction_id == Auction.id)
-            .order_by(Auction.end_time.desc())
+            .order_by(Auction.end_time.desc(), Auction.id.desc())
+            .limit(_PARTICIPATION_BUCKET_LIMIT)
         )
     ).all()
 
@@ -653,7 +712,12 @@ async def get_my_participation(
         await db.execute(
             select(Auction)
             .where(Auction.created_by == current_user.id)
-            .order_by(Auction.is_active.desc(), Auction.start_time.desc())
+            .order_by(
+                Auction.is_active.desc(),
+                Auction.start_time.desc(),
+                Auction.id.desc(),
+            )
+            .limit(_PARTICIPATION_BUCKET_LIMIT)
         )
     ).scalars().all()
 

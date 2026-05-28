@@ -7,11 +7,21 @@ prunes dead sockets in-place - without that pruning the buckets
 grow forever as tabs close without a clean shutdown handshake.
 """
 
+import asyncio
 import logging
 
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
+
+
+# Per-recipient deadline for ``send_json``. A half-open peer (laptop
+# closed lid, NAT timeout, intermediary buffering) that never ACKs
+# would otherwise block the entire ``_fan_out`` loop while the kernel
+# send buffer drains - every other subscriber of a hot lot then waits
+# behind the dead socket. Two seconds is generous for a JSON payload
+# of a few hundred bytes over WS; anything slower is treated as dead.
+_SEND_TIMEOUT_SECS = 2.0
 
 
 class ConnectionManager:
@@ -23,8 +33,17 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections.setdefault(auction_id, []).append(websocket)
 
-    async def connect_user(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
+    async def connect_user(
+        self, websocket: WebSocket, user_id: int, *, subprotocol: str | None = None
+    ):
+        # ``subprotocol`` echo is required by RFC 6455 §1.9 when the
+        # client offered one - the notifications handshake passes
+        # ``"bearer"`` so the JWT can ride as a subprotocol header
+        # instead of leaking into URL access logs. Accept-side and
+        # registry-write are funneled through this one helper so the
+        # subprotocol path can't drift from the non-subprotocol path
+        # (and any future bookkeeping added here applies to both).
+        await websocket.accept(subprotocol=subprotocol)
         self.user_connections.setdefault(user_id, []).append(websocket)
 
     def disconnect(self, websocket: WebSocket, auction_id: int):
@@ -68,7 +87,13 @@ class ConnectionManager:
         dead: list[WebSocket] = []
         for connection in snapshot:
             try:
-                await connection.send_json(message)
+                # ``wait_for`` so a half-open peer (silent NAT timeout,
+                # stalled send buffer) can't block every other subscriber
+                # behind it. A timed-out send drops the socket the same
+                # way an exception would.
+                await asyncio.wait_for(
+                    connection.send_json(message), timeout=_SEND_TIMEOUT_SECS
+                )
             except Exception as exc:
                 logger.debug("Dropping dead websocket on %s: %s", key, exc)
                 dead.append(connection)

@@ -170,29 +170,43 @@ async def _run_one_tick() -> int:
     (sent + scheduled + dead-lettered); used by tests to assert
     progress without sleeping."""
     processed = 0
+    # Cheap read of candidate ids; no row lock taken here. The order is
+    # FIFO by ``created_at`` so the verification email arrives before
+    # the change-notice if both were enqueued in the same second.
     async with _db_module.SessionLocal() as db:
-        # FOR UPDATE SKIP LOCKED makes this loop safe under any
-        # number of concurrent workers - each tick claims rows it
-        # processes and others skip them. ORDER BY created_at gives
-        # FIFO delivery, which matches user expectations (the
-        # verification email should arrive before the change-notice
-        # if both were enqueued in the same second).
-        rows = (
+        candidate_ids = (
             await db.execute(
-                select(EmailOutbox)
+                select(EmailOutbox.id)
                 .where(EmailOutbox.status == "pending")
                 .where(EmailOutbox.next_attempt_at <= utcnow())
                 .order_by(EmailOutbox.created_at)
                 .limit(WORKER_BATCH_SIZE)
-                .with_for_update(skip_locked=True)
             )
         ).scalars().all()
-        for row in rows:
-            # Commit per row. A batch commit at the end of the loop
-            # used to roll back every row's state change if any later
-            # _process_one raised: row 1 marked sent + row 2 marked
-            # failed + row 3 raises = all three reset to pending and
-            # on the next tick row 1's email is sent again.
+
+    # Each row gets its own session so the FOR UPDATE lock lifetime is
+    # bounded by that row's own commit. The previous shape held one
+    # session-wide FOR UPDATE on the whole batch and committed per row;
+    # the first commit released *all* the batch locks at once, letting
+    # a concurrent worker SELECT-FOR-UPDATE-SKIP-LOCKED the still-
+    # pending later rows and double-send their SMTP message. SKIP LOCKED
+    # on the per-row claim also keeps two workers racing the same id
+    # from blocking each other - the loser just skips.
+    for outbox_id in candidate_ids:
+        async with _db_module.SessionLocal() as db:
+            row = (
+                await db.execute(
+                    select(EmailOutbox)
+                    .where(EmailOutbox.id == outbox_id)
+                    .where(EmailOutbox.status == "pending")
+                    .with_for_update(skip_locked=True)
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                # Status already terminal (sibling worker beat us to
+                # it) or row currently held by another worker; either
+                # way, nothing to do.
+                continue
             try:
                 await _process_one(row, db)
                 await db.commit()

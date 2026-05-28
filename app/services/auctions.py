@@ -22,7 +22,7 @@ from app.models import Auction, Bid, Notification, NotificationType, User
 from app.services import auction_scheduler
 from app.services.balance import lock_users_by_id
 from app.services.notifications import notify_many
-from app.services.transactions import add_transaction
+from app.services.transactions import apply_balance_delta
 from app.services.websocket_manager import manager
 from app.utils.money import quantize_money
 from app.utils.time import utcnow
@@ -62,16 +62,14 @@ def _credit_seller(
     # rounds on store. Centralised via ``quantize_money`` so the policy
     # lives in one place.
     gross = quantize_money(gross)
-    seller.balance += gross
-    add_transaction(
-        db, seller, "auction_sale", gross,
+    apply_balance_delta(
+        db, seller, gross, "auction_sale",
         sale_description, auction_id=auction.id,
     )
     commission = seller_commission(gross)
     if commission > 0:
-        seller.balance -= commission
-        add_transaction(
-            db, seller, "commission", commission,
+        apply_balance_delta(
+            db, seller, -commission, "commission",
             f"Комиссия платформы {PLATFORM_COMMISSION_PERCENT}%",
             auction_id=auction.id,
         )
@@ -92,9 +90,8 @@ def settle_bin_purchase(
     listing was up" edge case - buyer still gets the goods, the lot
     just doesn't credit anyone."""
     price = auction.bin_price
-    buyer.balance -= price
-    add_transaction(
-        db, buyer, "bin_purchase", price,
+    apply_balance_delta(
+        db, buyer, -price, "bin_purchase",
         f"Покупка «{auction.title}» по цене BIN", auction_id=auction.id,
     )
     auction.current_price = price
@@ -325,9 +322,8 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         creator = locked_users.get(auction.created_by)
 
         if winner:
-            winner.balance -= last_bid.amount
-            add_transaction(
-                db, winner, "bid_win", last_bid.amount,
+            apply_balance_delta(
+                db, winner, -last_bid.amount, "bid_win",
                 f"Победа в аукционе «{auction.title}»", auction_id=auction.id,
             )
 

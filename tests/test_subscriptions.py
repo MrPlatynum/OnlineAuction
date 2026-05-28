@@ -35,7 +35,11 @@ async def test_subscribe_to_nonexistent_seller_returns_404(client, second_user):
     assert r.status_code == 404
 
 
-async def test_duplicate_subscribe_rejected(client, registered_user, second_user):
+async def test_duplicate_subscribe_is_idempotent(client, registered_user, second_user):
+    """A repeated POST on an existing subscription used to return 400
+    "Уже подписаны"; it now returns the same 200 shape as a fresh
+    subscribe so a double-click or a dropped-response retry converges
+    instead of surfacing a fake error."""
     seller_id = registered_user["user"]["id"]
     r1 = await client.post(
         f"/api/sellers/{seller_id}/subscribe",
@@ -46,10 +50,13 @@ async def test_duplicate_subscribe_rejected(client, registered_user, second_user
         f"/api/sellers/{seller_id}/subscribe",
         headers=second_user["headers"],
     )
-    assert r2.status_code == 400
+    assert r2.status_code == 200
+    body = r2.json()
+    assert body["subscribed"] is True
+    assert body["subscribers_count"] == 1
 
 
-async def test_subscribe_integrity_race_returns_400_not_500(
+async def test_subscribe_integrity_race_returns_200_not_500(
     client, registered_user, second_user, monkeypatch
 ):
     """The pre-check is a TOCTOU window: in production two concurrent
@@ -58,7 +65,10 @@ async def test_subscribe_integrity_race_returns_400_not_500(
     client serialises requests so a plain asyncio.gather doesn't
     reproduce the race; monkeypatch the existence check to None to
     drive the second request straight into the INSERT path while the
-    first call's row is already in the DB."""
+    first call's row is already in the DB. Race-loser used to be
+    surfaced as 400 "Уже подписаны"; with the idempotency change it
+    converges on the same 200 "you are subscribed" shape as the
+    winner."""
     seller_id = registered_user["user"]["id"]
 
     # First call - lays down the row normally.
@@ -96,9 +106,12 @@ async def test_subscribe_integrity_race_returns_400_not_500(
         f"/api/sellers/{seller_id}/subscribe",
         headers=second_user["headers"],
     )
-    # Without the IntegrityError handler this surfaces as 500.
-    assert second.status_code == 400, second.text
-    assert "подписан" in second.json()["detail"].lower()
+    # Without the IntegrityError handler this surfaces as 500. With
+    # idempotency, the race loser gets the same 200 the winner did.
+    assert second.status_code == 200, second.text
+    body = second.json()
+    assert body["subscribed"] is True
+    assert body["subscribers_count"] == 1
 
 
 async def test_new_lot_emails_subscribers(client, registered_user, second_user, capture_emails):
@@ -140,7 +153,7 @@ async def test_new_lot_emails_subscribers(client, registered_user, second_user, 
         headers=second_user["headers"],
     )
     assert notifs.status_code == 200
-    rows = notifs.json()
+    rows = notifs.json()["items"]
     assert any(r["type"] == "new_lot" and "Shiny new" in r["message"] for r in rows)
 
 
@@ -159,15 +172,22 @@ async def test_unsubscribe_removes_subscription(client, registered_user, second_
     assert r.json()["subscribers_count"] == 0
 
 
-async def test_unsubscribe_without_subscription_rejected(
+async def test_unsubscribe_without_subscription_is_idempotent(
     client, registered_user, second_user
 ):
+    """DELETE on a missing subscription used to return 400 "Вы не
+    подписаны"; it now returns the same 200 "subscribed: false" shape
+    as a successful unsubscribe so a reconciliation flow that retries
+    on stale UI state converges instead of looping on a fake error."""
     seller_id = registered_user["user"]["id"]
     r = await client.delete(
         f"/api/sellers/{seller_id}/subscribe",
         headers=second_user["headers"],
     )
-    assert r.status_code == 400
+    assert r.status_code == 200
+    body = r.json()
+    assert body["subscribed"] is False
+    assert body["subscribers_count"] == 0
 
 
 async def test_my_subscriptions_lists_current_seller(client, registered_user, second_user):
@@ -217,3 +237,17 @@ async def test_subscription_status_returns_true_after_subscribe(
     body = r.json()
     assert body["subscribed"] is True
     assert body["subscribers_count"] == 1
+
+
+async def test_subscription_status_404_for_unknown_seller(
+    client, registered_user
+):
+    """Used to return 200 with `{subscribed: false, subscribers_count: 0}`
+    for any seller_id, real or not - the UI then rendered a working
+    Subscribe button on a profile URL that did not exist, and the POST
+    that followed 404'd."""
+    r = await client.get(
+        "/api/sellers/999999/subscription",
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 404

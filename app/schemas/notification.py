@@ -13,3 +13,13 @@ class NotificationResponse(BaseModel):
     auction_title: str | None
     is_read: bool
     created_at: datetime
+
+
+class PaginatedNotificationsResponse(BaseModel):
+    """Listing envelope so the client can page past the first batch.
+    Without ``total`` and ``offset`` the feed silently truncates at
+    ``limit`` and the UI has no way to fetch older notifications."""
+    items: list[NotificationResponse]
+    total: int
+    limit: int
+    offset: int

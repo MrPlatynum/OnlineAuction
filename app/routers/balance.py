@@ -1,10 +1,9 @@
 """Money-only operations on the user balance: deposit, withdraw, and
 the paginated transaction ledger. Every mutating endpoint funnels
-through ``services.transactions.add_transaction`` so every ₽-move has
-a matching audit row with ``balance_after``.
+through ``services.transactions.apply_balance_delta`` so the balance
+mutation and the matching audit row land atomically and ``balance_after``
+can't drift from the running balance.
 """
-
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
@@ -14,20 +13,18 @@ from app.database import get_db
 from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import get_committed_balance, lock_users_by_id
-from app.services.transactions import add_transaction
-from app.utils.money import money_to_float, to_decimal
+from app.services.transactions import apply_balance_delta
+from app.utils.money import MAX_USER_BALANCE, money_to_float, quantize_money, to_decimal
 from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
-# Numeric(12, 2) accepts up to 9_999_999_999.99 before Postgres raises
-# ``numeric field overflow``. Cap user-visible balance well below that
-# so we can never hit the column ceiling: a determined attacker firing
-# the maximum per-call deposit at the rate-limit ceiling would still
-# saturate against this number, not blow up with a 500.
-MAX_USER_BALANCE = Decimal("10000000.00")
+# MAX_USER_BALANCE moved to app/utils/money.py so the settle path in
+# services/auctions.py can validate against the same ceiling. Kept the
+# import alias for any external caller that grew used to importing it
+# from here.
 
 
 @router.post("/deposit")
@@ -43,14 +40,16 @@ async def deposit(
     # /withdraw on the same account serialise instead of racing on stale
     # in-memory copies and clobbering each other's update.
     await lock_users_by_id(db, current_user.id)
-    new_balance = round(current_user.balance + amount, 2)
-    if new_balance > MAX_USER_BALANCE:
+    # Project the post-deposit balance only to enforce the cap; the
+    # actual mutation lands inside ``apply_balance_delta`` so the
+    # audit-row balance_after can't drift from user.balance.
+    projected = quantize_money(current_user.balance + amount)
+    if projected > MAX_USER_BALANCE:
         raise HTTPException(
             status_code=400,
             detail=f"Максимальный баланс - {MAX_USER_BALANCE:.2f} ₽",
         )
-    current_user.balance = new_balance
-    add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
+    apply_balance_delta(db, current_user, amount, "deposit", "Пополнение баланса")
     await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
@@ -81,8 +80,7 @@ async def withdraw(
                 f"({committed:.2f} ₽ удерживается на активных аукционах)."
             ),
         )
-    current_user.balance = round(current_user.balance - amount, 2)
-    add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
+    apply_balance_delta(db, current_user, -amount, "withdrawal", "Вывод средств")
     await db.commit()
     return {
         "balance": money_to_float(current_user.balance),

@@ -175,11 +175,15 @@ async def test_update_auction_blocks_field_edit_when_bids_exist(
     assert response.status_code == 400
 
 
-async def test_update_auction_extend_minutes_allowed_with_bids(
+async def test_update_auction_blocks_extend_when_bids_exist(
     client, registered_user, second_user
 ):
-    """Extending the deadline is the one edit safe to allow after a bid
-    landed - a longer auction never harms an existing bidder."""
+    """Seller-driven extend_minutes used to be carved out from the
+    "no edits after bid" rule, which let the seller indefinitely
+    push end_time forward and freeze the leader bidder's committed
+    balance. Now any edit (including extend_minutes) is rejected
+    once a bid has landed; the anti-sniping path in routers/bids.py
+    still handles late-bid extension on the bidder's behalf."""
     auction = await _seed_active_auction(client, registered_user["headers"])
     bid = await client.post(
         "/api/bids",
@@ -188,6 +192,24 @@ async def test_update_auction_extend_minutes_allowed_with_bids(
     )
     assert bid.status_code == 200
 
+    before = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    response = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"extend_minutes": 30},
+        headers=registered_user["headers"],
+    )
+    assert response.status_code == 400
+    after = (await client.get(f"/api/auctions/{auction['id']}")).json()
+    assert after["end_time"] == before["end_time"]
+
+
+async def test_update_auction_extend_minutes_allowed_without_bids(
+    client, registered_user
+):
+    """The freeze-on-bid rule does not apply to lots that have not
+    received bids yet - the seller can still extend the deadline
+    before any bidder commits funds."""
+    auction = await _seed_active_auction(client, registered_user["headers"])
     before = (await client.get(f"/api/auctions/{auction['id']}")).json()
     response = await client.patch(
         f"/api/auctions/{auction['id']}",
@@ -212,6 +234,30 @@ async def test_list_auctions_paginated(client, registered_user):
     body = response.json()
     assert body["total"] == 3
     assert len(body["items"]) == 3
+
+
+async def test_create_auction_unknown_category_returns_400(client, registered_user):
+    """Unknown category_id used to flow straight into the INSERT and
+    surface as an opaque 500 from the FK violation at commit. The
+    pre-check turns that into a clean 400."""
+    payload = _make_auction_payload(title="Bad cat")
+    payload["category_id"] = 999_999
+    r = await client.post(
+        "/api/auctions", json=payload, headers=registered_user["headers"]
+    )
+    assert r.status_code == 400
+    assert "Категория" in r.json()["detail"]
+
+
+async def test_update_auction_unknown_category_returns_400(client, registered_user):
+    """Same pre-check on the PATCH side."""
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    r = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"category_id": 999_999},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400
 
 
 async def test_bin_lot_seeds_current_price_from_bin_price(client, registered_user):

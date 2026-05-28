@@ -107,7 +107,15 @@ async def seed_categories():
         else:
             existing = (await db.execute(select(Category))).scalars().all()
             existing_slugs = frozenset(c.slug for c in existing)
-            parent_map = {c.slug: c.id for c in existing if c.parent_id is None}
+            # Match parents by their canonical ``_PARENTS`` slug list
+            # instead of inferring from ``parent_id IS NULL``. A future
+            # category-tree refactor that converts a former parent into
+            # a child of another (e.g. moving "other" under a real
+            # parent) would otherwise leave the new orphan looking
+            # like a parent here, and re-seeding would attach fresh
+            # subs to the wrong row.
+            _PARENT_SLUGS = frozenset(slug for _name, slug, _icon in _PARENTS)
+            parent_map = {c.slug: c.id for c in existing if c.slug in _PARENT_SLUGS}
             new_subs = _build_new_subs(parent_map, existing_slugs)
             if new_subs:
                 db.add_all(new_subs)

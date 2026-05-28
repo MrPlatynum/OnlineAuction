@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 # Username charset: Latin + Cyrillic letters, digits, underscore,
 # hyphen. Defence-in-depth against stored-XSS: the username flows
@@ -11,13 +11,31 @@ from pydantic import BaseModel, EmailStr, Field
 # exploited. Auction titles intentionally remain unrestricted -
 # sellers need quotes / punctuation - so titles stay covered by
 # the render-side escape discipline.
-_USERNAME_PATTERN = r"^[A-Za-zА-Яа-яЁё0-9_-]+$"
+# First character must be alphanumeric so leading-hyphen handles
+# ("-alice") that confuse CLI tools and URL parsers can't slip
+# through. Remaining characters keep the wider charset.
+_USERNAME_PATTERN = r"^[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_-]*$"
+
+
+def _normalize_username(value: str) -> str:
+    """Lower-case the username at every input boundary so 'Alice' and
+    'alice' collapse to the same row and the SQL UNIQUE constraint
+    actually enforces "one account per name". Without this the
+    column comparison ``User.username == ...`` is case-sensitive and
+    both rows could legally coexist, making @-mentions ambiguous and
+    profile lookups silently fail on case-mismatched URLs."""
+    return value.lower() if isinstance(value, str) else value
 
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=32, pattern=_USERNAME_PATTERN)
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("username", mode="after")
+    @classmethod
+    def _lower_username(cls, v: str) -> str:
+        return _normalize_username(v)
 
 
 class UserLogin(BaseModel):
@@ -27,6 +45,11 @@ class UserLogin(BaseModel):
     # limit kicked in; 128 chars is well above NIST's recommended minimum
     # and what most major sites accept (AWS, Stripe, etc.).
     password: str = Field(max_length=128)
+
+    @field_validator("username", mode="after")
+    @classmethod
+    def _lower_username(cls, v: str) -> str:
+        return _normalize_username(v)
 
 
 class UserResponse(BaseModel):
@@ -58,7 +81,12 @@ class NotificationSettings(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
+    # Mirror new_password / UserCreate.password / UserLogin.password:
+    # without the cap a multi-MB body parses into memory before
+    # verify_password's 1024-byte fast-reject kicks in, so the
+    # Pydantic-layer ddos cap every sibling field carries was
+    # missing on exactly one entry point.
+    current_password: str = Field(max_length=128)
     new_password: str = Field(min_length=8, max_length=128)
 
 

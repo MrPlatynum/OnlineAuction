@@ -2,13 +2,17 @@ from datetime import UTC, datetime
 
 
 def utcnow() -> datetime:
-    """Return the current UTC time as a naive datetime.
+    """Return the current UTC time as a tz-aware datetime.
 
-    Replacement for the deprecated ``datetime.utcnow()``. Returning a
-    naive value matches the existing ``DateTime`` column behaviour so
-    the database schema and stored values stay identical.
+    Replacement for the deprecated ``datetime.utcnow()``. Aware (not
+    naive) is the load-bearing choice: every ``DateTime`` column is
+    declared ``DateTime(timezone=True)``, so a naive value mixed with
+    a DB-loaded aware value would raise on subtraction or comparison.
+    Serialising aware datetimes also emits the ``+00:00`` suffix in
+    ISO format so the JS client parses them as UTC instead of
+    interpreting them as the browser's local time zone.
     """
-    return datetime.now(UTC).replace(tzinfo=None)
+    return datetime.now(UTC)
 
 
 def seconds_until(end_time: datetime | None, *, is_active: bool = True) -> int:

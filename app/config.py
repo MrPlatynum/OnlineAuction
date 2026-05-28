@@ -1,5 +1,6 @@
 import os
 from decimal import Decimal
+from decimal import InvalidOperation as _InvalidDecimal
 
 from dotenv import load_dotenv
 
@@ -73,7 +74,28 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("
 # so the multiplication path in app/services/auctions.py doesn't have
 # to coerce float → Decimal on the hot settlement path. Operators can
 # override per-deployment via env (e.g. PLATFORM_COMMISSION_PERCENT=10).
-PLATFORM_COMMISSION_PERCENT = Decimal(os.getenv("PLATFORM_COMMISSION_PERCENT", "7"))
+# Range-validated at module-load: a typo (PLATFORM_COMMISSION_PERCENT=70
+# instead of 7.0, or a negative value) used to silently corrupt every
+# settle from then on, since nothing downstream re-checks the constant.
+def _load_commission_percent() -> Decimal:
+    raw = os.getenv("PLATFORM_COMMISSION_PERCENT", "7")
+    try:
+        value = Decimal(raw)
+    except _InvalidDecimal as exc:
+        raise RuntimeError(
+            f"PLATFORM_COMMISSION_PERCENT={raw!r} is not a valid decimal"
+        ) from exc
+    if value < 0 or value > 100:
+        raise RuntimeError(
+            f"PLATFORM_COMMISSION_PERCENT={value} is out of range [0, 100]"
+        )
+    # ``normalize`` strips trailing zeros so an env value of "7.00"
+    # renders as "7%" in transaction descriptions / notification copy
+    # instead of "7.00%". Mathematically identical, but cleaner.
+    return value.normalize()
+
+
+PLATFORM_COMMISSION_PERCENT = _load_commission_percent()
 
 CORS_ORIGINS = [
     origin.strip()

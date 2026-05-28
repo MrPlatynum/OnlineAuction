@@ -43,7 +43,9 @@ async def test_list_returns_only_own_notifications(
 
     r = await client.get("/api/notifications", headers=registered_user["headers"])
     assert r.status_code == 200
-    items = r.json()
+    body = r.json()
+    assert body["total"] == 2
+    items = body["items"]
     assert len(items) == 2
     # Bob's notif must not bleed into Alice's feed.
     assert all(it["title"] != "Bob's lonely notification" for it in items)
@@ -54,9 +56,44 @@ async def test_unread_only_filter(client, registered_user, two_notifications):
         "/api/notifications?unread_only=true",
         headers=registered_user["headers"],
     )
-    items = r.json()
+    body = r.json()
+    assert body["total"] == 1
+    items = body["items"]
     assert len(items) == 1
     assert items[0]["is_read"] is False
+
+
+async def test_notifications_pagination_via_offset(client, registered_user):
+    """Seed more rows than the default limit and walk the feed with
+    explicit offset; the envelope's ``total`` and the second page's
+    items both make older notifications reachable - the prior bare-list
+    response capped silently at ``limit`` with no way past it."""
+    user_id = registered_user["user"]["id"]
+    for i in range(25):
+        await _seed_notification(user_id, title=f"N{i}")
+
+    first = (await client.get(
+        "/api/notifications?limit=10&offset=0",
+        headers=registered_user["headers"],
+    )).json()
+    second = (await client.get(
+        "/api/notifications?limit=10&offset=10",
+        headers=registered_user["headers"],
+    )).json()
+    third = (await client.get(
+        "/api/notifications?limit=10&offset=20",
+        headers=registered_user["headers"],
+    )).json()
+
+    assert first["total"] == 25
+    assert len(first["items"]) == 10
+    assert len(second["items"]) == 10
+    assert len(third["items"]) == 5
+
+    # Disjoint pages: ids on page 2 must not appear on page 1.
+    ids_p1 = {n["id"] for n in first["items"]}
+    ids_p2 = {n["id"] for n in second["items"]}
+    assert ids_p1.isdisjoint(ids_p2)
 
 
 async def test_unread_count(client, registered_user, two_notifications):

@@ -7,6 +7,8 @@ the dead socket in the bucket - every subsequent broadcast then
 iterated growing piles of dead sockets and re-raised.
 """
 
+import asyncio
+
 import pytest
 
 from app.services.websocket_manager import ConnectionManager
@@ -87,6 +89,44 @@ class _DisconnectingWebSocket(_StubWebSocket):
     async def send_json(self, message: dict):
         await super().send_json(message)
         self._mgr.disconnect(self._victim, self._key)
+
+
+class _SlowWebSocket(_StubWebSocket):
+    """Stub whose ``send_json`` hangs longer than the fan-out per-socket
+    deadline. Models a half-open peer (silent NAT timeout, frozen tab,
+    stalled kernel send buffer) - the receiver simply never ACKs."""
+
+    async def send_json(self, message: dict):
+        await asyncio.sleep(10)
+        self.sent.append(message)
+
+
+@pytest.mark.asyncio
+async def test_broadcast_drops_slow_recipient_without_stalling_others(monkeypatch):
+    """A half-open peer used to block the entire ``_fan_out`` loop while
+    its ``send_json`` waited indefinitely; every other subscriber of a
+    hot lot would then hang behind it. The per-socket ``wait_for``
+    cap drops the stalled socket and lets the rest of the bucket
+    receive normally."""
+    from app.services import websocket_manager as ws_mod
+
+    # Cap to a small value so the test doesn't actually wait 2s.
+    monkeypatch.setattr(ws_mod, "_SEND_TIMEOUT_SECS", 0.05)
+
+    mgr = ConnectionManager()
+    fast_before = _StubWebSocket()
+    slow = _SlowWebSocket()
+    fast_after = _StubWebSocket()
+    mgr.active_connections[11] = [fast_before, slow, fast_after]
+
+    await mgr.broadcast({"v": 42}, 11)
+
+    assert fast_before.sent == [{"v": 42}]
+    assert fast_after.sent == [{"v": 42}]
+    # Slow peer's send_json never completed; the socket was treated as
+    # dead and pruned from the bucket.
+    assert slow.sent == []
+    assert slow not in mgr.active_connections[11]
 
 
 @pytest.mark.asyncio

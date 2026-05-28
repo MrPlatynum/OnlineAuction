@@ -6,7 +6,7 @@ from app.schemas.auction import (
 )
 from app.schemas.balance import DepositRequest, WithdrawRequest
 from app.schemas.bid import BidCreate, BidResponse, PaginatedBidsResponse
-from app.schemas.notification import NotificationResponse
+from app.schemas.notification import NotificationResponse, PaginatedNotificationsResponse
 from app.schemas.review import (
     ReviewCreate,
     SellerReviewItem,
@@ -34,6 +34,7 @@ __all__ = [
     "UserResponse",
     "VerifyEmailRequest",
     "NotificationResponse",
+    "PaginatedNotificationsResponse",
     "AuctionCreate",
     "AuctionResponse",
     "AuctionUpdate",

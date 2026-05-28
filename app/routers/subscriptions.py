@@ -9,12 +9,12 @@ exposing the subscriber count for the seller's public profile.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Auction, Review, Subscription, User
-from app.utils.db import commit_or_409
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
@@ -116,6 +116,17 @@ async def get_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Probe user existence so the UI can tell "real seller, you're not
+    # subscribed yet" from "this seller does not exist" - otherwise both
+    # answers come back as {subscribed: false, subscribers_count: 0} and
+    # a typo'd profile link silently renders a working Subscribe button
+    # whose POST then 404s.
+    seller_exists = await db.scalar(
+        select(func.count()).select_from(User).where(User.id == seller_id)
+    )
+    if not seller_exists:
+        raise HTTPException(status_code=404, detail="Продавец не найден")
+
     sub = (
         await db.execute(
             select(Subscription).where(
@@ -154,13 +165,23 @@ async def subscribe(
             )
         )
     ).scalar_one_or_none()
+    # Idempotent: a repeated POST on an existing subscription returns
+    # the same 200 shape as a fresh subscribe, not 400. This matches
+    # the convention every double-click-prone button expects (the UI
+    # can retry on dropped responses without surfacing a fake error).
     if exists:
-        raise HTTPException(status_code=400, detail="Уже подписаны")
+        count = await _subscriber_count(db, seller_id)
+        return {"subscribed": True, "subscribers_count": count}
     db.add(Subscription(subscriber_id=current_user.id, seller_id=seller_id))
     # Two concurrent /subscribe calls on the same (subscriber, seller)
-    # pair race the INSERT; the unique constraint surfaces the loser
-    # through the shared 400 path.
-    await commit_or_409(db, detail="Уже подписаны")
+    # pair race the INSERT; the unique constraint loser is rolled back
+    # and collapsed into the same idempotent "subscribed" response as
+    # the winner. ``commit_or_409`` is bypassed here because its 400
+    # raise contradicts the idempotency contract.
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
     count = await _subscriber_count(db, seller_id)
     return {"subscribed": True, "subscribers_count": count}
 
@@ -181,9 +202,12 @@ async def unsubscribe(
             )
         )
     ).scalar_one_or_none()
-    if not sub:
-        raise HTTPException(status_code=400, detail="Вы не подписаны")
-    await db.delete(sub)
-    await db.commit()
+    # Idempotent: DELETE on a missing subscription returns the same 200
+    # shape as a successful unsubscribe (subscribed: false) instead of
+    # 400. A reconciliation flow ("UI says subscribed, server says no -
+    # retry DELETE") then converges instead of looping on a fake error.
+    if sub is not None:
+        await db.delete(sub)
+        await db.commit()
     count = await _subscriber_count(db, seller_id)
     return {"subscribed": False, "subscribers_count": count}

@@ -5,7 +5,7 @@ every startup - the API just surfaces the resulting parent/child tree
 so the create-lot form and the listing filter can render it.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,12 @@ router = APIRouter(prefix="/api", tags=["categories"])
 
 
 @router.get("/categories")
-async def get_categories(db: AsyncSession = Depends(get_db)):
+async def get_categories(response: Response, db: AsyncSession = Depends(get_db)):
+    # Categories are seeded at startup and effectively immutable in
+    # the lifetime of a deployment, so a five-minute public cache is
+    # a free latency win on every page-load (the listing filter and
+    # the create-lot form both fetch this on render).
+    response.headers["Cache-Control"] = "public, max-age=300"
     all_cats = (
         await db.execute(select(Category).order_by(Category.id))
     ).scalars().all()

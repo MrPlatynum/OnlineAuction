@@ -6,15 +6,26 @@ creation, deletion by the author, and the seller-side aggregate
 (average + per-rating histogram) consumed by the auction page.
 """
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Auction, Review, User
 from app.schemas import ReviewCreate, SellerReviewsResponse
 from app.utils.db import commit_or_409
+from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
+from app.utils.time import utcnow
+
+# Reviews freeze 24 hours after creation: long enough that a reviewer
+# can retract a mistake, short enough that the seller's review history
+# isn't rewritable indefinitely (the original review-bombing surface
+# was delete + immediate recreate to spam fresh notifications).
+_REVIEW_EDIT_WINDOW = timedelta(hours=24)
 
 router = APIRouter(prefix="/api", tags=["reviews"])
 
@@ -27,6 +38,16 @@ _REVIEWS_LIST_CAP = 50
 
 @router.get("/sellers/{seller_id}/reviews", response_model=SellerReviewsResponse)
 async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db)):
+    # Probe user existence before serving review aggregates - otherwise
+    # an unknown seller_id silently returns the same `{total: 0, avg: 0,
+    # distribution: zeros, reviews: []}` shape as a real seller with no
+    # reviews yet, and any client trying to tell the two apart can't.
+    seller_exists = await db.scalar(
+        select(func.count()).select_from(User).where(User.id == seller_id)
+    )
+    if not seller_exists:
+        raise HTTPException(status_code=404, detail="Продавец не найден")
+
     base_filter = Review.seller_id == seller_id
 
     total = await db.scalar(
@@ -95,7 +116,9 @@ async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/reviews")
+@limiter.limit("10/minute")
 async def create_review(
+    request: Request,
     data: ReviewCreate,
     current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
@@ -154,7 +177,9 @@ async def create_review(
 
 
 @router.delete("/reviews/{review_id}")
+@limiter.limit("10/minute")
 async def delete_review(
+    request: Request,
     review_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -165,7 +190,17 @@ async def delete_review(
     if not review:
         raise HTTPException(status_code=404, detail="Отзыв не найден")
     if review.reviewer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Нельзя удалить чужой отзыв")
+        raise HTTPException(status_code=403, detail="Это не ваш отзыв")
+    # Edit window: a review older than _REVIEW_EDIT_WINDOW is frozen.
+    # Without this, a hostile reviewer could keep deleting and re-
+    # creating the same one-star review to spam the seller with fresh
+    # notifications, and the seller's review history would be
+    # rewritable indefinitely.
+    if utcnow() - review.created_at > _REVIEW_EDIT_WINDOW:
+        raise HTTPException(
+            status_code=400,
+            detail="Отзыв нельзя удалить - окно редактирования истекло",
+        )
     await db.delete(review)
     await db.commit()
     return {"message": "Отзыв удалён"}
