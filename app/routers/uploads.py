@@ -168,6 +168,12 @@ async def upload_image(
 async def upload_avatar(
     request: Request,
     file: UploadFile = File(...),
+    # Intentionally ``get_current_user`` and not ``require_verified_user``:
+    # avatar customisation during onboarding (before the email-verify
+    # click lands) is part of the standard registration flow. The
+    # upload still pays the same per-account quota + rate-limit as
+    # the lot-image surface, so the verified gate buys nothing
+    # beyond friction here.
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -203,7 +209,9 @@ async def upload_avatar(
 
 
 @router.delete("/upload-avatar")
+@limiter.limit("20/minute")
 async def delete_avatar(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):

@@ -54,15 +54,15 @@ PASSWORD_INPUT_LIMIT = 1024
 # the handler short-circuits before verify_password and "user-doesn't-
 # exist" returns in microseconds while a real-but-wrong password takes
 # ~50 ms - trivial to distinguish over the network. We verify against
-# this hash instead so both branches spend the same CPU. Hash is
-# evaluated lazily on first /login so the import-time cost stays zero.
-_DUMMY_HASH: str | None = None
+# this hash instead so both branches spend the same CPU. Eagerly
+# evaluated at import: a lazy global with no lock would race the
+# ~50 ms argon2 cost across the first few concurrent /login misses,
+# making the timing-stability invariant itself non-uniform on a
+# cold process.
+_DUMMY_HASH: str = pwd_context.hash("timing-stability-dummy")
 
 
 def _dummy_password_hash() -> str:
-    global _DUMMY_HASH
-    if _DUMMY_HASH is None:
-        _DUMMY_HASH = pwd_context.hash("timing-stability-dummy")
     return _DUMMY_HASH
 
 

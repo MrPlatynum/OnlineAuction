@@ -56,14 +56,20 @@ def validate_and_normalise_image(image_bytes: bytes) -> tuple[bytes, str, str]:
 
     content_type, ext = _PIL_FORMAT_TO_META[fmt]
 
-    save_kwargs: dict = {}
+    # Strip metadata explicitly. Pillow's ``save`` carries forward
+    # ``img.info["icc_profile"]`` and ``img.info["exif"]`` by default
+    # on PNG/JPEG/WEBP encoders, so a re-encode alone is not enough -
+    # an attacker-supplied ICC chunk would survive the sanitisation
+    # step the docstring promises. Passing the keys as empty bytes /
+    # None explicitly drops them.
+    save_kwargs: dict = {"icc_profile": None, "exif": b""}
     if fmt == "JPEG":
         # JPEG can't store P / RGBA / CMYK as-is; coerce to RGB.
         if img.mode not in ("RGB", "L"):
             img = img.convert("RGB")
-        save_kwargs = {"quality": 90, "optimize": True}
+        save_kwargs |= {"quality": 90, "optimize": True}
     elif fmt == "PNG":
-        save_kwargs = {"optimize": True}
+        save_kwargs |= {"optimize": True}
 
     buf = io.BytesIO()
     img.save(buf, format=fmt, **save_kwargs)
