@@ -510,6 +510,55 @@ async def test_concurrent_late_bids_extend_end_time_once(
     )
 
 
+async def test_anti_sniping_cap_stops_extending_past_max(
+    client, registered_user, second_user
+):
+    """Once ``Auction.extensions_count`` reaches MAX_ANTISNIPING_EXTENSIONS,
+    a late bid is still accepted (the bidder isn't punished for
+    participating) but end_time is no longer pushed forward - the lot
+    is allowed to close on schedule. Without the cap, two coordinated
+    bidders could keep ping-ponging late bids and freeze the leader's
+    committed_balance indefinitely."""
+    from app.services import auction_scheduler
+
+    auction = await _create_auction(client, registered_user["headers"])
+    # Force the lot into the late-bid window AND pre-set the counter to
+    # the cap. The next bid lands inside the window but must not
+    # extend.
+    async with _db_module.SessionLocal() as db:
+        await db.execute(
+            update(Auction)
+            .where(Auction.id == auction["id"])
+            .values(
+                end_time=utcnow() + timedelta(seconds=30),
+                extensions_count=auction_scheduler.MAX_ANTISNIPING_EXTENSIONS,
+            )
+        )
+        await db.commit()
+
+    r = await client.post(
+        "/api/bids",
+        json={"auction_id": auction["id"], "amount": 150.0},
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+    # No extension granted past the cap.
+    assert r.json()["extended_until"] is None
+
+    async with _db_module.SessionLocal() as db:
+        refreshed = (
+            await db.execute(select(Auction).where(Auction.id == auction["id"]))
+        ).scalar_one()
+    seconds_left = (refreshed.end_time - utcnow()).total_seconds()
+    # end_time stayed put (~30s left of the original window), did NOT
+    # jump to ~120s.
+    assert seconds_left < 60, (
+        f"end_time was extended past the cap: {seconds_left:.1f}s left"
+    )
+    # Counter unchanged - we hit the limit, no increment.
+    assert refreshed.extensions_count == auction_scheduler.MAX_ANTISNIPING_EXTENSIONS
+
+
 # -- Anti-sniping end-to-end (HTTP + WebSocket broadcast) -------------------
 
 async def test_late_bid_broadcasts_extended_until(

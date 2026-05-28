@@ -192,16 +192,29 @@ async def place_bid(
 
     # Anti-sniping: a bid within the closing window resets end_time to a
     # full extension from "now". Resetting ending_soon_notified lets the
-    # five-minute warning fire again ahead of the new deadline.
+    # five-minute warning fire again ahead of the new deadline. Capped
+    # at MAX_ANTISNIPING_EXTENSIONS per lot so two coordinated bidders
+    # can't ping-pong late bids and hold the lot open indefinitely
+    # (the leader's committed_balance stays frozen for the duration).
+    # Past the cap the bid is still accepted, but no further extension
+    # is granted - the lot closes on schedule.
     extended = False
+    # Snapshot ``now`` once so the delta check and the new end_time
+    # don't disagree by however many microseconds the second utcnow()
+    # would have drifted by.
+    now = utcnow()
     # Lower-clamp to a positive delta: if the bid slipped past the line-140
     # expiry guard by microseconds (concurrent scheduler tick + FOR UPDATE
-    # serialisation), `end_time - utcnow()` is negative and would otherwise
+    # serialisation), `end_time - now` is negative and would otherwise
     # extend an auction that should have completed.
-    delta = auction.end_time - utcnow()
-    if timedelta(0) < delta < auction_scheduler.ANTISNIPING_WINDOW:
-        auction.end_time = utcnow() + auction_scheduler.ANTISNIPING_EXTEND
+    delta = auction.end_time - now
+    if (
+        timedelta(0) < delta < auction_scheduler.ANTISNIPING_WINDOW
+        and auction.extensions_count < auction_scheduler.MAX_ANTISNIPING_EXTENSIONS
+    ):
+        auction.end_time = now + auction_scheduler.ANTISNIPING_EXTEND
         auction.ending_soon_notified = False
+        auction.extensions_count += 1
         extended = True
 
     db.add(db_bid)

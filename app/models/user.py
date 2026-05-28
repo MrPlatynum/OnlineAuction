@@ -1,4 +1,12 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, Numeric, String
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Integer,
+    Numeric,
+    String,
+)
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -55,3 +63,13 @@ class User(Base):
 
     bids = relationship("Bid", back_populates="user")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        # DB-level safety net: every code path that mutates balance
+        # already pre-checks (deposit caps at MAX_USER_BALANCE, withdraw
+        # validates available >= amount, bid debit happens against the
+        # locked row in complete_auction), but a bug or admin SQL that
+        # somehow leaks a negative debit would silently corrupt the
+        # audit trail. The constraint catches that at INSERT/UPDATE.
+        CheckConstraint("balance >= 0", name="ck_users_balance_nonneg"),
+    )

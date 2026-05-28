@@ -33,6 +33,13 @@ class Auction(Base):
     ending_soon_notified = Column(Boolean, default=False, nullable=False)
     auction_type = Column(String, default="bid", nullable=False)
     bin_price = Column(Numeric(12, 2), nullable=True)
+    # Counts late-bid anti-sniping extensions on this lot. Capped at
+    # MAX_EXTENSIONS in the /bids handler so two coordinated bidders
+    # can't ping-pong late bids and keep the lot open indefinitely
+    # (each extension is ANTISNIPING_EXTEND long, so the cap also
+    # bounds the maximum additional lifetime to MAX_EXTENSIONS ×
+    # ANTISNIPING_EXTEND seconds).
+    extensions_count = Column(Integer, default=0, nullable=False)
 
     bids = relationship("Bid", back_populates="auction")
     category = relationship("Category", back_populates="auctions")
