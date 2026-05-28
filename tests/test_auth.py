@@ -26,13 +26,51 @@ async def test_register_rejects_html_in_username(client):
 
 
 async def test_register_accepts_cyrillic_username(client):
+    """Cyrillic charset passes the validator AND gets folded to lower
+    case at the input boundary, so the stored handle is canonical and
+    @-mentions / profile URLs case-collapse on both sides."""
     r = await client.post("/api/register", json={
         "username": "Алиса",
         "email": "alisa@example.com",
         "password": "secret123",
     })
     assert r.status_code == 200, r.text
-    assert r.json()["user"]["username"] == "Алиса"
+    # ``Алиса`` lowercases to ``алиса`` via str.lower() Unicode handling.
+    assert r.json()["user"]["username"] == "алиса"
+
+
+async def test_register_case_insensitive_collision_rejected(
+    client, registered_user
+):
+    """Registering 'ALICE' must collide with the already-registered
+    'alice' from the fixture - the input is case-folded before the
+    duplicate check, so 'Alice' / 'alice' / 'ALICE' resolve to the
+    same row."""
+    r = await client.post("/api/register", json={
+        "username": registered_user["user"]["username"].upper(),
+        "email": "different@example.com",
+        "password": "secret123",
+    })
+    assert r.status_code == 400
+
+
+async def test_login_case_insensitive_username(client, registered_user):
+    """The login form accepts whatever case the user typed; the
+    handler folds it to the stored canonical form before lookup."""
+    r = await client.post("/api/login", json={
+        "username": registered_user["user"]["username"].upper(),
+        "password": registered_user["password"],
+    })
+    assert r.status_code == 200
+
+
+async def test_profile_lookup_case_insensitive(client, registered_user):
+    """``/api/users/{username}`` resolves the path param case-insensitively
+    so a link with uppercase in it still lands on the right profile."""
+    upper = registered_user["user"]["username"].upper()
+    r = await client.get(f"/api/users/{upper}")
+    assert r.status_code == 200
+    assert r.json()["user"]["username"] == registered_user["user"]["username"]
 
 
 async def test_register_duplicate_username_or_email_indistinguishable(

@@ -398,8 +398,13 @@ async def get_auctions(
         query = query.where(Auction.current_price <= max_price)
 
     if created_by:
+        # Usernames are stored lowercase; mirror the normalisation so
+        # ?created_by=Alice and ?created_by=alice resolve to the same
+        # filter without two seq-scans.
         creator_user = (
-            await db.execute(select(User).where(User.username == created_by))
+            await db.execute(
+                select(User).where(User.username == created_by.lower())
+            )
         ).scalar_one_or_none()
         if creator_user is None:
             return _empty_auctions_page(page, page_size)

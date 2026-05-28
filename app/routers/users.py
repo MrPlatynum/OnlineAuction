@@ -44,6 +44,10 @@ async def update_notification_settings(
 
 @router.get("/users/{username}")
 async def get_user_profile(username: str, db: AsyncSession = Depends(get_db)):
+    # Usernames are stored lowercase (see app/schemas/user.py
+    # _normalize_username); lowercase the path param so /users/Alice
+    # and /users/alice resolve to the same profile.
+    username = username.lower()
     user = (
         await db.execute(select(User).where(User.username == username))
     ).scalar_one_or_none()
