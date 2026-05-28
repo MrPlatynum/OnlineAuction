@@ -8,6 +8,13 @@ from decimal import ROUND_HALF_UP, Decimal
 
 _CENT = Decimal("0.01")
 
+# Numeric(12, 2) accepts up to 9_999_999_999.99 before Postgres raises
+# ``numeric field overflow``. Cap user-visible balance well below that
+# so credit paths (deposit, settle, BIN payout) can validate against
+# one shared ceiling instead of each path inventing its own bound
+# and one of them silently overflowing the column.
+MAX_USER_BALANCE = Decimal("10000000.00")
+
 
 def to_decimal(value) -> Decimal | None:
     """Convert via ``str`` so we don't inherit float's binary

@@ -15,19 +15,17 @@ from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.transactions import add_transaction
-from app.utils.money import money_to_float, to_decimal
+from app.utils.money import MAX_USER_BALANCE, money_to_float, to_decimal
 from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
-# Numeric(12, 2) accepts up to 9_999_999_999.99 before Postgres raises
-# ``numeric field overflow``. Cap user-visible balance well below that
-# so we can never hit the column ceiling: a determined attacker firing
-# the maximum per-call deposit at the rate-limit ceiling would still
-# saturate against this number, not blow up with a 500.
-MAX_USER_BALANCE = Decimal("10000000.00")
+# MAX_USER_BALANCE moved to app/utils/money.py so the settle path in
+# services/auctions.py can validate against the same ceiling. Kept the
+# import alias for any external caller that grew used to importing it
+# from here.
 
 
 @router.post("/deposit")
