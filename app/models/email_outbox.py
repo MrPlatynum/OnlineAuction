@@ -20,9 +20,9 @@ class EmailOutbox(Base):
     last_error = Column(Text, nullable=True)
     # The worker fetches rows where ``status='pending' AND
     # next_attempt_at <= now()``. Backoff updates push this forward.
-    next_attempt_at = Column(DateTime, nullable=False, default=utcnow)
-    created_at = Column(DateTime, nullable=False, default=utcnow)
-    sent_at = Column(DateTime, nullable=True)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utcnow)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
 
     # The migration creates this index for the hot worker query above;
     # the model has to declare it too or the next alembic autogenerate

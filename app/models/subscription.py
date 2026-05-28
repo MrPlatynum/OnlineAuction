@@ -14,7 +14,7 @@ class Subscription(Base):
     # used to seq-scan the table.
     subscriber_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     seller_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     subscriber = relationship("User", foreign_keys=[subscriber_id])
     seller = relationship("User", foreign_keys=[seller_id])
 

@@ -26,7 +26,7 @@ class Notification(Base):
     )
     auction_title = Column(String(500), nullable=True)
     is_read = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     user = relationship("User", back_populates="notifications")
 

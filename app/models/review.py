@@ -30,7 +30,7 @@ class Review(Base):
     auction_id = Column(Integer, ForeignKey("auctions.id"), nullable=False)
     rating = Column(Integer, nullable=False)
     comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     seller = relationship("User", foreign_keys=[seller_id])
     reviewer = relationship("User", foreign_keys=[reviewer_id])
 

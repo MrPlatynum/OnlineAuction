@@ -25,7 +25,7 @@ class Transaction(Base):
     auction_id = Column(
         Integer, ForeignKey("auctions.id", ondelete="SET NULL"), nullable=True
     )
-    created_at = Column(DateTime, default=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     user = relationship("User", foreign_keys=[user_id])
 
     __table_args__ = (
