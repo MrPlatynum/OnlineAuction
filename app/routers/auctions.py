@@ -327,9 +327,17 @@ async def buy_now(
             auction.id, auction.title, manager,
         )
 
-    # Notify everyone who placed a real bid before the BIN-purchase that
-    # the auction ended without them. complete_auction does this on the
-    # timer path; /buy-now used to silently leave them in the dark.
+    # Defensive notify-the-losers loop. In the current model the loop
+    # is dead by construction: /buy-now only accepts BIN lots, and the
+    # /bids handler rejects every bid on a BIN lot (see bids.py:133),
+    # so ``losers`` is always empty here. The block is kept so that if
+    # ``auction_type`` ever gains a hybrid mode (BIN with concurrent
+    # bids accepted up to the BIN price), losers get notified the same
+    # way complete_auction does on the timer path - otherwise they
+    # would silently miss the end-of-lot event. If hybrid mode lands,
+    # swap the loop for ``notify_many`` so the fan-out stays a single
+    # commit + concurrent WS broadcast (mirrors the complete_auction
+    # path; see § 4.3.5 microbench).
     losers = await fetch_auction_bidders(
         db, auction_id, exclude_user_ids=(current_user.id,)
     )
