@@ -1,7 +1,8 @@
 """Money-only operations on the user balance: deposit, withdraw, and
 the paginated transaction ledger. Every mutating endpoint funnels
-through ``services.transactions.add_transaction`` so every ₽-move has
-a matching audit row with ``balance_after``.
+through ``services.transactions.apply_balance_delta`` so the balance
+mutation and the matching audit row land atomically and ``balance_after``
+can't drift from the running balance.
 """
 
 from decimal import Decimal
@@ -14,7 +15,7 @@ from app.database import get_db
 from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import get_committed_balance, lock_users_by_id
-from app.services.transactions import add_transaction
+from app.services.transactions import apply_balance_delta
 from app.utils.money import MAX_USER_BALANCE, money_to_float, quantize_money, to_decimal
 from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
@@ -41,20 +42,16 @@ async def deposit(
     # /withdraw on the same account serialise instead of racing on stale
     # in-memory copies and clobbering each other's update.
     await lock_users_by_id(db, current_user.id)
-    # ``quantize_money`` instead of Python's ``round``: round on Decimal
-    # uses banker's rounding (ROUND_HALF_EVEN), which contradicts the
-    # ROUND_HALF_UP policy quantize_money enforces everywhere else in
-    # the service layer. Today both operands are 2-dp so the sum is
-    # 2-dp and the call is a no-op, but a future refund / commission
-    # delta would otherwise round differently here than at settle.
-    new_balance = quantize_money(current_user.balance + amount)
-    if new_balance > MAX_USER_BALANCE:
+    # Project the post-deposit balance only to enforce the cap; the
+    # actual mutation lands inside ``apply_balance_delta`` so the
+    # audit-row balance_after can't drift from user.balance.
+    projected = quantize_money(current_user.balance + amount)
+    if projected > MAX_USER_BALANCE:
         raise HTTPException(
             status_code=400,
             detail=f"Максимальный баланс - {MAX_USER_BALANCE:.2f} ₽",
         )
-    current_user.balance = new_balance
-    add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
+    apply_balance_delta(db, current_user, amount, "deposit", "Пополнение баланса")
     await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
@@ -85,8 +82,7 @@ async def withdraw(
                 f"({committed:.2f} ₽ удерживается на активных аукционах)."
             ),
         )
-    current_user.balance = quantize_money(current_user.balance - amount)
-    add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
+    apply_balance_delta(db, current_user, -amount, "withdrawal", "Вывод средств")
     await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
