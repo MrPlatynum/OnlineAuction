@@ -8,7 +8,11 @@ from app.utils.time import utcnow
 class Subscription(Base):
     __tablename__ = "subscriptions"
     id = Column(Integer, primary_key=True, index=True)
-    subscriber_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # Both FKs indexed: the ``seller_id`` index was already there for
+    # "who follows this seller", and ``subscriber_id`` was the missing
+    # symmetric counterpart used by "my subscriptions" - that lookup
+    # used to seq-scan the table.
+    subscriber_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     seller_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
     subscriber = relationship("User", foreign_keys=[subscriber_id])

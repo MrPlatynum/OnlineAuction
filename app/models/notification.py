@@ -35,4 +35,9 @@ class Notification(Base):
         Index("ix_notifications_user_unread", "user_id", "is_read"),
         # listing endpoint orders by created_at desc
         Index("ix_notifications_user_created", "user_id", "created_at"),
+        # ENDING_SOON per-recipient idempotency dedupe scan in
+        # services/auctions.py filters by (auction_id, type); the two
+        # composites above index user_id-led tuples and don't cover
+        # that scan, which grew linearly with the notifications table.
+        Index("ix_notifications_auction_type", "auction_id", "type"),
     )
