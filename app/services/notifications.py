@@ -276,8 +276,14 @@ async def notify_many(
         # without committing; the batch commit below covers it.
         await _fire_and_forget_email(user.email, title, html_content, db=db)
     await db.commit()
-    for row in notif_rows:
-        await db.refresh(row)
+    # No per-row ``db.refresh(row)`` loop here. ``id`` lands via the
+    # INSERT...RETURNING that SQLAlchemy issues on commit (every PK in
+    # this project is autoincrement), and ``created_at`` is a Python-
+    # side ``default=utcnow`` which the insert machinery evaluates
+    # before sending the SQL - both attributes are already populated
+    # on the in-memory instances. The prior per-row refresh added N
+    # extra round-trips and undid the batching win on hot fan-out
+    # paths (auction settle, NEW_LOT subscriber broadcast).
 
     if manager is None:
         return
