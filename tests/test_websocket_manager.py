@@ -7,6 +7,8 @@ the dead socket in the bucket - every subsequent broadcast then
 iterated growing piles of dead sockets and re-raised.
 """
 
+import asyncio
+
 import pytest
 
 from app.services.websocket_manager import ConnectionManager

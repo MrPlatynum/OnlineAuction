@@ -5,8 +5,6 @@ mutation and the matching audit row land atomically and ``balance_after``
 can't drift from the running balance.
 """
 
-from decimal import Decimal
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession

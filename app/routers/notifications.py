@@ -13,7 +13,7 @@ from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Notification, User
-from app.schemas import NotificationResponse, PaginatedNotificationsResponse
+from app.schemas import PaginatedNotificationsResponse
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 

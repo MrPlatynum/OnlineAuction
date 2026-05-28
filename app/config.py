@@ -1,5 +1,6 @@
 import os
 from decimal import Decimal
+from decimal import InvalidOperation as _InvalidDecimal
 
 from dotenv import load_dotenv
 
@@ -76,9 +77,6 @@ PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("
 # Range-validated at module-load: a typo (PLATFORM_COMMISSION_PERCENT=70
 # instead of 7.0, or a negative value) used to silently corrupt every
 # settle from then on, since nothing downstream re-checks the constant.
-from decimal import InvalidOperation as _InvalidDecimal
-
-
 def _load_commission_percent() -> Decimal:
     raw = os.getenv("PLATFORM_COMMISSION_PERCENT", "7")
     try:

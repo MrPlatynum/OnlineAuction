@@ -7,7 +7,6 @@ receive_text, headers, client). This exercises the auth / rate-limit /
 cap / disconnect-cleanup paths without a real WS handshake.
 """
 
-import asyncio
 from datetime import timedelta
 from types import SimpleNamespace
 

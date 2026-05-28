@@ -4,14 +4,12 @@ edge cases (None passthrough, the ``start/stop`` idempotency, the
 disabled-by-env short circuit). Direct unit drive, no DB or SMTP."""
 
 import asyncio
-import os
 from decimal import Decimal
 
 import pytest
 
 from app.services import email_outbox as outbox
 from app.utils.money import money_to_float, quantize_money, to_decimal
-
 
 # ---------------------------------------------------------------------
 # money helpers
