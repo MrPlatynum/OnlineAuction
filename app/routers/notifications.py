@@ -55,10 +55,16 @@ async def get_notifications(
 
 
 @router.get("/unread-count")
+@limiter.limit("120/minute")
 async def get_unread_count(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # The bell badge polls this endpoint - one tab at a 5s cadence is
+    # 12/min, multiple tabs multiply linearly. The cap is generous
+    # enough for normal use (six tabs at 5s = 72/min) but bounds a
+    # misbehaving client to a sane budget.
     count = await db.scalar(
         select(func.count())
         .select_from(Notification)

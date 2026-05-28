@@ -679,11 +679,20 @@ async def get_my_participation(
         .distinct(Bid.auction_id)
         .subquery()
     )
+    # Cap each bucket at a fixed window. Power users (bots, test
+    # fixtures) with thousands of placed bids would otherwise serialise
+    # the whole history into one JSON response every dashboard hit,
+    # competing with the bid hot-path for the same connection-pool
+    # slot. ``stats.total_bids`` still reflects the true count, so the
+    # UI shows the real number even when the per-bucket list is
+    # truncated.
+    _PARTICIPATION_BUCKET_LIMIT = 200
     participating_rows = (
         await db.execute(
             select(Auction, my_last_bids_sub.c.my_amount)
             .join(my_last_bids_sub, my_last_bids_sub.c.auction_id == Auction.id)
-            .order_by(Auction.end_time.desc())
+            .order_by(Auction.end_time.desc(), Auction.id.desc())
+            .limit(_PARTICIPATION_BUCKET_LIMIT)
         )
     ).all()
 
@@ -703,7 +712,12 @@ async def get_my_participation(
         await db.execute(
             select(Auction)
             .where(Auction.created_by == current_user.id)
-            .order_by(Auction.is_active.desc(), Auction.start_time.desc())
+            .order_by(
+                Auction.is_active.desc(),
+                Auction.start_time.desc(),
+                Auction.id.desc(),
+            )
+            .limit(_PARTICIPATION_BUCKET_LIMIT)
         )
     ).scalars().all()
 
