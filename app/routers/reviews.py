@@ -175,7 +175,7 @@ async def delete_review(
     if not review:
         raise HTTPException(status_code=404, detail="Отзыв не найден")
     if review.reviewer_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Нельзя удалить чужой отзыв")
+        raise HTTPException(status_code=403, detail="Это не ваш отзыв")
     await db.delete(review)
     await db.commit()
     return {"message": "Отзыв удалён"}

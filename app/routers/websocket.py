@@ -153,7 +153,12 @@ async def notifications_websocket(websocket: WebSocket, user_id: int):
         user = (
             await db.execute(select(User).where(User.id == user_id))
         ).scalar_one_or_none()
-    if user is None or payload.get("tv", 0) != user.token_version:
+    # ``payload.get("tv")`` returns ``None`` for any forged or legacy
+    # token without the claim; that must not silently match a fresh
+    # account's ``token_version=0`` default. Reject if the claim is
+    # missing OR mismatched.
+    token_version = payload.get("tv")
+    if user is None or token_version is None or token_version != user.token_version:
         logger.warning(
             "WS notifications denied: token_version mismatch for user_id %s", user_id
         )

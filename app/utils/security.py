@@ -292,12 +292,12 @@ async def get_current_user(
     # ``token_version``. ``/password-reset/confirm`` and the change-
     # password flow bump the column under a row lock so every JWT
     # signed off the old value (still-active browser sessions, queued
-    # email links) decodes here, mismatches, and 401s. The ``payload.get``
-    # default exists so a future migration that introduces ``tv`` on
-    # already-signed tokens doesn't 500 on a missing key - in practice
-    # ``create_access_token`` always writes the claim.
-    token_version = payload.get("tv", 0)
-    if token_version != user.token_version:
+    # email links) decodes here, mismatches, and 401s. A token without
+    # the ``tv`` claim at all (forged or pre-rollout legacy) must also
+    # 401 - otherwise it silently matches the ``token_version=0``
+    # default that every fresh account starts with.
+    token_version = payload.get("tv")
+    if token_version is None or token_version != user.token_version:
         raise HTTPException(status_code=401, detail="Token invalidated")
     return user
 

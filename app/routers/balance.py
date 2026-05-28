@@ -15,7 +15,7 @@ from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
 from app.services.balance import get_committed_balance, lock_users_by_id
 from app.services.transactions import add_transaction
-from app.utils.money import MAX_USER_BALANCE, money_to_float, to_decimal
+from app.utils.money import MAX_USER_BALANCE, money_to_float, quantize_money, to_decimal
 from app.utils.pagination import total_pages_for
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
@@ -41,7 +41,13 @@ async def deposit(
     # /withdraw on the same account serialise instead of racing on stale
     # in-memory copies and clobbering each other's update.
     await lock_users_by_id(db, current_user.id)
-    new_balance = round(current_user.balance + amount, 2)
+    # ``quantize_money`` instead of Python's ``round``: round on Decimal
+    # uses banker's rounding (ROUND_HALF_EVEN), which contradicts the
+    # ROUND_HALF_UP policy quantize_money enforces everywhere else in
+    # the service layer. Today both operands are 2-dp so the sum is
+    # 2-dp and the call is a no-op, but a future refund / commission
+    # delta would otherwise round differently here than at settle.
+    new_balance = quantize_money(current_user.balance + amount)
     if new_balance > MAX_USER_BALANCE:
         raise HTTPException(
             status_code=400,
@@ -79,7 +85,7 @@ async def withdraw(
                 f"({committed:.2f} ₽ удерживается на активных аукционах)."
             ),
         )
-    current_user.balance = round(current_user.balance - amount, 2)
+    current_user.balance = quantize_money(current_user.balance - amount)
     add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
     await db.commit()
     return {

@@ -238,6 +238,19 @@ async def test_notifications_ws_token_version_mismatch_closes_1008():
     assert fake.close_code == 1008
 
 
+async def test_notifications_ws_rejects_token_without_tv_claim():
+    """A forged or pre-rollout legacy token without the ``tv`` claim
+    used to silently match a fresh account whose ``token_version``
+    defaults to 0. The handler now requires the claim to be present;
+    missing-claim tokens are 1008-closed same as a mismatched one."""
+    user = await _make_user("nws_no_tv")
+    token = create_access_token({"user_id": user.id})  # no tv
+
+    fake = FakeWebSocket(headers={"sec-websocket-protocol": f"bearer, {token}"})
+    await ws_router.notifications_websocket(fake, user_id=user.id)
+    assert fake.close_code == 1008
+
+
 async def test_notifications_ws_accepts_valid_token_with_subprotocol_echo():
     """Valid token + matching user_id + current tv: accept with
     subprotocol="bearer" echoed back (RFC 6455 §1.9), register socket

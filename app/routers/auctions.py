@@ -613,7 +613,7 @@ async def delete_auction(
     if not auction:
         raise HTTPException(status_code=404, detail="Аукцион не найден")
     if auction.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Нельзя удалить чужой лот")
+        raise HTTPException(status_code=403, detail="Это не ваш лот")
 
     bids_count = await db.scalar(
         select(func.count()).select_from(Bid).where(Bid.auction_id == auction_id)
