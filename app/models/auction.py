@@ -72,6 +72,14 @@ class Auction(Base):
             "auction_type != 'bin' OR bin_price IS NOT NULL",
             name="ck_auctions_bin_requires_price",
         ),
+        # BIN price below starting_price is a degenerate state - the
+        # /buy-now path would charge less than what the listing card
+        # advertises as the floor. Enforce at the schema layer so
+        # admin tools / data imports can't slip past the API gate.
+        CheckConstraint(
+            "bin_price IS NULL OR bin_price >= starting_price",
+            name="ck_auctions_bin_ge_start",
+        ),
     )
 
 
