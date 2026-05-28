@@ -209,6 +209,14 @@ async def test_seller_with_no_reviews_returns_empty_stats(client, registered_use
     assert body["reviews"] == []
 
 
+async def test_seller_reviews_404_for_unknown_seller(client):
+    """Used to return 200 with the same empty-stats shape as a real
+    seller-with-no-reviews; a client probing whether a profile exists
+    could not tell the two apart."""
+    r = await client.get("/api/sellers/999999/reviews")
+    assert r.status_code == 404
+
+
 async def test_delete_nonexistent_review_returns_404(client, registered_user):
     r = await client.delete(
         "/api/reviews/999999", headers=registered_user["headers"]

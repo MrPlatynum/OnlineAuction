@@ -27,6 +27,16 @@ _REVIEWS_LIST_CAP = 50
 
 @router.get("/sellers/{seller_id}/reviews", response_model=SellerReviewsResponse)
 async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db)):
+    # Probe user existence before serving review aggregates - otherwise
+    # an unknown seller_id silently returns the same `{total: 0, avg: 0,
+    # distribution: zeros, reviews: []}` shape as a real seller with no
+    # reviews yet, and any client trying to tell the two apart can't.
+    seller_exists = await db.scalar(
+        select(func.count()).select_from(User).where(User.id == seller_id)
+    )
+    if not seller_exists:
+        raise HTTPException(status_code=404, detail="Продавец не найден")
+
     base_filter = Review.seller_id == seller_id
 
     total = await db.scalar(

@@ -116,6 +116,17 @@ async def get_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Probe user existence so the UI can tell "real seller, you're not
+    # subscribed yet" from "this seller does not exist" - otherwise both
+    # answers come back as {subscribed: false, subscribers_count: 0} and
+    # a typo'd profile link silently renders a working Subscribe button
+    # whose POST then 404s.
+    seller_exists = await db.scalar(
+        select(func.count()).select_from(User).where(User.id == seller_id)
+    )
+    if not seller_exists:
+        raise HTTPException(status_code=404, detail="Продавец не найден")
+
     sub = (
         await db.execute(
             select(Subscription).where(

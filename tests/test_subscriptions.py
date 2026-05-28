@@ -140,7 +140,7 @@ async def test_new_lot_emails_subscribers(client, registered_user, second_user, 
         headers=second_user["headers"],
     )
     assert notifs.status_code == 200
-    rows = notifs.json()
+    rows = notifs.json()["items"]
     assert any(r["type"] == "new_lot" and "Shiny new" in r["message"] for r in rows)
 
 
@@ -217,3 +217,17 @@ async def test_subscription_status_returns_true_after_subscribe(
     body = r.json()
     assert body["subscribed"] is True
     assert body["subscribers_count"] == 1
+
+
+async def test_subscription_status_404_for_unknown_seller(
+    client, registered_user
+):
+    """Used to return 200 with `{subscribed: false, subscribers_count: 0}`
+    for any seller_id, real or not - the UI then rendered a working
+    Subscribe button on a profile URL that did not exist, and the POST
+    that followed 404'd."""
+    r = await client.get(
+        "/api/sellers/999999/subscription",
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 404
