@@ -7,11 +7,21 @@ prunes dead sockets in-place - without that pruning the buckets
 grow forever as tabs close without a clean shutdown handshake.
 """
 
+import asyncio
 import logging
 
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
+
+
+# Per-recipient deadline for ``send_json``. A half-open peer (laptop
+# closed lid, NAT timeout, intermediary buffering) that never ACKs
+# would otherwise block the entire ``_fan_out`` loop while the kernel
+# send buffer drains - every other subscriber of a hot lot then waits
+# behind the dead socket. Two seconds is generous for a JSON payload
+# of a few hundred bytes over WS; anything slower is treated as dead.
+_SEND_TIMEOUT_SECS = 2.0
 
 
 class ConnectionManager:
@@ -68,7 +78,13 @@ class ConnectionManager:
         dead: list[WebSocket] = []
         for connection in snapshot:
             try:
-                await connection.send_json(message)
+                # ``wait_for`` so a half-open peer (silent NAT timeout,
+                # stalled send buffer) can't block every other subscriber
+                # behind it. A timed-out send drops the socket the same
+                # way an exception would.
+                await asyncio.wait_for(
+                    connection.send_json(message), timeout=_SEND_TIMEOUT_SECS
+                )
             except Exception as exc:
                 logger.debug("Dropping dead websocket on %s: %s", key, exc)
                 dead.append(connection)
