@@ -236,6 +236,30 @@ async def test_list_auctions_paginated(client, registered_user):
     assert len(body["items"]) == 3
 
 
+async def test_create_auction_unknown_category_returns_400(client, registered_user):
+    """Unknown category_id used to flow straight into the INSERT and
+    surface as an opaque 500 from the FK violation at commit. The
+    pre-check turns that into a clean 400."""
+    payload = _make_auction_payload(title="Bad cat")
+    payload["category_id"] = 999_999
+    r = await client.post(
+        "/api/auctions", json=payload, headers=registered_user["headers"]
+    )
+    assert r.status_code == 400
+    assert "Категория" in r.json()["detail"]
+
+
+async def test_update_auction_unknown_category_returns_400(client, registered_user):
+    """Same pre-check on the PATCH side."""
+    auction = await _seed_active_auction(client, registered_user["headers"])
+    r = await client.patch(
+        f"/api/auctions/{auction['id']}",
+        json={"category_id": 999_999},
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400
+
+
 async def test_bin_lot_seeds_current_price_from_bin_price(client, registered_user):
     """A BIN listing is a fixed-price sale: starting_price is meaningless.
     Whatever the form submits as starting_price, the server must seed

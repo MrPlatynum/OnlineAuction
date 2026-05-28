@@ -153,6 +153,18 @@ async def create_auction(
     start_time = utcnow()
     end_time = start_time + timedelta(minutes=auction.duration_minutes)
 
+    # Validate category_id up-front. Without this, an unknown id flows
+    # straight into the INSERT, Postgres raises a foreign-key violation
+    # at commit, and the client sees an opaque 500 instead of a clean
+    # 400 with the actual reason. Same shape applied below in
+    # update_auction.
+    if auction.category_id is not None:
+        exists = await db.scalar(
+            select(Category.id).where(Category.id == auction.category_id)
+        )
+        if not exists:
+            raise HTTPException(status_code=400, detail="Категория не найдена")
+
     auction_type = auction.auction_type or "bid"
     # BIN is a fixed-price listing - starting_price is meaningless there
     # and would let the UI show "$10" on a lot the buyer actually pays
@@ -524,6 +536,16 @@ async def update_auction(
     if "description" in fields and data.description is not None:
         auction.description = data.description.strip()
     if "category_id" in fields:
+        # Mirror the create-side pre-check: an unknown id would otherwise
+        # surface as a 500 from the FK violation at commit instead of
+        # a clean 400. ``None`` resets the category, which is allowed
+        # (the column is nullable).
+        if data.category_id is not None:
+            exists = await db.scalar(
+                select(Category.id).where(Category.id == data.category_id)
+            )
+            if not exists:
+                raise HTTPException(status_code=400, detail="Категория не найдена")
         auction.category_id = data.category_id
     if "starting_price" in fields and data.starting_price is not None:
         auction.starting_price = data.starting_price
