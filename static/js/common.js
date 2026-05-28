@@ -424,7 +424,13 @@
       list.innerHTML = `<div class="notif-empty">Загрузка…</div>`;
       try {
         const r = await window.apiFetch(`${window.API}/api/notifications?limit=30`);
-        if (r.ok) renderList(await r.json());
+        if (r.ok) {
+          const body = await r.json();
+          // GET /api/notifications now returns {items,total,limit,offset}.
+          // Keep the bare-list fallback so an old proxy/cached response
+          // (or a future revert) doesn't blow up the bell dropdown.
+          renderList(Array.isArray(body) ? body : (body.items || []));
+        }
         else list.innerHTML = `<div class="notif-empty">Ошибка</div>`;
       } catch {
         list.innerHTML = `<div class="notif-empty">Нет связи</div>`;

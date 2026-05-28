@@ -214,7 +214,10 @@ async function loadNotifPanel() {
     const r = await apiFetch(API + '/api/notifications');
     if (!r.ok) return;
     const data = await r.json();
-    const items = data.notifications || data || [];
+    // GET /api/notifications returns {items,total,limit,offset}. Keep
+    // the legacy `notifications` and bare-list fallbacks so a cached
+    // proxy response or a future shape revert does not blank the panel.
+    const items = data.items || data.notifications || data || [];
 
     const unread = items.filter(n => !n.is_read).length;
     const badge = $('sbNotifBadge');
