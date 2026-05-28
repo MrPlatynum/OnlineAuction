@@ -222,3 +222,46 @@ async def test_delete_nonexistent_review_returns_404(client, registered_user):
         "/api/reviews/999999", headers=registered_user["headers"]
     )
     assert r.status_code == 404
+
+
+async def test_delete_review_blocked_after_edit_window(
+    client, registered_user, second_user
+):
+    """A reviewer can delete a fresh review but not one older than the
+    edit window. Without the freeze, a hostile reviewer could
+    indefinitely cycle delete + recreate on the same auction to spam
+    the seller with new-review notifications and rewrite history."""
+    from datetime import timedelta as _td
+
+    from sqlalchemy import update as _update
+
+    from app import database as _db_module
+    from app.models import Review as _Review
+    from app.utils.time import utcnow as _utcnow
+
+    seller_id = registered_user["user"]["id"]
+    auction_id = await _buy_from_seller(
+        client, registered_user["headers"], second_user["headers"]
+    )
+    created = (await client.post(
+        "/api/reviews",
+        json={"seller_id": seller_id, "auction_id": auction_id, "rating": 4},
+        headers=second_user["headers"],
+    )).json()
+
+    # Backdate the review past the edit window without waiting in real
+    # time.
+    async with _db_module.SessionLocal() as db:
+        await db.execute(
+            _update(_Review)
+            .where(_Review.id == created["id"])
+            .values(created_at=_utcnow() - _td(hours=25))
+        )
+        await db.commit()
+
+    r = await client.delete(
+        f"/api/reviews/{created['id']}",
+        headers=second_user["headers"],
+    )
+    assert r.status_code == 400
+    assert "окно" in r.json()["detail"].lower()
