@@ -18,11 +18,15 @@ from app.database import Base
 class Auction(Base):
     __tablename__ = "auctions"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True, nullable=False)
+    # Length matches AuctionCreate.title Pydantic max_length=300; the
+    # schema-level cap is defence-in-depth against server-generated
+    # code (e.g. snapshotting auction_title into notifications) that
+    # bypasses the input validator.
+    title = Column(String(300), index=True, nullable=False)
     description = Column(Text, nullable=False)
     starting_price = Column(Numeric(12, 2), nullable=False)
     current_price = Column(Numeric(12, 2), nullable=False)
-    image_url = Column(String, nullable=True)
+    image_url = Column(String(2000), nullable=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -31,7 +35,7 @@ class Auction(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
     ending_soon_notified = Column(Boolean, default=False, nullable=False)
-    auction_type = Column(String, default="bid", nullable=False)
+    auction_type = Column(String(10), default="bid", nullable=False)
     bin_price = Column(Numeric(12, 2), nullable=True)
     # Counts late-bid anti-sniping extensions on this lot. Capped at
     # MAX_EXTENSIONS in the /bids handler so two coordinated bidders
@@ -77,6 +81,6 @@ class AuctionImage(Base):
     auction_id = Column(
         Integer, ForeignKey("auctions.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    url = Column(String, nullable=False)
+    url = Column(String(2000), nullable=False)
     order = Column(Integer, default=0, nullable=False)
     auction = relationship("Auction", back_populates="images")

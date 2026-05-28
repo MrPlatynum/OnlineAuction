@@ -13,9 +13,9 @@ class Category(Base):
     # ``/categories/<slug>`` route plus the seed-time "already exists"
     # check. The seed always populates both fields, but admin tools and
     # future migrations need the constraint enforced at the schema.
-    name = Column(String, unique=True, index=True, nullable=False)
-    slug = Column(String, unique=True, index=True, nullable=False)
-    icon = Column(String, default="📦")
+    name = Column(String(100), unique=True, index=True, nullable=False)
+    slug = Column(String(100), unique=True, index=True, nullable=False)
+    icon = Column(String(20), default="📦")
     parent_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
     auctions = relationship("Auction", back_populates="category")
     children = relationship(

@@ -18,10 +18,10 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    type = Column(String, nullable=False)
+    type = Column(String(50), nullable=False)
     amount = Column(Numeric(12, 2), nullable=False)
     balance_after = Column(Numeric(12, 2), nullable=False)
-    description = Column(String, nullable=True)
+    description = Column(String(500), nullable=True)
     auction_id = Column(
         Integer, ForeignKey("auctions.id", ondelete="SET NULL"), nullable=True
     )

@@ -16,9 +16,15 @@ from app.utils.time import utcnow
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    # Explicit length caps so the schema itself bounds what
+    # server-generated code can write here. Pydantic gates the user-
+    # facing inputs at the same or tighter limits, so this is a
+    # defence-in-depth layer that catches a buggy template or admin
+    # SQL writing multi-MB strings.
+    username = Column(String(64), unique=True, index=True, nullable=False)
+    # RFC 5321 caps an email address at 320 octets (64 local + @ + 255 domain).
+    email = Column(String(320), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
     # Bumped by /change-password (and any future invalidation event) so
     # tokens issued before the bump fail at /me / get_current_user. JWT
     # carries the value as a ``tv`` claim; mismatch → 401.
@@ -51,7 +57,7 @@ class User(Base):
     balance = Column(Numeric(12, 2), default=1000.0, nullable=False)
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
-    avatar_url = Column(String, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
 
     email_notifications = Column(Boolean, default=True, nullable=False)
     notify_outbid = Column(Boolean, default=True, nullable=False)

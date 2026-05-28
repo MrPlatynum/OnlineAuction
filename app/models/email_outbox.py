@@ -8,13 +8,13 @@ class EmailOutbox(Base):
     __tablename__ = "email_outbox"
 
     id = Column(Integer, primary_key=True, index=True)
-    to_email = Column(String, nullable=False)
-    subject = Column(String, nullable=False)
+    to_email = Column(String(320), nullable=False)
+    subject = Column(String(500), nullable=False)
     html_body = Column(Text, nullable=False)
     # ``pending``: not yet sent or scheduled for retry.
     # ``sent``: terminal success.
     # ``failed``: terminal dead-letter - retry budget exhausted.
-    status = Column(String, nullable=False, default="pending")
+    status = Column(String(20), nullable=False, default="pending")
     attempts = Column(Integer, nullable=False, default=0)
     max_attempts = Column(Integer, nullable=False, default=5)
     last_error = Column(Text, nullable=True)
