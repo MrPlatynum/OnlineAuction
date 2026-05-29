@@ -21,7 +21,6 @@ from app.models import EmailOutbox, User
 from app.services import notifications as notif_mod
 from app.services.email_outbox import enqueue_email
 from app.services.notifications import NotificationType, notify_user
-
 from tests.conftest import _register_and_verify
 
 
