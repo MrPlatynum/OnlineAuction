@@ -186,9 +186,18 @@ async def notify_user(
             },
         })
 
-    await _maybe_send_email(
+    # ``create_notification`` above already committed, so the outbox row
+    # ``_maybe_send_email`` enrols lands in a *fresh* transaction with no
+    # commit behind it. ``get_db`` doesn't commit on exit, so without the
+    # commit below the row is rolled back on session close and the email
+    # silently vanishes - notably the last ``notify_user`` in a handler,
+    # whose row no later ``create_notification`` commit happens to rescue.
+    # Commit only when a row was actually enrolled to keep the no-email
+    # hot path (most notifications) at a single round-trip.
+    if await _maybe_send_email(
         user, notification_type, title, message, auction_id, auction_title, db=db
-    )
+    ):
+        await db.commit()
 
 
 def _email_enabled(user: User, notification_type: NotificationType) -> bool:
@@ -207,12 +216,19 @@ async def _maybe_send_email(
     auction_title: str | None,
     *,
     db: AsyncSession | None = None,
-) -> None:
+) -> bool:
+    """Enrol the notification email in the outbox when the user opted in.
+
+    Returns ``True`` when a row was enrolled in ``db`` (so the caller knows
+    it owns an uncommitted outbox row), ``False`` otherwise.
+    """
     if _email_enabled(user, notification_type):
         html_content = build_notification_email_html(
             notification_type.value, title, message, auction_id, auction_title
         )
         await _fire_and_forget_email(user.email, title, html_content, db=db)
+        return True
+    return False
 
 
 async def notify_many(

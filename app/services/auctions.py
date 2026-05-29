@@ -223,7 +223,7 @@ async def notify_auction_ending_soon(auction: Auction, db: AsyncSession):
         await db.execute(
             select(Bid)
             .where(Bid.auction_id == auction.id)
-            .order_by(Bid.timestamp.desc())
+            .order_by(Bid.timestamp.desc(), Bid.id.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
@@ -301,7 +301,7 @@ async def complete_auction(auction_id: int, db: AsyncSession):
         await db.execute(
             select(Bid)
             .where(Bid.auction_id == auction_id)
-            .order_by(Bid.timestamp.desc())
+            .order_by(Bid.timestamp.desc(), Bid.id.desc())
             .limit(1)
         )
     ).scalar_one_or_none()

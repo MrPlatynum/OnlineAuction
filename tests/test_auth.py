@@ -54,6 +54,36 @@ async def test_register_case_insensitive_collision_rejected(
     assert r.status_code == 400
 
 
+async def test_register_lowercases_email(client):
+    """``EmailStr`` only normalises the domain; the handler must fold the
+    local part too so the stored email is canonical."""
+    r = await client.post("/api/register", json={
+        "username": "mixedcase",
+        "email": "MixedCase@Example.COM",
+        "password": "secret123",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["user"]["email"] == "mixedcase@example.com"
+
+
+async def test_register_case_insensitive_email_collision_rejected(client):
+    """Two registrations whose emails differ only in case must collide -
+    otherwise the case-sensitive UNIQUE index lets duplicate accounts in
+    and a password reset keyed on the other casing silently misses."""
+    first = await client.post("/api/register", json={
+        "username": "userone",
+        "email": "Dup@Example.com",
+        "password": "secret123",
+    })
+    assert first.status_code == 200, first.text
+    second = await client.post("/api/register", json={
+        "username": "usertwo",
+        "email": "dup@example.com",
+        "password": "secret123",
+    })
+    assert second.status_code == 400
+
+
 async def test_login_case_insensitive_username(client, registered_user):
     """The login form accepts whatever case the user typed; the
     handler folds it to the stored canonical form before lookup."""

@@ -166,6 +166,15 @@ async def create_auction(
             raise HTTPException(status_code=400, detail="Категория не найдена")
 
     auction_type = auction.auction_type or "bid"
+    # A BIN listing without a price is meaningless and would otherwise trip
+    # the DB CheckConstraint ``ck_auctions_bin_requires_price`` at commit,
+    # surfacing as an opaque 500. Reject up front with a clean 400 - the
+    # same guard ``update_auction`` already applies.
+    if auction_type == "bin" and auction.bin_price is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Для лота с фиксированной ценой обязательно указать bin_price",
+        )
     # BIN is a fixed-price listing - starting_price is meaningless there
     # and would let the UI show "$10" on a lot the buyer actually pays
     # $bin_price for. Coerce both seed prices to bin_price so what the
@@ -592,6 +601,17 @@ async def update_auction(
     ):
         auction.starting_price = auction.bin_price
         auction.current_price = auction.bin_price
+
+    # Editing only ``starting_price`` on a lot that carries a lower
+    # ``bin_price`` (the drag-along above doesn't fire for a bare
+    # ``starting_price`` edit) would otherwise trip the DB CheckConstraint
+    # ``bin_price >= starting_price`` at commit and surface as a 500.
+    # Reject with a clean 400 instead.
+    if auction.bin_price is not None and auction.bin_price < auction.starting_price:
+        raise HTTPException(
+            status_code=400,
+            detail="Цена выкупа не может быть ниже стартовой цены",
+        )
 
     await db.commit()
     await db.refresh(auction)

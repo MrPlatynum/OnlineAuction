@@ -94,6 +94,31 @@ async def test_relative_and_absolute_image_urls_accepted(client, registered_user
     assert r.status_code == 200, r.text
 
 
+async def test_create_bin_auction_without_price_rejected(client, registered_user):
+    """A BIN lot with no ``bin_price`` is a clean 400, not the opaque
+    500 the DB CheckConstraint would otherwise produce at commit.
+    ``update_auction`` already guards this; ``create_auction`` must match."""
+    r = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(auction_type="bin", bin_price=None),
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 400, r.text
+    assert "bin_price" in r.json()["detail"]
+
+
+async def test_create_bin_auction_with_price_accepted(client, registered_user):
+    r = await client.post(
+        "/api/auctions",
+        json=_make_auction_payload(auction_type="bin", bin_price=250.0),
+        headers=registered_user["headers"],
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # BIN coerces the seed prices to bin_price so the card matches /buy-now.
+    assert body["current_price"] == 250.0
+
+
 async def _seed_active_auction(client, headers, **overrides):
     response = await client.post(
         "/api/auctions",
