@@ -27,6 +27,17 @@ def _normalize_username(value: str) -> str:
     return value.lower() if isinstance(value, str) else value
 
 
+def _normalize_email(value: str) -> str:
+    """Lower-case the email at every input boundary for the same reason
+    as the username: ``EmailStr`` only normalises the domain, so
+    ``Alice@x.com`` and ``alice@x.com`` would register as two distinct
+    rows under the case-sensitive UNIQUE index and a password-reset
+    lookup keyed on the other casing would silently miss the account.
+    Mail providers treat the local part case-insensitively in practice,
+    so folding it is safe and closes the duplicate-account window."""
+    return value.lower() if isinstance(value, str) else value
+
+
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=32, pattern=_USERNAME_PATTERN)
     email: EmailStr
@@ -36,6 +47,11 @@ class UserCreate(BaseModel):
     @classmethod
     def _lower_username(cls, v: str) -> str:
         return _normalize_username(v)
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _lower_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class UserLogin(BaseModel):
@@ -96,6 +112,11 @@ class VerifyEmailRequest(BaseModel):
 
 class PasswordResetRequestBody(BaseModel):
     email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _lower_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class PasswordResetConfirmBody(BaseModel):

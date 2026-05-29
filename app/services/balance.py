@@ -55,7 +55,7 @@ async def get_committed_balance(db: AsyncSession, user_id: int) -> Decimal:
     """
     latest_bidder = (
         select(Bid.auction_id, Bid.user_id.label("leader_id"))
-        .order_by(Bid.auction_id, Bid.timestamp.desc())
+        .order_by(Bid.auction_id, Bid.timestamp.desc(), Bid.id.desc())
         .distinct(Bid.auction_id)
         .subquery()
     )
@@ -96,7 +96,7 @@ async def effective_committed_balance(
         await db.execute(
             select(Bid)
             .where(Bid.auction_id == current_auction_id)
-            .order_by(Bid.timestamp.desc())
+            .order_by(Bid.timestamp.desc(), Bid.id.desc())
             .limit(1)
         )
     ).scalar_one_or_none()

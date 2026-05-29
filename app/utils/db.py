@@ -6,8 +6,25 @@ unique-constraint endpoint picks up the pattern by import instead of
 copy-paste."""
 
 from fastapi import HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import User
+
+
+async def ensure_seller_exists(db: AsyncSession, seller_id: int) -> None:
+    """Raise ``HTTPException(404, "Продавец не найден")`` when no user
+    with ``seller_id`` exists. The reviews and subscriptions routers
+    both gate seller-scoped endpoints on this same existence probe -
+    a shared helper keeps the query and the 404 wording in one place
+    instead of three hand-rolled copies that could drift apart.
+    """
+    exists = await db.scalar(
+        select(func.count()).select_from(User).where(User.id == seller_id)
+    )
+    if not exists:
+        raise HTTPException(status_code=404, detail="Продавец не найден")
 
 
 async def commit_or_409(db: AsyncSession, *, detail: str) -> None:

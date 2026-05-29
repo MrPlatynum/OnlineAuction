@@ -15,6 +15,7 @@ from starlette.requests import Request
 
 from app.database import get_db
 from app.models import Auction, Review, Subscription, User
+from app.utils.db import ensure_seller_exists
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user
 
@@ -121,11 +122,7 @@ async def get_subscription(
     # answers come back as {subscribed: false, subscribers_count: 0} and
     # a typo'd profile link silently renders a working Subscribe button
     # whose POST then 404s.
-    seller_exists = await db.scalar(
-        select(func.count()).select_from(User).where(User.id == seller_id)
-    )
-    if not seller_exists:
-        raise HTTPException(status_code=404, detail="Продавец не найден")
+    await ensure_seller_exists(db, seller_id)
 
     sub = (
         await db.execute(
@@ -152,11 +149,7 @@ async def subscribe(
     # Pre-check existence instead of letting the FK violation bubble as
     # 500 - a non-existent seller_id is a client mistake (stale link),
     # not an internal error.
-    seller = (
-        await db.execute(select(User.id).where(User.id == seller_id))
-    ).scalar_one_or_none()
-    if seller is None:
-        raise HTTPException(status_code=404, detail="Продавец не найден")
+    await ensure_seller_exists(db, seller_id)
     exists = (
         await db.execute(
             select(Subscription).where(

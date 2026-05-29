@@ -16,7 +16,7 @@ from starlette.requests import Request
 from app.database import get_db
 from app.models import Auction, Review, User
 from app.schemas import ReviewCreate, SellerReviewsResponse
-from app.utils.db import commit_or_409
+from app.utils.db import commit_or_409, ensure_seller_exists
 from app.utils.rate_limit import limiter
 from app.utils.security import get_current_user, require_verified_user
 from app.utils.time import utcnow
@@ -42,11 +42,7 @@ async def get_seller_reviews(seller_id: int, db: AsyncSession = Depends(get_db))
     # an unknown seller_id silently returns the same `{total: 0, avg: 0,
     # distribution: zeros, reviews: []}` shape as a real seller with no
     # reviews yet, and any client trying to tell the two apart can't.
-    seller_exists = await db.scalar(
-        select(func.count()).select_from(User).where(User.id == seller_id)
-    )
-    if not seller_exists:
-        raise HTTPException(status_code=404, detail="Продавец не найден")
+    await ensure_seller_exists(db, seller_id)
 
     base_filter = Review.seller_id == seller_id
 
@@ -125,11 +121,7 @@ async def create_review(
 ):
     if data.seller_id == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя оставить отзыв о себе")
-    seller = (
-        await db.execute(select(User).where(User.id == data.seller_id))
-    ).scalar_one_or_none()
-    if not seller:
-        raise HTTPException(status_code=404, detail="Продавец не найден")
+    await ensure_seller_exists(db, data.seller_id)
 
     # Reviewer must have actually transacted with this seller - won the
     # referenced completed auction (the only way Auction.winner_id is set

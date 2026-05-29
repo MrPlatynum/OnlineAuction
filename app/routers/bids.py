@@ -80,7 +80,7 @@ async def get_auction_bids(
             select(Bid)
             .where(base_filter)
             .options(selectinload(Bid.user))
-            .order_by(Bid.timestamp.desc())
+            .order_by(Bid.timestamp.desc(), Bid.id.desc())
             .offset(offset)
             .limit(page_size)
         )
@@ -157,7 +157,7 @@ async def place_bid(
         await db.execute(
             select(Bid)
             .where(Bid.auction_id == bid.auction_id)
-            .order_by(Bid.timestamp.desc())
+            .order_by(Bid.timestamp.desc(), Bid.id.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
