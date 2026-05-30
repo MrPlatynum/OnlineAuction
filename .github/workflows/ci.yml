@@ -19,6 +19,23 @@ jobs:
       - run: pip install ruff==0.15.12
       - run: ruff check .
 
+  audit:
+    name: pip-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install pip-audit==2.10.0
+      # Audit the runtime dependency tree against the PyPI Advisory and
+      # OSV databases. ``-r requirements.txt`` resolves the full pinned
+      # tree (including transitive packages such as starlette behind
+      # fastapi), so a freshly disclosed CVE in any shipped dependency
+      # fails the PR before it reaches a deploy.
+      - run: pip-audit -r requirements.txt
+
   test:
     name: pytest
     runs-on: ubuntu-latest
