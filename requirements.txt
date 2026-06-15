@@ -5,7 +5,7 @@ greenlet==3.2.4         # required by SQLAlchemy async extension
 pydantic==2.10.3
 python-multipart==0.0.27 # CVE-2024-53981 + CVE-2026-{24486,40347,42561}
 email-validator==2.2.0
-PyJWT==2.12.1           # CVE-2026-32597
+PyJWT==2.13.0           # CVE-2026-32597; PYSEC-2026-{175,177,178,179}
 passlib[bcrypt]==1.7.4
 bcrypt==4.3.0           # Pinned: passlib 1.7.4 is incompatible with bcrypt 5.x.
                         # Still needed to verify legacy bcrypt hashes; new hashes use argon2.
