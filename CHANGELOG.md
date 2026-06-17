@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-17
+
+### Изменено
+- Файлы выпускной квалификационной работы в `docs/` заменены на финальную сборку: реальный титульный лист, автособираемое оглавление, сквозная нумерация страниц.
+
 ## [1.0.0] - 2026-06-17
 
 ### Добавлено
@@ -69,7 +74,8 @@
 ### Добавлено
 - Первая версия платформы электронных торгов на FastAPI: каталог лотов, ставки, аккаунты, базовый цикл аукциона.
 
-[Unreleased]: https://github.com/MrPlatynum/OnlineAuction/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/MrPlatynum/OnlineAuction/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/MrPlatynum/OnlineAuction/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.1.0...v0.2.0
