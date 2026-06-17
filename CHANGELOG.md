@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-17
+
 ### Добавлено
 - Очередь исходящих писем (outbox) с устойчивым хранением, экспоненциальной задержкой повторов и идемпотентной доставкой уведомлений.
 - Пагинация ленты уведомлений (offset-конверт) и единая утилита расчёта `total_pages` для всех постраничных эндпоинтов.
@@ -67,7 +69,8 @@
 ### Добавлено
 - Первая версия платформы электронных торгов на FastAPI: каталог лотов, ставки, аккаунты, базовый цикл аукциона.
 
-[Unreleased]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/MrPlatynum/OnlineAuction/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/MrPlatynum/OnlineAuction/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/MrPlatynum/OnlineAuction/releases/tag/v0.1.0
