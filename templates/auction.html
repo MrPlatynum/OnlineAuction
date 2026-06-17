@@ -3,10 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Лот — AuctionHub</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <title>Лот - Лотус</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/auction.css">
 </head>
 <body>
@@ -15,8 +17,8 @@
 <header class="navbar">
   <div class="nav-inner">
     <a class="nav-logo" href="index.html">
-      <div class="nav-logo-icon">🔨</div>
-      <span class="nav-logo-text">AuctionHub</span>
+      <div class="nav-logo-icon"></div>
+      <span class="nav-logo-text">Лотус</span>
     </a>
     <div class="nav-divider"></div>
     <div class="nav-crumb">
@@ -36,14 +38,26 @@
       <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
         <div class="nav-avatar" id="avatar">?</div>
         <div>
-          <div class="nav-user-name" id="userName">—</div>
+          <div class="nav-user-name" id="userName">-</div>
           <div class="nav-balance" id="userBalance"></div>
         </div>
       </a>
       <button class="btn btn-primary btn-sm" id="authBtn" onclick="goAuth()">Войти</button>
+
+      <button class="nav-hamburger" type="button" onclick="document.getElementById('mobileNav').classList.add('open')">☰</button>
     </div>
   </div>
 </header>
+
+<!-- Mobile nav -->
+<div class="mobile-nav" id="mobileNav" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="mobile-nav-inner">
+    <div class="mobile-nav-title">Лотус</div>
+    <a class="mobile-nav-link" href="index.html">🏠 Аукционы</a>
+    <a class="mobile-nav-link" href="my-bids.html">🎯 Мои ставки</a>
+    <a class="mobile-nav-link" href="profile.html">👤 Профиль</a>
+  </div>
+</div>
 
 <!-- Notification dropdown -->
 <div class="notif-dropdown" id="notifDropdown">
@@ -58,6 +72,17 @@
      MAIN
      ================================================================ -->
 <div class="page-wrap">
+
+  <!-- LOT HEADER: badges + title + byline (hoisted above the columns) -->
+  <header class="lot-header" id="lotInfoBlock">
+    <div class="lot-meta-row">
+      <div class="status-badge active" id="statusBadge">Активен</div>
+      <div class="cat-badge" id="categoryBadge"></div>
+      <button id="editLotBtn" onclick="openEditModal()" style="display:none;" class="btn btn-secondary btn-sm">Редактировать</button>
+    </div>
+    <h1 class="lot-title" id="title">Загрузка…</h1>
+    <div class="lot-byline" id="lotByline"></div>
+  </header>
 
   <!-- TOP: gallery + sidebar -->
   <div class="lot-top">
@@ -79,23 +104,35 @@
     <div class="lot-sidebar">
 
       <!-- Price + Timer card -->
-      <div class="card">
-        <div class="card-title" id="bidCardTitle">Текущая ставка</div>
-        <div class="price-hero">
-          <span class="price-hero-val" id="currentPrice">—</span>
+      <div class="card price-card">
+        <div class="bid-card-head">
+          <div class="card-title" id="bidCardTitle">Текущая ставка</div>
+          <span class="bid-count-pill"><span id="bidsCount">0</span> ст.</span>
         </div>
-        <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">—</span></div>
+        <div class="price-hero">
+          <span class="price-hero-val" id="currentPrice">-</span>
+        </div>
+        <div class="price-start" id="priceStartRow">Старт: <span id="startingPrice">-</span></div>
+        <!-- Owner-only hint: how much actually lands on the seller's
+             balance after the platform takes its cut. Hidden by default,
+             flipped to display:flex from auction.js when the viewer is
+             the lot's creator. -->
+        <div class="seller-payout-hint" id="sellerPayoutHint" style="display:none;">
+          <span class="seller-payout-label">К получению</span>
+          <span class="seller-payout-val" id="sellerPayoutVal">-</span>
+          <span class="seller-payout-note" id="sellerPayoutNote">после комиссии</span>
+        </div>
 
         <div class="timer-row" id="timerRow">
-          <span class="timer-icon">⏱</span>
-          <span class="timer-val" id="timeLeft">—</span>
-          <span class="timer-bids"><span id="bidsCount">0</span> ставок</span>
+          <span class="timer-pulse"></span>
+          <span class="timer-val" id="timeLeft">-</span>
+          <span class="timer-label">до конца</span>
         </div>
 
         <!-- BIN block -->
         <div id="binBlock" style="display:none;" class="bin-block">
-          <div class="bin-label">Цена</div>
-          <div class="bin-price" id="binPriceDisplay">—</div>
+          <div class="bin-label">Купить сразу</div>
+          <div class="bin-price" id="binPriceDisplay">-</div>
           <button class="btn btn-primary" id="binBtn" onclick="buyNow()" style="width:100%;height:42px;font-size:14px;">Купить</button>
           <div id="binDivider" class="bin-divider">
             <div class="bin-divider-line"></div>
@@ -106,9 +143,24 @@
 
         <!-- Bid form -->
         <div class="bid-form" id="bidForm">
+          <div class="bid-quick" id="bidQuick" style="display:none;">
+            <button type="button" class="bid-quick-btn" data-bump="1"   onclick="bumpBid(1)">+1</button>
+            <button type="button" class="bid-quick-btn" data-bump="5"   onclick="bumpBid(5)">+5</button>
+            <button type="button" class="bid-quick-btn" data-bump="10"  onclick="bumpBid(10)">+10</button>
+            <button type="button" class="bid-quick-btn" data-bump="50"  onclick="bumpBid(50)">+50</button>
+            <button type="button" class="bid-quick-btn" data-bump="100" onclick="bumpBid(100)">+100</button>
+          </div>
           <div class="bid-input-wrap">
-            <span class="bid-currency">$</span>
+            <span class="bid-currency">₽</span>
             <input class="bid-input" id="bidAmount" type="number" min="0" step="0.01" placeholder="Введите сумму">
+            <div class="bid-num-stepper">
+              <button type="button" class="bid-num-btn" data-step="up" tabindex="-1" aria-label="Увеличить">
+                <svg width="10" height="6" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 4 1 7 4"/></svg>
+              </button>
+              <button type="button" class="bid-num-btn" data-step="down" tabindex="-1" aria-label="Уменьшить">
+                <svg width="10" height="6" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 4 4 7 1"/></svg>
+              </button>
+            </div>
           </div>
           <button class="btn btn-primary bid-submit" id="bidBtn" onclick="placeBid()">Поставить ставку</button>
           <div class="bid-hint" id="bidHint">Войдите, чтобы делать ставки</div>
@@ -128,7 +180,7 @@
         <div class="seller-top">
           <div class="seller-avatar" id="sellerAvatar">?</div>
           <div>
-            <a class="seller-name-link" id="sellerLink" href="#">—</a>
+            <a class="seller-name-link" id="sellerLink" href="#">-</a>
             <div class="seller-meta" id="sellerMeta">Продавец</div>
             <div class="seller-rating-row">
               <div class="stars" id="sellerStars"></div>
@@ -139,15 +191,15 @@
         </div>
         <div class="seller-stats">
           <div class="seller-stat">
-            <div class="seller-stat-val" id="sellerLots">—</div>
+            <div class="seller-stat-val" id="sellerLots">-</div>
             <div class="seller-stat-lbl">Лотов</div>
           </div>
           <div class="seller-stat">
-            <div class="seller-stat-val" id="sellerSubs">—</div>
+            <div class="seller-stat-val" id="sellerSubs">-</div>
             <div class="seller-stat-lbl">Подписчиков</div>
           </div>
           <div class="seller-stat">
-            <div class="seller-stat-val" id="sellerReviews">—</div>
+            <div class="seller-stat-val" id="sellerReviews">-</div>
             <div class="seller-stat-lbl">Отзывов</div>
           </div>
         </div>
@@ -160,150 +212,263 @@
     </div>
   </div>
 
-  <!-- LOT INFO: title, desc, stats -->
-  <div class="lot-info" id="lotInfoBlock">
-    <div class="lot-meta-row">
-      <div class="status-badge active" id="statusBadge">Активен</div>
-      <div class="cat-badge" id="categoryBadge"></div>
-      <button id="editLotBtn" onclick="openEditModal()" style="display:none;margin-left:auto;" class="btn btn-secondary btn-sm">✏️ Редактировать</button>
+  <!-- WINNER (shown only when the auction is finished) -->
+  <div class="winner-block" id="winnerBlock" style="display:none;">
+    <div class="winner-icon">🏆</div>
+    <div>
+      <div class="winner-label">Победитель</div>
+      <div class="winner-name" id="winnerName">-</div>
     </div>
-    <h1 class="lot-title" id="title">Загрузка…</h1>
-    <p class="lot-desc" id="description">Пожалуйста, подождите…</p>
-    <div class="lot-stats">
-      <div class="lot-stat">
-        <div class="lot-stat-label">Текущая цена</div>
-        <div class="lot-stat-value green" id="currentPrice2">—</div>
-      </div>
-      <div class="lot-stat">
-        <div class="lot-stat-label">Стартовая цена</div>
-        <div class="lot-stat-value" id="startingPrice2">—</div>
-      </div>
-      <div class="lot-stat">
-        <div class="lot-stat-label">До окончания</div>
-        <div class="lot-stat-value amber" id="timeLeft2">—</div>
-      </div>
-      <div class="lot-stat">
-        <div class="lot-stat-label">Ставок</div>
-        <div class="lot-stat-value" id="bidsCount2">—</div>
-      </div>
+  </div>
+
+  <!-- TABS: Description / Reviews -->
+  <div class="lot-tabs">
+    <div class="tabs-nav" role="tablist">
+      <button class="lot-tab-btn active" type="button" role="tab" data-tab="desc"
+              onclick="switchLotTab('desc')">Описание</button>
+      <button class="lot-tab-btn" type="button" role="tab" data-tab="reviews"
+              onclick="switchLotTab('reviews')">
+        Отзывы <span class="tab-count" id="reviewsTabCount">0</span>
+      </button>
     </div>
-    <div class="winner-block" id="winnerBlock" style="display:none;">
-      <div class="winner-icon">🏆</div>
-      <div>
-        <div class="winner-label">Победитель</div>
-        <div class="winner-name" id="winnerName">—</div>
+
+    <!-- Tab: Description -->
+    <div class="tab-panel active" id="tab-desc" role="tabpanel">
+      <p class="lot-desc" id="description">Пожалуйста, подождите…</p>
+    </div>
+
+    <!-- Tab: Reviews -->
+    <div class="tab-panel" id="tab-reviews" role="tabpanel">
+      <div class="reviews-section" id="reviewsSection">
+        <div class="reviews-head">
+          <div class="section-title">Отзывы о продавце</div>
+          <a id="allReviewsLink" href="#" style="display:none;" class="card-link">Профиль продавца →</a>
+        </div>
+        <div class="reviews-summary" id="reviewsSummary" style="display:none;">
+          <div class="reviews-big-score">
+            <div class="reviews-big-num" id="revAvg">-</div>
+            <div class="reviews-big-stars" id="revBigStars"></div>
+            <div class="reviews-big-count" id="revCount"></div>
+          </div>
+          <div class="reviews-bars" id="revBars"></div>
+        </div>
+
+        <!-- Star-filter pills -->
+        <div class="rev-filter" id="revFilter" style="display:none;">
+          <button class="rev-pill rev-pill-toggle" type="button" id="revPillThisLot" onclick="toggleThisLotOnly()">
+            <span class="rev-pill-check"
+                  ><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg></span>
+            Об этом лоте <span class="rev-pill-count" id="revPillThisLotCount">0</span>
+          </button>
+          <span class="rev-filter-sep"></span>
+          <button class="rev-pill active" data-rating="all" type="button" onclick="filterReviewsByRating('all',this)">
+            Все <span class="rev-pill-count" id="revPillAll">0</span>
+          </button>
+          <button class="rev-pill" data-rating="5" type="button" onclick="filterReviewsByRating(5,this)">
+            5<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill5">0</span>
+          </button>
+          <button class="rev-pill" data-rating="4" type="button" onclick="filterReviewsByRating(4,this)">
+            4<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill4">0</span>
+          </button>
+          <button class="rev-pill" data-rating="3" type="button" onclick="filterReviewsByRating(3,this)">
+            3<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill3">0</span>
+          </button>
+          <button class="rev-pill" data-rating="2" type="button" onclick="filterReviewsByRating(2,this)">
+            2<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill2">0</span>
+          </button>
+          <button class="rev-pill" data-rating="1" type="button" onclick="filterReviewsByRating(1,this)">
+            1<span class="rev-pill-star">★</span> <span class="rev-pill-count" id="revPill1">0</span>
+          </button>
+        </div>
+
+        <div class="review-list" id="reviewList"></div>
+        <div class="review-form" id="reviewForm" style="display:none;">
+          <div class="review-form-title">Оставить отзыв</div>
+          <div class="star-picker" id="starPicker">
+            <span class="star-pick" data-val="1">★</span>
+            <span class="star-pick" data-val="2">★</span>
+            <span class="star-pick" data-val="3">★</span>
+            <span class="star-pick" data-val="4">★</span>
+            <span class="star-pick" data-val="5">★</span>
+          </div>
+          <textarea class="review-ta" id="reviewText" maxlength="1000"
+                    placeholder="Расскажите о своём опыте работы с продавцом…"
+                    oninput="updateReviewCounter()"></textarea>
+          <div class="review-form-footer">
+            <span class="review-char-count" id="reviewCharCount">0 / 1000</span>
+            <button class="btn btn-primary btn-sm" onclick="submitReview()">Опубликовать отзыв</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- BOTTOM: Reviews -->
-  <div class="lot-bottom" id="reviewsSection">
-    <div class="reviews-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-        <div class="section-title">Отзывы об этом лоте</div>
-        <a id="allReviewsLink" href="#" style="display:none;font-size:12px;color:var(--accent);">Все отзывы о продавце →</a>
-      </div>
-      <div class="reviews-summary" id="reviewsSummary" style="display:none;">
-        <div class="reviews-big-score">
-          <div class="reviews-big-num" id="revAvg">—</div>
-          <div class="reviews-big-stars" id="revBigStars"></div>
-          <div class="reviews-big-count" id="revCount"></div>
-        </div>
-        <div class="reviews-bars" id="revBars"></div>
-      </div>
-      <div class="review-list" id="reviewList"></div>
-      <div class="review-form" id="reviewForm" style="display:none;">
-        <div class="review-form-title">Оставить отзыв</div>
-        <div class="star-picker" id="starPicker">
-          <span class="star-pick" data-val="1">★</span>
-          <span class="star-pick" data-val="2">★</span>
-          <span class="star-pick" data-val="3">★</span>
-          <span class="star-pick" data-val="4">★</span>
-          <span class="star-pick" data-val="5">★</span>
-        </div>
-        <textarea class="review-ta" id="reviewText" placeholder="Расскажите о своём опыте работы с продавцом…"></textarea>
-        <div class="review-form-footer">
-          <button class="btn btn-primary btn-sm" onclick="submitReview()">Опубликовать отзыв</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Hidden elements kept for compatibility with the old JS (sync targets) -->
+  <span id="currentPrice2" hidden></span>
+  <span id="startingPrice2" hidden></span>
+  <span id="timeLeft2" hidden></span>
+  <span id="bidsCount2" hidden></span>
 
 </div><!-- /.page-wrap -->
 
-<!-- Toast -->
-<div class="toast" id="toast">
-  <div class="toast-dot" id="toastDot"></div>
-  <div>
-    <div class="toast-title" id="toastTitle"></div>
-    <div class="toast-msg" id="toastMsg"></div>
-  </div>
-</div>
-
 <!-- Edit Lot Modal -->
-<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:300;align-items:center;justify-content:center;backdrop-filter:blur(6px);">
-  <div style="width:500px;max-width:95vw;max-height:88vh;overflow-y:auto;background:var(--bg-2);border:1px solid var(--border-hi);border-radius:16px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.6);">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+<div class="edit-modal-overlay" id="editModal" style="display:none;">
+  <div class="edit-modal-box">
+    <div class="edit-modal-head">
       <div>
-        <div style="font-size:17px;font-weight:700;">✏️ Редактировать лот</div>
-        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Изменения доступны пока нет ставок</div>
+        <div class="edit-modal-title">✏️ Редактировать лот</div>
+        <div class="edit-modal-sub">Изменения доступны пока нет ставок</div>
       </div>
-      <button onclick="closeEditModal()" style="background:var(--bg-3);border:1px solid var(--border);color:var(--text-3);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;">✕</button>
+      <button class="modal-close" type="button" onclick="closeEditModal()">✕</button>
     </div>
-    <div id="editError" style="display:none;padding:10px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:14px;"></div>
-    <div style="display:flex;flex-direction:column;gap:14px;">
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Название</div>
-        <input type="text" id="editTitle" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+
+    <div class="error-box" id="editError"></div>
+
+    <div class="edit-modal-fields">
+      <div class="form-group m-0">
+        <label class="form-label">Название</label>
+        <input type="text" class="form-input" id="editTitle">
       </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Описание</div>
-        <textarea id="editDescription" rows="3" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;resize:vertical;font-family:inherit;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+
+      <div class="form-group m-0">
+        <label class="form-label">Описание</label>
+        <textarea class="form-input" id="editDescription" rows="3"></textarea>
       </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Категория</div>
+
+      <div class="form-group m-0">
+        <label class="form-label">Категория</label>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <select id="editCategoryParent" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;cursor:pointer;"><option value="">— Выберите категорию —</option></select>
-          <select id="editCategory" style="display:none;width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;cursor:pointer;"><option value="">— Вся категория —</option></select>
+          <select class="form-input" id="editCategoryParent"><option value="">- Выберите категорию -</option></select>
+          <select class="form-input" id="editCategory" style="display:none;"><option value="">- Вся категория -</option></select>
         </div>
       </div>
-      <div id="editPriceBlock" style="display:flex;gap:12px;">
-        <div id="editStartPriceWrap" style="flex:1;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Стартовая цена ($)</div>
-          <input type="number" id="editPrice" min="1" step="0.01" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+
+      <div class="edit-field-row" id="editPriceBlock">
+        <div class="form-group" id="editStartPriceWrap" style="margin:0;">
+          <label class="form-label">Стартовая цена (₽)</label>
+          <input type="number" class="form-input" id="editPrice" min="1" step="0.01">
+          <div class="payout-hint" id="editPricePayout" hidden></div>
         </div>
-        <div id="editBinPriceBlock" style="flex:1;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Цена BIN ($)</div>
-          <input type="number" id="editBinPrice" min="1" step="0.01" style="width:100%;padding:9px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:9px;color:var(--text-1);font-size:14px;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
-        </div>
-      </div>
-      <div id="editExtendBlock">
-        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Продлить аукцион</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-          <button type="button" onclick="setExtend(30)" style="padding:6px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;">+30 мин</button>
-          <button type="button" onclick="setExtend(60)" style="padding:6px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;">+1 час</button>
-          <button type="button" onclick="setExtend(1440)" style="padding:6px 12px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-2);font-size:12px;font-weight:600;cursor:pointer;">+1 день</button>
-          <input type="number" id="editExtend" min="1" max="10080" placeholder="мин вручную" style="width:130px;padding:6px 10px;background:var(--bg-3);border:1px solid var(--border);border-radius:7px;color:var(--text-1);font-size:12px;outline:none;">
+        <div class="form-group" id="editBinPriceBlock" style="margin:0;">
+          <label class="form-label">Цена BIN (₽)</label>
+          <input type="number" class="form-input" id="editBinPrice" min="1" step="0.01">
+          <div class="payout-hint" id="editBinPricePayout" hidden></div>
         </div>
       </div>
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Фотографии</div>
+
+      <div class="form-group" id="editExtendBlock" style="margin:0;">
+        <label class="form-label">Продлить аукцион</label>
+        <div class="edit-extend-row">
+          <button type="button" class="btn btn-secondary" onclick="setExtend(30)">+30 мин</button>
+          <button type="button" class="btn btn-secondary" onclick="setExtend(60)">+1 час</button>
+          <button type="button" class="btn btn-secondary" onclick="setExtend(1440)">+1 день</button>
+          <input type="number" id="editExtend" min="1" max="10080" placeholder="мин вручную">
+        </div>
+      </div>
+
+      <div class="form-group m-0">
+        <label class="form-label">Фотографии</label>
         <div class="multi-img-preview" id="editImgPreview"></div>
-        <label for="editImageFile" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;background:var(--bg-3);border:1px dashed var(--border-hi);border-radius:8px;color:var(--text-3);font-size:12px;font-weight:600;cursor:pointer;">
+        <label for="editImageFile" class="multi-img-add" style="margin-top:8px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Добавить фото
         </label>
         <input type="file" id="editImageFile" accept="image/*" multiple style="display:none;">
-        <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Первое фото — обложка. До 5 изображений.</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:5px;">Первое фото - обложка. До 5 изображений.</div>
       </div>
     </div>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
-      <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Отмена</button>
-      <button type="button" id="editSaveBtn" onclick="saveEdit()" class="btn btn-primary" style="min-width:130px;">Сохранить</button>
+
+    <div class="edit-modal-footer">
+      <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Отмена</button>
+      <button type="button" class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()" style="min-width:130px;">Сохранить</button>
     </div>
   </div>
 </div>
 
+<!-- ================================================================
+     FOOTER
+     ================================================================ -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="footer-logo">
+        <div class="nav-logo-icon"></div>
+        <span class="footer-logo-text">Лотус</span>
+      </div>
+      <p class="footer-tagline">
+        Платформа онлайн-аукционов для коллекционеров.<br>
+        Торгуйтесь честно, побеждайте достойно.
+      </p>
+      <div class="footer-social">
+        <a class="footer-soc" href="#" aria-label="Telegram"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg></a>
+        <a class="footer-soc" href="#" aria-label="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57v-2c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.66-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.13 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.6-2.81 5.62-5.48 5.92.42.36.81 1.1.81 2.22v3.29c0 .31.22.69.83.57A12 12 0 0 0 12 .3z"/></svg></a>
+        <a class="footer-soc" href="#" aria-label="Twitter"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+      </div>
+    </div>
+
+    <div class="footer-cols">
+      <div class="footer-col">
+        <div class="footer-col-title">Платформа</div>
+        <a class="footer-link" href="index.html">Все аукционы</a>
+        <a class="footer-link" href="my-bids.html">Мои ставки</a>
+        <a class="footer-link" href="profile.html">Профиль</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Помощь</div>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">О сервисе</div>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <div class="footer-bottom-inner">
+      <span class="footer-copy">© 2026 Лотус. Все права защищены.</span>
+    </div>
+  </div>
+</footer>
+
+  <!-- Lightbox: открывается по клику на фото в галерее лота.
+       Поддерживает зум (колесом / кнопками), панорамирование при зуме,
+       навигацию стрелками / клавишами, закрытие на Esc / клике по фону. -->
+  <div class="lot-lightbox" id="lotLightbox" hidden>
+    <button class="lb-btn lb-close" type="button" onclick="closeLightbox()" aria-label="Закрыть">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <button class="lb-btn lb-nav lb-prev" type="button" onclick="lbSlide(-1)" aria-label="Предыдущее">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <button class="lb-btn lb-nav lb-next" type="button" onclick="lbSlide(1)" aria-label="Следующее">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="lb-stage" id="lbStage">
+      <img class="lb-img" id="lbImg" alt="" draggable="false">
+    </div>
+    <div class="lb-controls">
+      <button class="lb-btn" type="button" onclick="lbZoom(-0.25)" aria-label="Уменьшить">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <span class="lb-zoom-label" id="lbZoomLabel">100%</span>
+      <button class="lb-btn" type="button" onclick="lbZoom(0.25)" aria-label="Увеличить">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button class="lb-btn" type="button" onclick="lbZoomReset()" aria-label="Сбросить">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+      </button>
+    </div>
+    <div class="lb-counter" id="lbCounter"></div>
+  </div>
+
+  <script src="/static/js/common.js"></script>
   <script src="/static/js/auction.js"></script>
 </body>
 </html>

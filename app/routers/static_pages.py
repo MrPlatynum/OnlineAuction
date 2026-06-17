@@ -1,3 +1,11 @@
+"""Plain-HTML pages served as static templates.
+
+The frontend is multi-page, no SPA framework - each navigable URL maps
+to a file in ``templates/`` returned via ``FileResponse``. Per-page
+``static/js/<page>.js`` does the data fetching client-side; this
+module just resolves URL → file and 404s if the template is missing.
+"""
+
 import os
 
 from fastapi import APIRouter, HTTPException
@@ -13,7 +21,7 @@ router = APIRouter()
 def _page(name: str) -> FileResponse:
     path = os.path.join(TEMPLATES_DIR, name)
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Page not found")
+        raise HTTPException(status_code=404, detail="Страница не найдена")
     return FileResponse(path)
 
 
@@ -47,12 +55,18 @@ async def read_user():
     return _page("user.html")
 
 
-@router.get("/notifications.html")
-async def read_notifications():
-    notifications_path = os.path.join(TEMPLATES_DIR, "notifications.html")
-    if os.path.exists(notifications_path):
-        return FileResponse(notifications_path)
-    demo_path = os.path.join(BASE_DIR, "notifications_demo.html")
-    if os.path.exists(demo_path):
-        return FileResponse(demo_path)
-    raise HTTPException(status_code=404, detail="Page not found")
+@router.get("/verify-email.html")
+async def read_verify_email():
+    return _page("verify-email.html")
+
+
+@router.get("/forgot-password.html")
+async def read_forgot_password():
+    return _page("forgot-password.html")
+
+
+@router.get("/password-reset.html")
+async def read_password_reset():
+    return _page("password-reset.html")
+
+

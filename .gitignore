@@ -5,6 +5,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
 
 # Virtual env
 venv/
@@ -20,19 +22,7 @@ env/
 .env.local
 
 # Application data — never commit
-auction.db
-auction.db.backup_*
 static/uploads/
-
-# Test/dev images (not part of the app)
-images/
-
-# Refactor backup (delete after thesis defense)
-_old_root_html/
-
-# Personal notes (not for repo)
-Запуск.txt
-Текстовый документ.txt
 
 # Misc
 *.bak
@@ -40,3 +30,4 @@ _old_root_html/
 *.swp
 .DS_Store
 Thumbs.db
+static/email_preview/

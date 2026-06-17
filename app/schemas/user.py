@@ -1,18 +1,71 @@
 from datetime import datetime
-from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+# Username charset: Latin + Cyrillic letters, digits, underscore,
+# hyphen. Defence-in-depth against stored-XSS: the username flows
+# into Notification.message ("@<user> выставил новый лот: …") and
+# auction listings; the frontend escapes through esc() everywhere
+# today, but constraining the source means a future render-path
+# regression that calls innerHTML directly on a username can't be
+# exploited. Auction titles intentionally remain unrestricted -
+# sellers need quotes / punctuation - so titles stay covered by
+# the render-side escape discipline.
+# First character must be alphanumeric so leading-hyphen handles
+# ("-alice") that confuse CLI tools and URL parsers can't slip
+# through. Remaining characters keep the wider charset.
+_USERNAME_PATTERN = r"^[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_-]*$"
+
+
+def _normalize_username(value: str) -> str:
+    """Lower-case the username at every input boundary so 'Alice' and
+    'alice' collapse to the same row and the SQL UNIQUE constraint
+    actually enforces "one account per name". Without this the
+    column comparison ``User.username == ...`` is case-sensitive and
+    both rows could legally coexist, making @-mentions ambiguous and
+    profile lookups silently fail on case-mismatched URLs."""
+    return value.lower() if isinstance(value, str) else value
+
+
+def _normalize_email(value: str) -> str:
+    """Lower-case the email at every input boundary for the same reason
+    as the username: ``EmailStr`` only normalises the domain, so
+    ``Alice@x.com`` and ``alice@x.com`` would register as two distinct
+    rows under the case-sensitive UNIQUE index and a password-reset
+    lookup keyed on the other casing would silently miss the account.
+    Mail providers treat the local part case-insensitively in practice,
+    so folding it is safe and closes the duplicate-account window."""
+    return value.lower() if isinstance(value, str) else value
 
 
 class UserCreate(BaseModel):
-    username: str
+    username: str = Field(min_length=3, max_length=32, pattern=_USERNAME_PATTERN)
     email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("username", mode="after")
+    @classmethod
+    def _lower_username(cls, v: str) -> str:
+        return _normalize_username(v)
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _lower_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class UserLogin(BaseModel):
     username: str
-    password: str
+    # Match UserCreate / ChangePasswordRequest. Without an explicit cap a
+    # multi-MB JSON body would parse before verify_password's internal
+    # limit kicked in; 128 chars is well above NIST's recommended minimum
+    # and what most major sites accept (AWS, Stripe, etc.).
+    password: str = Field(max_length=128)
+
+    @field_validator("username", mode="after")
+    @classmethod
+    def _lower_username(cls, v: str) -> str:
+        return _normalize_username(v)
 
 
 class UserResponse(BaseModel):
@@ -21,13 +74,16 @@ class UserResponse(BaseModel):
     username: str
     email: str
     balance: float
-    created_at: Optional[datetime] = None
-    avatar_url: Optional[str] = None
+    created_at: datetime | None = None
+    avatar_url: str | None = None
+    email_verified: bool = False
     email_notifications: bool = True
     notify_outbid: bool = True
     notify_winning: bool = True
     notify_ending: bool = True
     notify_sold: bool = True
+    notify_bid_received: bool = True
+    notify_lost: bool = True
 
 
 class NotificationSettings(BaseModel):
@@ -36,8 +92,33 @@ class NotificationSettings(BaseModel):
     notify_winning: bool
     notify_ending: bool
     notify_sold: bool
+    notify_bid_received: bool = True
+    notify_lost: bool = True
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
+    # Mirror new_password / UserCreate.password / UserLogin.password:
+    # without the cap a multi-MB body parses into memory before
+    # verify_password's 1024-byte fast-reject kicks in, so the
+    # Pydantic-layer ddos cap every sibling field carries was
+    # missing on exactly one entry point.
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+class PasswordResetRequestBody(BaseModel):
+    email: EmailStr
+
+    @field_validator("email", mode="after")
+    @classmethod
+    def _lower_email(cls, v: str) -> str:
+        return _normalize_email(v)
+
+
+class PasswordResetConfirmBody(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=128)

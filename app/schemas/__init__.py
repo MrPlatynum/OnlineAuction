@@ -1,29 +1,43 @@
-from app.schemas.user import (
-    ChangePasswordRequest,
-    NotificationSettings,
-    UserCreate,
-    UserLogin,
-    UserResponse,
-)
-from app.schemas.notification import NotificationResponse
 from app.schemas.auction import (
     AuctionCreate,
     AuctionResponse,
+    AuctionUpdate,
     PaginatedAuctionsResponse,
 )
-from app.schemas.bid import BidCreate, BidResponse, PaginatedBidsResponse
 from app.schemas.balance import DepositRequest, WithdrawRequest
-from app.schemas.review import ReviewCreate
+from app.schemas.bid import BidCreate, BidResponse, PaginatedBidsResponse
+from app.schemas.notification import NotificationResponse, PaginatedNotificationsResponse
+from app.schemas.review import (
+    ReviewCreate,
+    SellerReviewItem,
+    SellerReviewsResponse,
+    SellerReviewsStats,
+)
+from app.schemas.user import (
+    ChangePasswordRequest,
+    NotificationSettings,
+    PasswordResetConfirmBody,
+    PasswordResetRequestBody,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    VerifyEmailRequest,
+)
 
 __all__ = [
     "ChangePasswordRequest",
     "NotificationSettings",
+    "PasswordResetConfirmBody",
+    "PasswordResetRequestBody",
     "UserCreate",
     "UserLogin",
     "UserResponse",
+    "VerifyEmailRequest",
     "NotificationResponse",
+    "PaginatedNotificationsResponse",
     "AuctionCreate",
     "AuctionResponse",
+    "AuctionUpdate",
     "PaginatedAuctionsResponse",
     "BidCreate",
     "BidResponse",
@@ -31,4 +45,7 @@ __all__ = [
     "DepositRequest",
     "WithdrawRequest",
     "ReviewCreate",
+    "SellerReviewItem",
+    "SellerReviewsResponse",
+    "SellerReviewsStats",
 ]

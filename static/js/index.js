@@ -1,12 +1,3 @@
-(function(){
-  const t = localStorage.getItem('theme') || 'dark';
-  if (t === 'light') document.documentElement.setAttribute('data-theme','light');
-  else if (t === 'auto') {
-    if (!window.matchMedia('(prefers-color-scheme: dark)').matches)
-      document.documentElement.setAttribute('data-theme','light');
-  }
-})();
-
 // Mobile nav
 function openMobileNav() { document.getElementById('mobileNav').classList.add('open'); }
 function closeMobileNavFull() { document.getElementById('mobileNav').classList.remove('open'); }
@@ -25,13 +16,79 @@ function setStatus(el, status) {
   }
 }
 
-function onSortChange() { /* применяется через кнопку Применить */ }
-function onCategoryChange() { /* применяется через selectCategory */ }
+function onSortChange() { /* applied via the Apply button */ }
+function onCategoryChange() { /* applied via selectCategory */ }
+
+// Write the current filters back to the URL without reloading the
+// page. Parameters at default values are omitted so a "clean" home
+// page yields a clean index.html URL.
+window.syncUrlFromFilters = function() {
+  if (typeof currentFilters === 'undefined') return;
+  const f = currentFilters;
+  const p = new URLSearchParams();
+  if (f.status && f.status !== 'active')   p.set('status',       f.status);
+  if (f.search)                            p.set('search',       f.search);
+  if (f.category)                          p.set('category',     f.category);
+  if (f.minPrice)                          p.set('min_price',    f.minPrice);
+  if (f.maxPrice)                          p.set('max_price',    f.maxPrice);
+  if (f.createdBy)                         p.set('created_by',   f.createdBy);
+  if (f.auctionType)                       p.set('auction_type', f.auctionType);
+  if (f.sortBy && f.sortBy !== 'time')     p.set('sort_by',      f.sortBy);
+  if (f.page && f.page > 1)                p.set('page',         f.page);
+  const qs = p.toString();
+  const newUrl = location.pathname + (qs ? '?' + qs : '') + location.hash;
+  if (newUrl === location.pathname + location.search + location.hash) return;
+  // pushState (not replaceState) so Back/Forward behave the way users
+  // expect - each filter commit is a separate history entry. The
+  // popstate handler below reloads the page: simpler and more reliable
+  // than duplicating the entire UI-sync logic from the init IIFE.
+  history.pushState({ filters: true }, '', newUrl);
+};
+
+// On Back/Forward navigation, reload the page so the init IIFE runs
+// against the new URL. The alternative - manually syncing every input,
+// checkbox, active class, and breadcrumb - is ~80 extra lines that
+// easily drift out of step with the init IIFE.
+window.addEventListener('popstate', () => {
+  // Guard against our own pushState (inside loadAuctions) somehow
+  // firing popstate - real popstates carry state!=null from us or null
+  // from the first entry. A reload is idempotent in either case.
+  location.reload();
+});
 
 document.addEventListener('DOMContentLoaded', () => setTimeout(loadCategories, 150));
 
-// Загрузка категорий с сервера
+// Fetch the live platform constants and reflect the seller commission
+// in the hero strip. Falls back silently to the hard-coded "7%" already
+// in the HTML if the endpoint is unreachable - the page must not break
+// because a marketing badge couldn't update.
+document.addEventListener('DOMContentLoaded', async () => {
+  const el = document.getElementById('statCommission');
+  if (!el) return;
+  try {
+    const r = await fetch(`${window.API}/api/platform`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (typeof data.commission_percent === 'number') {
+      // Integer percent looks better in the marketing strip; the
+      // backend stores Decimal so we render whatever it ships.
+      const pct = Number.isInteger(data.commission_percent)
+        ? data.commission_percent
+        : data.commission_percent.toFixed(1);
+      el.textContent = `${pct}%`;
+    }
+  } catch {
+    /* keep the hard-coded fallback */
+  }
+});
+
+// Fetch categories from the server.
 // ===== Search History =====
+// localStorage can throw on every access in private-browsing mode
+// (Safari) and when the user has disabled site data - search history
+// is a nice-to-have, never let it break the page. Each access below
+// is wrapped in try/catch that intentionally swallows; the function
+// returns an empty array / no-ops so callers don't need to branch.
 const SEARCH_HISTORY_KEY = 'auction_search_history';
 const SEARCH_HISTORY_MAX = 8;
 
@@ -70,12 +127,14 @@ function renderSearchHistory() {
     list.innerHTML = '<div class="sh-empty">История пуста</div>';
     return;
   }
-  list.innerHTML = history.map(q => `
-    <div class="sh-item" onclick="applyHistorySearch('${q.replace(/'/g, "\\'")}')">
+  list.innerHTML = history.map(q => {
+    const safe = esc(q);
+    return `<div class="sh-item" data-query="${safe}" onclick="applyHistorySearch(this.dataset.query)">
       <span class="sh-item-icon">🕐</span>
-      <span class="sh-item-text">${q}</span>
-      <button class="sh-item-del" onclick="event.stopPropagation();removeFromSearchHistory('${q.replace(/'/g, "\\'")}')">×</button>
-    </div>`).join('');
+      <span class="sh-item-text">${safe}</span>
+      <button class="sh-item-del" onclick="event.stopPropagation();removeFromSearchHistory(this.parentElement.dataset.query)">×</button>
+    </div>`;
+  }).join('');
 }
 
 function showSearchHistory() {
@@ -111,18 +170,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const wrap  = document.getElementById('searchWrap');
 
   if (input) {
-    // Показать историю при фокусе
+    // Show search history on focus.
     input.addEventListener('focus', () => {
       if (!input.value) showSearchHistory();
     });
-    // Скрыть при вводе (показываем только когда поле пустое)
+    // Hide while typing - history only shows when the field is empty.
     input.addEventListener('input', () => {
       if (input.value) hideSearchHistory();
       else showSearchHistory();
     });
   }
 
-  // Скрыть при клике вне
+  // Hide on outside click.
   document.addEventListener('click', e => {
     const nav = document.querySelector('.nav-search');
     if (nav && !nav.contains(e.target)) hideSearchHistory();
@@ -139,8 +198,8 @@ function setAuctionType(type) {
   const isBin = type === 'bin';
   const hint  = document.getElementById('auctionTypeHint');
   if (hint) hint.textContent = isBin
-    ? 'Фиксированная цена — первый покупатель забирает лот'
-    : 'Покупатели делают ставки — побеждает наибольшая';
+    ? 'Фиксированная цена - первый покупатель забирает лот'
+    : 'Покупатели делают ставки - побеждает наибольшая';
 
   const bidFields = document.getElementById('bidFields');
   const binFields = document.getElementById('binFields');
@@ -150,24 +209,21 @@ function setAuctionType(type) {
 
 
 async function loadCategories() {
-  const apiBase = (typeof API_URL !== 'undefined' ? API_URL : null)
-               || (typeof API !== 'undefined' ? API : null)
-               || 'http://localhost:8000';
   try {
-    const r = await fetch(`${apiBase}/api/categories`);
+    const r = await fetch(`${window.API}/api/categories`);
     if (!r.ok) return;
     const cats = await r.json();
 
-    // Заполняем боковую панель — дерево категорий
+    // Populate the sidebar - the category tree.
     const listEl = document.getElementById('fsCatList');
     if (listEl) {
-      // Убираем дубли если уже есть
+      // Remove duplicates if already rendered.
       listEl.querySelectorAll('.fs-cat-item:not([data-slug=""]),.fs-cat-subs').forEach(e => e.remove());
       cats.forEach(cat => {
         const btn = document.createElement('button');
         btn.className = 'fs-cat-item';
         btn.dataset.slug = cat.slug;
-        btn.innerHTML = `<span>${cat.icon}</span> ${cat.name}`;
+        btn.textContent = cat.name;
         btn.onclick = () => selectCategory(btn, cat.slug, null, cat.name, null);
         listEl.appendChild(btn);
 
@@ -181,7 +237,7 @@ async function loadCategories() {
             sb.className = 'fs-sub-item';
             sb.dataset.slug = ch.slug;
             sb.dataset.parent = cat.slug;
-            sb.innerHTML = `<span>${ch.icon}</span> ${ch.name}`;
+            sb.textContent = ch.name;
             sb.onclick = () => selectCategory(sb, ch.slug, cat.slug, ch.name, cat.name);
             subs.appendChild(sb);
           });
@@ -190,8 +246,53 @@ async function loadCategories() {
       });
     }
 
-    // Двухшаговый пикер категорий в форме создания
-    window._catsData = cats; // кэшируем для sub-select
+    // Restore the visual selected-category state from the URL.
+    // Without this, after reload the chip renders from the slug but the
+    // active sidebar button and breadcrumb stay unhighlighted.
+    if (typeof currentFilters !== 'undefined' && currentFilters.category && listEl) {
+      const slug = currentFilters.category;
+      let parentSlug = null, parentName = null, name = slug;
+      let sub = null, parent = null;
+      for (const cat of cats) {
+        if (cat.slug === slug) { parent = cat; name = cat.name; break; }
+        if (cat.children) {
+          const ch = cat.children.find(c => c.slug === slug);
+          if (ch) { sub = ch; parent = cat; parentSlug = cat.slug; parentName = cat.name; name = ch.name; break; }
+        }
+      }
+      if (parent || sub) {
+        document.querySelectorAll('.fs-cat-item,.fs-sub-item').forEach(b => b.classList.remove('active'));
+        const sel = listEl.querySelector(
+          sub ? `.fs-sub-item[data-slug="${CSS.escape(slug)}"]`
+              : `.fs-cat-item[data-slug="${CSS.escape(slug)}"]`
+        );
+        if (sel) sel.classList.add('active');
+        const containerSlug = parentSlug || slug;
+        const subs = document.getElementById(`subs-${containerSlug}`);
+        if (subs) subs.style.display = 'block';
+        currentFilters.categoryName = name;
+        currentFilters.categoryParentSlug = parentSlug;
+        currentFilters.categoryParentName = parentName;
+        currentFilters.categoryLabel = parentName ? `${parentName} → ${name}` : name;
+      } else {
+        // The URL slug isn't in the catalog (category was removed or
+        // renamed). Drop the filter - otherwise the server returns an
+        // empty result and the chip sticks with a meaningless slug.
+        currentFilters.category = '';
+        currentFilters.categoryName = '';
+        currentFilters.categoryParentSlug = null;
+        currentFilters.categoryParentName = null;
+        currentFilters.categoryLabel = '';
+        if (typeof showToast === 'function') {
+          showToast('Категория не найдена', 'Фильтр по категории сброшен.', 'warn');
+        }
+      }
+      if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
+      if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
+    }
+
+    // Two-step category picker on the create-lot form.
+    window._catsData = cats; // cached for the sub-select.
     const parentSel = document.getElementById('auctionCategoryParent');
     const subSel    = document.getElementById('auctionCategory');
     if (parentSel && parentSel.options.length <= 1) {
@@ -199,24 +300,24 @@ async function loadCategories() {
         const opt = document.createElement('option');
         opt.value = cat.id;
         opt.dataset.slug = cat.slug;
-        opt.textContent = `${cat.icon} ${cat.name}`;
+        opt.textContent = cat.name;
         parentSel.appendChild(opt);
       });
       parentSel.addEventListener('change', () => {
         const catId = +parentSel.value;
         const cat = cats.find(c => c.id === catId);
-        subSel.innerHTML = '<option value="">— Вся категория —</option>';
+        subSel.innerHTML = '<option value="">- Вся категория -</option>';
         if (cat && cat.children && cat.children.length) {
           cat.children.forEach(ch => {
             const o = document.createElement('option');
-            o.value = ch.id; o.textContent = `${ch.icon} ${ch.name}`;
+            o.value = ch.id; o.textContent = ch.name;
             subSel.appendChild(o);
           });
           subSel.style.display = 'block';
         } else {
           subSel.style.display = 'none';
         }
-        // Если нет подкатегорий — sub = parent
+        // No subcategories - the picked sub is the parent itself.
         if (!cat || !cat.children || !cat.children.length) {
           subSel.value = parentSel.value || '';
         } else {
@@ -278,31 +379,44 @@ window.renderFilterTags = function() {
   const el = document.getElementById('filterTags');
   if (!el || typeof currentFilters === 'undefined') return;
   const tags = [];
-  if (currentFilters.search)     tags.push({ label: `🔍 ${currentFilters.search}`,   key: 'search' });
+  if (currentFilters.search)     tags.push({ label: `🔍 ${esc(currentFilters.search)}`, key: 'search' });
   if (currentFilters.category) {
     const parentSlug = currentFilters.categoryParentSlug;
     const parentName = currentFilters.categoryParentName;
-    const name       = currentFilters.categoryName;
+    // Names arrive from loadCategories asynchronously (~150ms after
+    // DOMContentLoaded). Until then, or if the slug isn't in the
+    // catalog, the name is empty - fall back to the slug itself so the
+    // chip doesn't look like a bare "📂".
+    const name = currentFilters.categoryName || currentFilters.category;
     let label;
     if (parentSlug && parentName) {
-      // Подкатегория — "Одежда → Мужская", клик на "Одежда" переключает на родителя
-      label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${parentName}">${parentName}</span> <span style="opacity:.5;">›</span> ${name}`;
+      // Subcategory - e.g. "Clothing > Men"; clicking the parent switches to it.
+      label = `📂 <span class="crumb-link" onclick="clickCrumbParent()" title="Выбрать категорию ${esc(parentName)}">${esc(parentName)}</span> <span style="opacity:.5;">›</span> ${esc(name)}`;
     } else {
-      label = `📂 ${name}`;
+      label = `📂 ${esc(name)}`;
     }
     tags.push({ label, key: 'category', raw: true });
   }
-  if (currentFilters.minPrice)   tags.push({ label: `от $${currentFilters.minPrice}`, key: 'minPrice' });
-  if (currentFilters.maxPrice)   tags.push({ label: `до $${currentFilters.maxPrice}`, key: 'maxPrice' });
-  if (currentFilters.createdBy)  tags.push({ label: `@${currentFilters.createdBy}`,   key: 'createdBy' });
+  if (currentFilters.minPrice)   tags.push({ label: `от ${esc(String(currentFilters.minPrice))} ₽`, key: 'minPrice' });
+  if (currentFilters.maxPrice)   tags.push({ label: `до ${esc(String(currentFilters.maxPrice))} ₽`, key: 'maxPrice' });
+  if (currentFilters.createdBy)  tags.push({ label: `@${esc(currentFilters.createdBy)}`, key: 'createdBy' });
   if (currentFilters.auctionType) tags.push({
     label: currentFilters.auctionType === 'bin' ? '⚡ BIN' : '🔨 BID', key: 'auctionType'
   });
-  el.innerHTML = tags.map(t => `
-    <div class="filter-tag">
-      ${t.raw ? t.label : t.label}
-      <button class="filter-tag-remove" onclick="removeFilterTag('${t.key}')">×</button>
+  const chips = tags.map(t => `
+    <div class="filter-tag" data-key="${t.key}">
+      <span class="filter-tag-label">${t.raw ? t.label : t.label}</span>
+      <button class="filter-tag-remove" onclick="removeFilterTag('${t.key}')" aria-label="Удалить фильтр">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>
+      </button>
     </div>`).join('');
+  const clearAll = tags.length >= 2
+    ? `<button class="filter-tag-clear" type="button" onclick="resetFilters()">
+         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+         Очистить все
+       </button>`
+    : '';
+  el.innerHTML = chips + clearAll;
 }
 
 window.clickCrumbParent = function() {
@@ -311,7 +425,7 @@ window.clickCrumbParent = function() {
   const parentName = currentFilters.categoryParentName;
   if (!parentSlug) return;
 
-  // Найти кнопку родительской категории и кликнуть её
+  // Find the parent-category button and click it.
   const btn = document.querySelector(`.fs-cat-item[data-slug="${parentSlug}"]`);
   if (btn) {
     selectCategory(btn, parentSlug, null, parentName, null);
@@ -347,7 +461,7 @@ window.removeFilterTag = function(key) {
 window.resetFilters = function() {
   if (typeof currentFilters === 'undefined') return;
 
-  // Сбрасываем инпуты
+  // Reset inputs.
   ['searchInput','minPrice','maxPrice','creatorInput'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -355,16 +469,16 @@ window.resetFilters = function() {
   const bid = document.getElementById('filterBid');  if (bid)  bid.checked = false;
   const bin = document.getElementById('filterBin');  if (bin)  bin.checked = false;
 
-  // Сбрасываем категории
+  // Reset categories.
   document.querySelectorAll('.fs-cat-item,.fs-sub-item').forEach(b => b.classList.remove('active'));
   document.querySelector('.fs-cat-item[data-slug=""]')?.classList.add('active');
   document.querySelectorAll('.fs-cat-subs').forEach(s => s.style.display = 'none');
 
-  // Сбрасываем статус-табы
+  // Reset status tabs.
   document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
   document.querySelector('[data-status="active"]')?.classList.add('active');
 
-  // Сбрасываем объект фильтров
+  // Reset the filters object.
   currentFilters.search = '';
   currentFilters.minPrice = null;
   currentFilters.maxPrice = null;
@@ -385,7 +499,7 @@ window.resetFilters = function() {
 
 
 
-// Duration hint — показывает время окончания в реальном времени
+// Duration hint - shows the end time in real time.
 document.addEventListener('DOMContentLoaded', () => {
   const dur = document.getElementById('auctionDuration');
   const hint = document.getElementById('durationHint');
@@ -403,11 +517,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const end = new Date(Date.now() + mins * 60000);
     const endStr = end.toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    hint.textContent = `${label} — завершится ${endStr}`;
+    hint.textContent = `${label} - завершится ${endStr}`;
   }
 
   dur.addEventListener('input', updateHint);
-  // Также обновлять когда модалка открывается
+  // Also refresh when the modal opens.
   document.getElementById('createModal')?.addEventListener('transitionend', updateHint);
   updateHint();
 });
@@ -456,13 +570,6 @@ document.addEventListener('click', e => {
   if (typeof loadAuctions === 'function') loadAuctions();
 });
 
-// Patch init to sync buttons after user loaded
-const _origInit = window.init;
-window.init = async function() {
-  if (typeof _origInit === 'function') await _origInit();
-  syncCreateBtns();
-};
-
 /* Advanced filter panel open class handler */
 document.addEventListener('DOMContentLoaded', () => {
   const adv = document.getElementById('advancedFilters');
@@ -500,10 +607,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-        const API_URL = 'http://localhost:8000';
-        const WS_URL = 'ws://localhost:8000';
-        let token = localStorage.getItem('token');
+        // API / WS_BASE come from common.js (window.API, window.WS_BASE).
+        // The local WS_URL alias stays - reads tighter in template strings.
+        const WS_URL  = window.WS_BASE;
+        let token = window.getToken();
         let currentUser = null;
+        // Mirror currentUser onto window so inline handlers in the
+        // template (e.g. the "List your lot" button) can tell a guest
+        // from a logged-in user. Used as
+        // window.currentUser? showCreateModal() : showAuth().
+        window.currentUser = null;
         let websockets = {};
         let timers = {};
         let reconnectAttempts = {};
@@ -521,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pageSize: 20
         };
 
-        // Читаем параметры из URL при загрузке
+        // Read filter parameters from the URL on load.
         (function() {
             const p = new URLSearchParams(location.search);
             if (p.get('created_by')) {
@@ -534,10 +647,81 @@ document.addEventListener('DOMContentLoaded', () => {
                 const inp = document.getElementById('searchInput');
                 if (inp) inp.value = p.get('search');
             }
+            const st = p.get('status');
+            if (st === 'active' || st === 'completed' || st === 'all') {
+                currentFilters.status = st;
+                // Switch the active status button.
+                document.querySelectorAll('[data-status]').forEach(b => {
+                    b.classList.toggle('active', b.dataset.status === st);
+                });
+                // Update the page heading to match the active status.
+                const titleEl = document.getElementById('pageTitle');
+                if (titleEl) {
+                    titleEl.textContent = st === 'completed' ? 'Завершённые аукционы'
+                                        : st === 'all'       ? 'Все аукционы'
+                                                             : 'Активные аукционы';
+                }
+            }
+            // Category - slug may arrive via the lot-page breadcrumb.
+            // Display names load asynchronously in loadCategories(), but
+            // the filter operates on the slug.
+            if (p.get('category')) {
+                currentFilters.category = p.get('category');
+            }
+            const minP = p.get('min_price');
+            if (minP) {
+                currentFilters.minPrice = minP;
+                const inp = document.getElementById('minPrice');
+                if (inp) inp.value = minP;
+            }
+            const maxP = p.get('max_price');
+            if (maxP) {
+                currentFilters.maxPrice = maxP;
+                const inp = document.getElementById('maxPrice');
+                if (inp) inp.value = maxP;
+            }
+            const at = p.get('auction_type');
+            if (at === 'bid' || at === 'bin') {
+                currentFilters.auctionType = at;
+                const box = document.getElementById(at === 'bid' ? 'filterBid' : 'filterBin');
+                if (box) box.checked = true;
+            }
+            const sb = p.get('sort_by');
+            if (sb === 'time' || sb === 'price_asc' || sb === 'price_desc') {
+                currentFilters.sortBy = sb;
+                const sel = document.getElementById('sortFilter');
+                if (sel) sel.value = sb;
+                // Update the decorative dropdown - select + label.
+                document.querySelectorAll('.fs-dd-opt').forEach(o => {
+                    const isSel = o.dataset.value === sb;
+                    o.classList.toggle('is-selected', isSel);
+                    o.setAttribute('aria-selected', isSel ? 'true' : 'false');
+                    if (isSel) {
+                        const labelEl = o.querySelector('.fs-dd-opt-label');
+                        const ddCurrent = o.closest('.fs-dropdown')?.querySelector('.fs-dd-current');
+                        if (labelEl && ddCurrent) ddCurrent.textContent = labelEl.textContent;
+                    }
+                });
+            }
+            const pg = parseInt(p.get('page') || '', 10);
+            if (Number.isFinite(pg) && pg > 1) currentFilters.page = pg;
+            // If filters are present in the URL the user followed an
+            // "All lots" / "All completed" link. After the first lot
+            // load, smoothly scroll to the start of the listing.
+            const hasUrlFilters = !!(
+                p.get('created_by') || p.get('status') || p.get('search') || p.get('category')
+                || p.get('min_price') || p.get('max_price') || p.get('auction_type')
+                || p.get('sort_by') || p.get('page')
+            );
+            window._scrollToLotsOnLoad = hasUrlFilters || !!p.get('scroll');
+            // The URL is the authoritative source for filters - block
+            // loadFiltersFromStorage from overwriting them later from
+            // localStorage, otherwise a shared link stops restoring 1:1.
+            window._filtersFromUrl = hasUrlFilters;
         })();
 
         // ===== Multi-image upload =====
-        let lotSelectedFiles = []; // массив File объектов
+        let lotSelectedFiles = []; // array of File objects
 
         function renderMultiImgPreview() {
             const preview = document.getElementById('multiImgPreview');
@@ -582,9 +766,8 @@ document.addEventListener('DOMContentLoaded', () => {
         async function uploadOneFile(file) {
             const fd = new FormData();
             fd.append('file', file, file.name || 'lot.jpg');
-            const r = await fetch(`${API_URL}/api/upload-image`, {
+            const r = await apiFetch(`${window.API}/api/upload-image`, {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
                 body: fd
             });
             if (!r.ok) {
@@ -621,6 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function loadFiltersFromStorage() {
+            if (window._filtersFromUrl) return;
             try {
                 const raw = localStorage.getItem(FILTERS_KEY);
                 if (!raw) return;
@@ -667,26 +851,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }</div>`;
         }
 
-        // Cards are now <a> tags — no click handler needed
+        // Cards are now <a> tags - no click handler needed
 
         let totalPages = 1;
 
-        // Инициализация
+        // Initialisation.
         async function init() {
-            // всегда подтягиваем token из localStorage
-            token = localStorage.getItem('token');
+            // Always pull the latest token from localStorage.
+            token = window.getToken();
 
             // wired once: image upload + crop UI
             try { wireLotImageUI(); } catch {}
 
             
 
-            // восстановить фильтры
+            // Restore filters.
             loadFiltersFromStorage();if (token) {
                 await loadCurrentUser();
             }
 
-            // Показать/скрыть блоки (без падений если элементов нет)
+            // Show/hide blocks (no-op if elements are missing).
             const userProfile = document.getElementById('userProfile');
             const guestProfile = document.getElementById('guestProfile');
             const createBtn = document.getElementById('createBtn');
@@ -703,40 +887,52 @@ document.addEventListener('DOMContentLoaded', () => {
             syncFilterInputsFromState();
             renderSkeleton(6);
             await loadAuctions();
-// Инициализация новой панели фильтров (если есть)
+            try {
+                const flashEmail = localStorage.getItem('flash_verify_email');
+                if (flashEmail) {
+                    localStorage.removeItem('flash_verify_email');
+                    showToast(
+                        'Подтвердите email',
+                        `Мы отправили письмо на ${flashEmail}. Чтобы делать ставки и создавать лоты - подтвердите адрес.`,
+                        'info'
+                    );
+                }
+            } catch (_) {}
+// Initialise the new filter panel (if present).
             if (typeof initFiltersUI === 'function') initFiltersUI();
         }
 
         async function loadCurrentUser() {
-            // синхронизируем token с localStorage (важно при переходах между страницами)
-            token = localStorage.getItem('token');
+            // Resync token with localStorage (important across page navigations).
+            token = window.getToken();
 
             // wired once: image upload + crop UI
             try { wireLotImageUI(); } catch {}
 
-            // если токена нет — гость
+            // No token - treat as guest.
             if (!token) {
                 currentUser = null;
+                window.currentUser = null;
                 return null;
             }
 
             let response;
             try {
-                response = await fetch(`${API_URL}/api/me`, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${token}` }
+                response = await apiFetch(`${window.API}/api/me`, {
+                    method: 'GET'
                 });
             } catch (err) {
-                // сеть/сервер недоступен — НЕ разлогиниваем
+                // Network/server unreachable - do NOT log the user out.
                 console.warn('loadCurrentUser: network error', err);
                 return null;
             }
 
             if (response.status === 401 || response.status === 403) {
-                // токен реально невалидный → удаляем
+                // Token genuinely invalid -> drop it.
                 localStorage.removeItem('token');
                 token = null;
                 currentUser = null;
+                window.currentUser = null;
                 return null;
             }
 
@@ -746,8 +942,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             currentUser = await response.json();
+            window.currentUser = currentUser;
 
-            // безопасно обновляем UI, если элементы существуют
+            // Safely refresh the UI, only if the elements exist.
             const userNameEl = document.getElementById('userName');
             const balEl = document.getElementById('userBalanceSmall');
             const avEl = document.getElementById('userAvatarSmall');
@@ -757,7 +954,7 @@ document.addEventListener('DOMContentLoaded', () => {
               avEl.textContent = (currentUser.username || '?').charAt(0).toUpperCase();
               if (currentUser.avatar_url) {
                 const img = document.createElement('img');
-                img.src = currentUser.avatar_url.startsWith('http') ? currentUser.avatar_url : `${API_URL}${currentUser.avatar_url}`;
+                img.src = resolveAvatarUrl(currentUser.avatar_url);
                 img.alt = currentUser.username;
                 avEl.appendChild(img);
               }
@@ -768,12 +965,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function loadAuctions() {
             const container = document.getElementById('auctionsContainer');
+            // Any request counts as "committed filters" - sync URL
+            // and the active filter chips so both stay aligned.
+            if (typeof window.syncUrlFromFilters === 'function') window.syncUrlFromFilters();
+            if (typeof window.renderFilterTags === 'function') window.renderFilterTags();
 
-            // 1. Fade-out — гарантированно ждём конца анимации
+            // 1. Fade-out - wait for the animation to finish.
             if (container) {
                 container.classList.remove('fade-in');
                 container.classList.add('fade-out');
-                await new Promise(r => setTimeout(r, 190)); // ждём конец fade-out (180ms)
+                await new Promise(r => setTimeout(r, 190)); // wait for fade-out end (180ms)
             }
 
             try {
@@ -790,20 +991,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentFilters.category)    params.append('category',     currentFilters.category);
                 if (currentFilters.auctionType) params.append('auction_type', currentFilters.auctionType);
                 
-                const response = await fetch(`${API_URL}/api/auctions?${params}`);
+                const response = await fetch(`${window.API}/api/auctions?${params}`);
                 const data = await response.json();
                 
                 totalPages = data.total_pages;
                 updatePagination(data.page, data.total_pages, data.total);
                 updateResultsInfo(data.total, data.page, data.total_pages);
 
-                // 2. Обновляем DOM пока контейнер невидим
+                // 2. Update the DOM while the container is invisible.
                 displayAuctions(data.items);
 
                 // 3. Fade-in
                 if (container) {
                     container.classList.remove('fade-out');
                     container.classList.add('fade-in');
+                }
+                // One-shot scroll to the lots listing when the user
+                // arrives via a filtered link (e.g. "All lots" from
+                // user.html).
+                if (window._scrollToLotsOnLoad) {
+                    window._scrollToLotsOnLoad = false;
+                    setTimeout(scrollToAuctionsTop, 50);
                 }
             } catch (e) {
                 if (container) { container.classList.remove('fade-out'); container.classList.add('fade-in'); }
@@ -827,31 +1035,253 @@ document.addEventListener('DOMContentLoaded', () => {
             if (adv) adv.textContent = text;
         }
 
-function updatePagination(page, total, itemsCount) {
+function buildPageList(current, total) {
+            // Returns array of numbers (1..total) and '...' separators.
+            // Window: first, last, and ±2 around current.
+            if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+            const pages = new Set([1, total, current - 1, current, current + 1, 2, total - 1]);
+            const sorted = [...pages].filter(p => p >= 1 && p <= total).sort((a, b) => a - b);
+            const out = [];
+            for (let i = 0; i < sorted.length; i++) {
+                if (i > 0 && sorted[i] - sorted[i - 1] > 1) out.push('...');
+                out.push(sorted[i]);
+            }
+            return out;
+        }
+
+        function updatePagination(page, total, itemsCount) {
             const paginationDiv = document.getElementById('pagination');
             const prevBtn = document.getElementById('prevBtn');
             const nextBtn = document.getElementById('nextBtn');
-            const pageInfo = document.getElementById('pageInfo');
+            const pagesEl = document.getElementById('paginationPages');
+            const jumpInput = document.getElementById('pageJumpInput');
 
-            if (total > 1) {
-                paginationDiv.style.display = 'flex';
-                pageInfo.textContent = `Страница ${page} из ${total} (всего: ${itemsCount})`;
-                prevBtn.disabled = page <= 1;
-                nextBtn.disabled = page >= total;
-            } else {
+            if (total <= 1) {
                 paginationDiv.style.display = 'none';
+                return;
+            }
+
+            paginationDiv.style.display = 'flex';
+            prevBtn.disabled = page <= 1;
+            nextBtn.disabled = page >= total;
+
+            if (pagesEl) {
+                pagesEl.innerHTML = '';
+                buildPageList(page, total).forEach(p => {
+                    if (p === '...') {
+                        const span = document.createElement('span');
+                        span.className = 'pagination-ellipsis';
+                        span.textContent = '…';
+                        pagesEl.appendChild(span);
+                    } else {
+                        const btn = document.createElement('button');
+                        btn.className = 'pagination-btn pagination-num' + (p === page ? ' active' : '');
+                        btn.type = 'button';
+                        btn.textContent = String(p);
+                        btn.onclick = () => goToPage(p);
+                        pagesEl.appendChild(btn);
+                    }
+                });
+            }
+
+            if (jumpInput) {
+                jumpInput.max = String(total);
+                if (document.activeElement !== jumpInput) jumpInput.value = '';
             }
         }
 
-        function changePage(delta) {
-            currentFilters.page = Math.max(1, Math.min(currentFilters.page + delta, totalPages));
+        function scrollToAuctionsTop() {
+            const headerEl = document.querySelector('.page-header')
+                          || document.getElementById('auctionsContainer');
+            if (!headerEl) return;
+            const nav = document.querySelector('.navbar');
+            const navH = nav ? nav.getBoundingClientRect().height : 60;
+            const y = headerEl.getBoundingClientRect().top + window.pageYOffset - navH - 12;
+            window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+        }
+
+        // Magnetic snap: after scrolling past the hero, if the user comes
+        // to rest in the intermediate zone (top of the listing below the
+        // navbar but already close), smoothly roll forward to the start of
+        // the listing. Mimics the "See lots" button without a click; fires
+        // after ~150 ms of scroll idle.
+        (function setupAuctionsSnap() {
+            // Respect the user's reduced-motion preference.
+            if (typeof matchMedia === 'function'
+                && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+            let timer = null;
+            let isAutoScrolling = false;
+            // Snap zone active: the top of .page-header (or the lot
+            // listing as fallback) sits inside [navH+12, navH+12+SNAP_ZONE_PX]
+            // from the viewport top. A smaller value triggers later, closer
+            // to the listing's exact start.
+            const SNAP_ZONE_PX = 120;
+            const DEBOUNCE_MS = 150;
+            const COOLDOWN_MS = 700;
+
+            function maybeSnap() {
+                if (isAutoScrolling) return;
+                // Don't interfere when a modal is open (auth / create / sort dropdown, etc.).
+                if (document.body.classList.contains('modal-open')) return;
+                // If focus is in a text input (search, filter), the user is typing - leave it alone.
+                const ae = document.activeElement;
+                if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+
+                const headerEl = document.querySelector('.page-header')
+                              || document.getElementById('auctionsContainer');
+                if (!headerEl) return;
+                const nav = document.querySelector('.navbar');
+                const navH = nav ? nav.getBoundingClientRect().height : 60;
+                const offset = navH + 12;
+                const top = headerEl.getBoundingClientRect().top;
+                if (top > offset && top < offset + SNAP_ZONE_PX) {
+                    isAutoScrolling = true;
+                    scrollToAuctionsTop();
+                    setTimeout(() => { isAutoScrolling = false; }, COOLDOWN_MS);
+                }
+            }
+
+            window.addEventListener('scroll', () => {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(maybeSnap, DEBOUNCE_MS);
+            }, { passive: true });
+        })();
+
+        function goToPage(n) {
+            const target = Math.max(1, Math.min(n, totalPages));
+            if (target === currentFilters.page) return;
+            currentFilters.page = target;
             loadAuctions();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            scrollToAuctionsTop();
+        }
+
+        function changePage(delta) {
+            goToPage(currentFilters.page + delta);
+        }
+
+        // Page-jump input - Enter or blur applies
+        document.addEventListener('DOMContentLoaded', () => {
+            const jumpInput = document.getElementById('pageJumpInput');
+            if (!jumpInput) return;
+            const apply = () => {
+                const v = parseInt(jumpInput.value, 10);
+                if (!isNaN(v)) goToPage(v);
+                jumpInput.value = '';
+                jumpInput.blur();
+            };
+            jumpInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); apply(); }
+            });
+            jumpInput.addEventListener('blur', () => {
+                if (jumpInput.value !== '') apply();
+            });
+        });
+
+        // Observer that opens a WS for visible cards and closes it when
+        // they leave the viewport. One instance per page; rebind to fresh
+        // [data-auction-id] nodes after every re-render.
+        let auctionWsObserver = null;
+        const lastPriceRefresh = {};
+        function refreshAuctionPrice(auctionId) {
+            // When a card just enters the viewport, the price may have
+            // moved while it was hidden (a new bid / buy-now). The WS only
+            // subscribes to future events - the current state needs a
+            // separate REST poke. Throttled to 5s so fast scroll doesn't
+            // spam the server for the same lot.
+            const now = Date.now();
+            if (lastPriceRefresh[auctionId] && now - lastPriceRefresh[auctionId] < 5000) return;
+            lastPriceRefresh[auctionId] = now;
+            fetch(`${window.API}/api/auctions/${auctionId}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(d => {
+                    if (d && typeof d.current_price === 'number') {
+                        updatePrice(auctionId, d.current_price);
+                    }
+                })
+                .catch(() => {});
+        }
+
+        function attachAuctionWsObserver() {
+            // displayAuctions wipes ``auctionsContainer.innerHTML`` and
+            // re-renders on every pagination / filter change. Without
+            // disconnecting the observer first, it keeps observing the
+            // detached card nodes from the prior render and holds their
+            // DOM references alive; after ~20 page changes that's
+            // hundreds of detached nodes pinned in memory. Tear it down
+            // and re-create so the observer's internal target set
+            // tracks only the live cards.
+            if (auctionWsObserver) {
+                auctionWsObserver.disconnect();
+                auctionWsObserver = null;
+            }
+            auctionWsObserver = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    const id = +entry.target.dataset.auctionId;
+                    if (!id) return;
+                    if (entry.isIntersecting) {
+                        refreshAuctionPrice(id);
+                        if (token && !websockets[id]) connectWebSocket(id);
+                    } else {
+                        const ws = websockets[id];
+                        if (!ws) return;
+                        safeCloseWs(ws);
+                        delete websockets[id];
+                    }
+                });
+            }, { rootMargin: '200px' });
+            const container = document.getElementById('auctionsContainer');
+            if (!container) return;
+            container.querySelectorAll('[data-auction-id]').forEach((el) => {
+                auctionWsObserver.observe(el);
+            });
+        }
+
+        // Safe WebSocket close that respects readyState. If the socket
+        // is still CONNECTING (readyState=0) the browser logs "closed before
+        // connection established" - harmless but noisy. Wait for onopen
+        // and close the established connection.
+        function safeCloseWs(ws) {
+            if (!ws) return;
+            ws.intentionallyClosed = true;
+            if (ws.pingInterval) clearInterval(ws.pingInterval);
+            // Fast scroll can ask us to close a socket that hasn't yet
+            // connected - a network error at that moment must not bump
+            // the reconnect counter.
+            const id = ws._auctionId;
+            if (id != null) reconnectAttempts[id] = 0;
+            try {
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    ws.addEventListener('open', () => {
+                        try { ws.close(1000, 'list refresh'); } catch (_) {}
+                    }, { once: true });
+                } else if (ws.readyState === WebSocket.OPEN) {
+                    ws.close(1000, 'list refresh');
+                }
+            } catch (_) {}
+        }
+
+        // Close every live WS connection and timer before swapping the
+        // listing contents. Otherwise old sockets pile up, the server hits
+        // its per-IP connection cap, and new opens get 1008.
+        function clearAuctionConnections() {
+            Object.entries(websockets).forEach(([id, ws]) => {
+                safeCloseWs(ws);
+                delete websockets[id];
+            });
+            Object.values(timers).forEach(t => clearInterval(t));
+            Object.keys(timers).forEach(k => delete timers[k]);
+            Object.keys(reconnectAttempts).forEach(k => delete reconnectAttempts[k]);
+            // Drop the per-auction refresh-throttle entries too: long
+            // browsing sessions otherwise grow this map by every id ever
+            // observed. Cheap per entry but unbounded in principle.
+            Object.keys(lastPriceRefresh).forEach(k => delete lastPriceRefresh[k]);
         }
 
         function displayAuctions(auctions) {
             const container = document.getElementById('auctionsContainer');
-            
+            clearAuctionConnections();
+
             if (auctions.length === 0) {
                 const hasFilters =
                     (currentFilters.search && currentFilters.search.length > 0) ||
@@ -892,34 +1322,33 @@ function updatePagination(page, total, itemsCount) {
                 }
 
                 const imgSrc = auction.image_url
-                    ? (String(auction.image_url).startsWith('http') ? auction.image_url : `${API_URL}${auction.image_url}`)
+                    ? (String(auction.image_url).startsWith('http') ? auction.image_url : `${window.API}${auction.image_url}`)
                     : null;
 
                 const isEnded = timeRemaining === 0;
                 const bidsCount = auction.bids_count ?? '';
                 const creatorName = auction.creator_username || '';
+                const safeCreator = esc(creatorName);
                 const creatorAvatarUrl = auction.creator_avatar_url || null;
                 const creatorAvatarHtml = creatorName ? (() => {
-                  const src = creatorAvatarUrl
-                    ? (creatorAvatarUrl.startsWith('http') ? creatorAvatarUrl : `${API_URL}${creatorAvatarUrl}`)
-                    : null;
-                  return `<div class="mini-avatar">${src ? `<img src="${src}" alt="${creatorName}">` : creatorName[0].toUpperCase()}</div>`;
+                  const src = resolveAvatarUrl(creatorAvatarUrl);
+                  return `<div class="mini-avatar">${src ? `<img src="${esc(src)}" alt="${safeCreator}">` : esc(creatorName[0].toUpperCase())}</div>`;
                 })() : '';
 
                 const isOwner = currentUser && auction.created_by === currentUser.id;
                 const canDelete = isOwner && !(auction.is_completed && auction.winner_id);
                 const catLabel = auction.category_icon && auction.category_name
-                    ? `${auction.category_icon} ${auction.category_name}` : '';
-                const safeTitle = auction.title.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                    ? esc(`${auction.category_icon} ${auction.category_name}`) : '';
+                const safeTitle = esc(auction.title);
 
                 const allImgUrls = (auction.image_urls && auction.image_urls.length)
-                    ? auction.image_urls.map(u => String(u).startsWith('http') ? u : `${API_URL}${u}`)
+                    ? auction.image_urls.map(u => String(u).startsWith('http') ? u : `${window.API}${u}`)
                     : (imgSrc ? [imgSrc] : []);
 
                 const hasMultiple = allImgUrls.length > 1;
 
                 const imagesHtml = allImgUrls.length
-                    ? allImgUrls.map((u, i) => `<img class="card-slide${i === 0 ? ' active' : ''}" src="${u}" alt="${safeTitle}" data-slide="${i}">`).join('')
+                    ? allImgUrls.map((u, i) => `<img class="card-slide${i === 0 ? ' active' : ''}" src="${esc(u)}" alt="${safeTitle}" data-slide="${i}">`).join('')
                     : `<div class="card-placeholder"><div class="card-placeholder-icon">🖼</div><div class="card-placeholder-label">Нет фото</div></div>`;
 
                 const isBinType = auction.auction_type === 'bin';
@@ -930,18 +1359,18 @@ function updatePagination(page, total, itemsCount) {
                 return `
                     <div class="auction-card" data-auction-id="${auction.id}"
                        data-title="${safeTitle}"
-                       data-price="${isBinType ? '⚡ ' : ''}$${auction.current_price.toFixed(2)}"
-                       data-start="от $${auction.starting_price.toFixed(2)}"
+                       data-price="${isBinType ? '⚡ ' : ''}${Number(auction.current_price ?? 0).toFixed(2)} ₽"
+                       data-start="от ${Number(auction.starting_price ?? 0).toFixed(2)} ₽"
                        data-bids="${bidsCount !== '' ? '💬 ' + bidsCount : ''}"
-                       data-creator="${creatorName ? '@' + creatorName : ''}"
+                       data-creator="${creatorName ? '@' + safeCreator : ''}"
                        data-category="${catLabel}"
                        data-slide-count="${allImgUrls.length}">
 
-                        <!-- Картинка — кликабельна -->
+                        <!-- Image - clickable -->
                         <a href="auction.html?id=${auction.id}" class="auction-image-link">
                             <div class="auction-image">
                                 ${imagesHtml}
-                                ${badgeClass !== 'badge-ended' ? `<div class="auction-badge ${badgeClass}">${badgeClass === 'badge-ending' ? '⏰ Скоро конец' : '● В эфире'}</div>` : ''}
+                                ${badgeClass === 'badge-ending' ? `<div class="auction-badge badge-ending">⏰ Скоро конец</div>` : ''}
                                 ${binBadge}
                                 ${canDelete ? `<button class="card-delete-btn" title="Удалить лот" onclick="deleteAuction(event, ${auction.id})">✕</button>` : ''}
                                 ${hasMultiple ? `
@@ -951,29 +1380,32 @@ function updatePagination(page, total, itemsCount) {
                             </div>
                         </a>
 
-                        <!-- Текстовый блок — статичный -->
+                        <!-- Text block - static -->
                         <div class="auction-body">
                             <a href="auction.html?id=${auction.id}" class="auction-title-link">
-                                <div class="auction-title">${auction.title}</div>
+                                <div class="auction-title">${safeTitle}</div>
                             </a>
-                            <div class="auction-price">$${auction.current_price.toFixed(2)}</div>
+                            <div class="auction-price">${Number(auction.current_price ?? 0).toFixed(2)} ₽</div>
                             ${!isEnded
-                                ? `<div class="auction-start" data-timer="${auction.id}" style="color:var(--amber);font-weight:600;">${formatTime(timeRemaining)}</div>`
-                                : `<div class="auction-start">Завершён · от $${auction.starting_price.toFixed(2)}</div>`}
-                            ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${creatorName}</a></span></div>` : ''}
+                                ? `<div class="auction-start auction-timer-row"><span class="auction-pulse" aria-hidden="true"></span><span class="auction-timer-text" data-timer="${auction.id}">${formatTime(timeRemaining)}</span></div>`
+                                : `<div class="auction-start">Завершён · от ${auction.starting_price.toFixed(2)} ₽</div>`}
+                            ${creatorName ? `<div class="auction-meta-row"><span class="auction-creator">${creatorAvatarHtml}<a href="user.html?username=${encodeURIComponent(creatorName)}" onclick="event.stopPropagation()">@${safeCreator}</a></span></div>` : ''}
                         </div>
                     </div>
                 `;
             }).join('');
 
-            // Загружаем ставки и запускаем таймеры
+            // Timers go on every lot immediately - cheap, pure DOM walk.
             auctions.forEach(auction => {
-                if (token && auction.time_remaining > 0) {
-                    loadBids(auction.id);
-                    connectWebSocket(auction.id);
-                }
                 startTimer(auction.id, auction.time_remaining);
             });
+
+            // Open a WS only for lots whose card is visible. Without
+            // this, 25-50 simultaneous connections from one IP exceed the
+            // server cap and some cards get 1008 Policy Violation. The
+            // IntersectionObserver opens / closes sockets during scroll -
+            // a natural rate limit.
+            if (token) attachAuctionWsObserver();
         }
 
         function formatTime(seconds) {
@@ -988,7 +1420,7 @@ function updatePagination(page, total, itemsCount) {
         }
 
         function startTimer(auctionId, initialTime) {
-            // Если аукцион уже завершён — просто выставляем текст и НЕ запускаем интервал
+            // If the auction is already finished, just set the text and don't start an interval.
             const timerElementNow = document.querySelector(`[data-timer="${auctionId}"]`);
             const init = Number(initialTime);
 
@@ -1015,26 +1447,26 @@ function updatePagination(page, total, itemsCount) {
                     delete timers[auctionId];
                     const timerEl = document.querySelector(`[data-timer="${auctionId}"]`);
                     if (timerEl) timerEl.textContent = 'Завершён';
-                    // НЕ перезагружаем страницу/список каждую секунду
+                    // Do NOT reload the page / listing every second.
                 }
             }, 1000);
         }
 
-        // УЛУЧШЕНИЕ: WebSocket с экспоненциальной задержкой переподключения
+        // WebSocket with exponential reconnect backoff.
         function connectWebSocket(auctionId) {
             if (websockets[auctionId]) return;
             
             const ws = new WebSocket(`${WS_URL}/ws/auction/${auctionId}`);
+            ws._auctionId = auctionId;
             
             if (!reconnectAttempts[auctionId]) {
                 reconnectAttempts[auctionId] = 0;
             }
             
             ws.onopen = () => {
-                console.log(`WebSocket connected for auction ${auctionId}`);
-                reconnectAttempts[auctionId] = 0; // Сброс счетчика при успешном подключении
+                reconnectAttempts[auctionId] = 0; // Reset on successful connect.
                 
-                // Ping каждые 25 секунд
+                // Ping every 25 seconds.
                 ws.pingInterval = setInterval(() => {
                     if (ws.readyState === WebSocket.OPEN) {
                         ws.send('ping');
@@ -1043,36 +1475,78 @@ function updatePagination(page, total, itemsCount) {
             };
 
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
+                // Ignore non-JSON frames (some proxies echo 'pong' for our
+                // 'ping' keepalive; future server-side heartbeats follow the
+                // same shape). auction.js and common.js already wrap this in
+                // try/catch - keep the listing-grid handler consistent.
+                let data;
+                try {
+                    data = JSON.parse(event.data);
+                } catch {
+                    return;
+                }
                 if (data.type === 'new_bid') {
                     updatePrice(auctionId, data.current_price);
-                    addBidToList(auctionId, data.bid);
+                    // Anti-sniping extension: a bid inside the closing window
+                    // pushes end_time forward. Without restarting the
+                    // per-card timer from the server-provided remaining
+                    // seconds, the local countdown keeps ticking to 0, flips
+                    // the card to 'Завершён' on screen, and the user sees a
+                    // closed listing while the lot is still actually live.
+                    if (Number.isFinite(data.time_remaining)) {
+                        startTimer(auctionId, data.time_remaining);
+                    }
                 }
             };
 
-            ws.onclose = () => {
-                console.log(`WebSocket closed for auction ${auctionId}`);
+            ws.onclose = (event) => {
                 delete websockets[auctionId];
-                
+
                 if (ws.pingInterval) {
                     clearInterval(ws.pingInterval);
                 }
-                
-                // Экспоненциальная задержка: 1s, 2s, 4s, 8s, 16s, максимум 30s
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts[auctionId]), 30000);
+
+                // Skip reconnect on intentional close (page change,
+                // filter swap) or any final code from the shared
+                // allowlist.
+                if (ws.intentionallyClosed) return;
+                if (event && window.wsIsFinalCloseCode(event.code)) {
+                    return;
+                }
+
+                // Hard cap on reconnect attempts. A persistent abnormal
+                // close (1006: server unreachable, proxy down) would
+                // otherwise spin the backoff loop forever as long as
+                // the card stays in the viewport - the 30s ceiling
+                // bounds the rate but not the total. Stop at 8 attempts
+                // (~3min of cumulative backoff) and let the user
+                // refresh; the card's price still polls via
+                // refreshAuctionPrice on next intersection.
+                if (!reconnectAttempts[auctionId]) reconnectAttempts[auctionId] = 0;
+                if (reconnectAttempts[auctionId] >= 8) {
+                    console.warn(`[auction ${auctionId}] giving up on WS reconnect after 8 attempts`);
+                    return;
+                }
+
+                const delay = window.wsReconnectDelay(reconnectAttempts[auctionId]);
                 reconnectAttempts[auctionId]++;
-                
-                console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts[auctionId]})`);
                 setTimeout(() => {
                     const card = document.querySelector(`[data-auction-id="${auctionId}"]`);
-                    if (card) { // Переподключаемся только если карточка еще на странице
+                    if (card) { // Reconnect only if the card is still on the page.
                         connectWebSocket(auctionId);
                     }
                 }, delay);
             };
 
-            ws.onerror = (error) => {
-                console.error(`WebSocket error for auction ${auctionId}:`, error);
+            ws.onerror = () => {
+                // WS error effectively duplicates onclose: the browser
+                // emits "error" right before "close" on any abnormal
+                // break (including 1008 server refusal and our own
+                // intentional close during CONNECTING).
+                if (ws.intentionallyClosed) return;
+                if (reconnectAttempts[auctionId] >= 3) {
+                    console.warn(`WS auction ${auctionId}: repeated failures`);
+                }
             };
 
             websockets[auctionId] = ws;
@@ -1083,7 +1557,13 @@ function updatePagination(page, total, itemsCount) {
             if (!card) return;
             const priceEl = card.querySelector('.auction-price');
             if (!priceEl) return;
-            priceEl.textContent = '$' + Number(newPrice).toFixed(2);
+            const next = Number(newPrice).toFixed(2) + ' ₽';
+            // If the price didn't change, do nothing - the flash
+            // animation only fires on real updates. Otherwise the
+            // refresh-on-view (REST poke when the card first enters the
+            // viewport) would blink the card for no reason.
+            if (priceEl.textContent === next) return;
+            priceEl.textContent = next;
             priceEl.classList.remove('price-flash');
             void priceEl.offsetWidth;
             priceEl.classList.add('price-flash');
@@ -1096,9 +1576,8 @@ function updatePagination(page, total, itemsCount) {
             const title = card?.dataset.title || 'этот лот';
             if (!confirm(`Удалить «${title}»?\n\nЭто действие нельзя отменить.`)) return;
             try {
-                const r = await fetch(`${API_URL}/api/auctions/${auctionId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': 'Bearer ' + token }
+                const r = await apiFetch(`${window.API}/api/auctions/${auctionId}`, {
+                    method: 'DELETE'
                 });
                 if (r.ok) {
                     if (card) {
@@ -1109,43 +1588,9 @@ function updatePagination(page, total, itemsCount) {
                     }
                 } else {
                     const err = await r.json().catch(() => ({}));
-                    alert(err.detail || 'Не удалось удалить лот');
+                    showToast('Не удалось удалить', err.detail || 'Попробуйте позже', 'bad');
                 }
-            } catch { alert('Ошибка сети'); }
-        }
-
-        async function loadBids(auctionId) {
-            try {
-                const response = await fetch(`${API_URL}/api/auctions/${auctionId}/bids?page=1&page_size=5`);
-                const data = await response.json();
-                const container = document.getElementById(`bids-${auctionId}`);
-                if (container && data.items.length > 0) {
-                    container.innerHTML = data.items.map(bid => `
-                        <div class="bid-item">
-                            <span class="bid-user">${bid.username}</span>
-                            <span class="bid-amount">${bid.amount.toFixed(2)}</span>
-                        </div>
-                    `).join('');
-                }
-            } catch (e) {
-                console.error('Error loading bids:', e);
-            }
-        }
-
-        function addBidToList(auctionId, bid) {
-            const container = document.getElementById(`bids-${auctionId}`);
-            if (container) {
-                const bidElement = document.createElement('div');
-                bidElement.className = 'bid-item';
-                bidElement.innerHTML = `
-                    <span class="bid-user">${bid.username}</span>
-                    <span class="bid-amount">${bid.amount.toFixed(2)}</span>
-                `;
-                container.insertBefore(bidElement, container.firstChild);
-                while (container.children.length > 5) {
-                    container.removeChild(container.lastChild);
-                }
-            }
+            } catch { showToast('Ошибка сети', 'Проверьте соединение', 'bad'); }
         }
 
         async function placeBid(auctionId) {
@@ -1154,16 +1599,15 @@ function updatePagination(page, total, itemsCount) {
             const amount = parseFloat(input.value);
 
             if (!amount || amount <= 0) {
-                alert('Введите корректную сумму');
+                showToast('Неверная сумма', 'Введите корректное число', 'warn');
                 return;
             }
 
             try {
-                const response = await fetch(`${API_URL}/api/bids`, {
+                const response = await apiFetch(`${window.API}/api/bids`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ auction_id: auctionId, amount })
                 });
@@ -1173,10 +1617,10 @@ function updatePagination(page, total, itemsCount) {
                     await loadCurrentUser();
                 } else {
                     const error = await response.json();
-                    alert(error.detail || 'Ошибка при размещении ставки');
+                    showToast('Ставка не принята', error.detail || 'Попробуйте ещё раз', 'bad');
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             }
         }
 
@@ -1184,7 +1628,7 @@ function updatePagination(page, total, itemsCount) {
         let filtersInitialized = false;
         
         function initFiltersUI() {
-            // Защита от повторной инициализации
+            // Guard against double-initialisation.
             if (filtersInitialized) return;
             
             const searchEl = document.getElementById('searchInput');
@@ -1218,15 +1662,96 @@ function updatePagination(page, total, itemsCount) {
                 });
             }
 
-            // toggleAdvanced теперь обрабатывается глобальным обработчиком ниже
+            // toggleAdvanced is now handled by the global handler below.
             
             if (applyBtn) applyBtn.addEventListener('click', applyFilters);
-            
+
+            wireMobileFilterDrawer();
+
             filtersInitialized = true;
-            console.log('✅ Фильтры инициализированы');
         }
 
-        // initFiltersUI и первичный рендер будут вызваны из wire() ниже
+        /**
+         * Mobile filter drawer: ≤768px viewport turns the always-visible
+         * desktop sidebar into an off-canvas drawer. CSS owns the slide-
+         * in animation; JS owns the open/close state, body-scroll lock,
+         * Esc / overlay / Apply dismissal, and the active-filter badge.
+         *
+         * Initialised once from initFiltersUI; the elements are present
+         * unconditionally in the markup so this is safe to call before
+         * the first viewport-resize event.
+         */
+        function wireMobileFilterDrawer() {
+            const sidebar = document.getElementById('filterSidebar');
+            const toggle  = document.getElementById('filterToggleBtn');
+            const closeBtn = document.getElementById('filterCloseBtn');
+            const backdrop = document.getElementById('filterBackdrop');
+            const badge   = document.getElementById('filterActiveBadge');
+            if (!sidebar || !toggle || !backdrop) return;
+
+            const setOpen = (open) => {
+                sidebar.classList.toggle('is-open', open);
+                backdrop.classList.toggle('is-visible', open);
+                backdrop.hidden = !open;
+                document.body.classList.toggle('no-scroll', open);
+                toggle.setAttribute('aria-expanded', String(open));
+            };
+
+            toggle.addEventListener('click', () => setOpen(true));
+            if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+            backdrop.addEventListener('click', () => setOpen(false));
+
+            // Esc dismisses - keyboard accessibility + a useful escape
+            // hatch for desktop testing in DevTools mobile emulation.
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {
+                    setOpen(false);
+                }
+            });
+
+            // Apply / Reset buttons inside the drawer should dismiss it
+            // on mobile - the user has expressed intent, no reason to
+            // keep the overlay covering the results they're about to see.
+            sidebar.addEventListener('click', (e) => {
+                const btn = e.target.closest('.fs-actions .btn');
+                if (btn && window.matchMedia('(max-width: 768px)').matches) {
+                    setOpen(false);
+                }
+            });
+
+            // Active-filter badge - recomputes whenever filters change so
+            // the user can see at a glance whether the drawer hides any
+            // narrowing rules. Counts: status≠active, any category, any
+            // type, any price, any creator, any non-default sort.
+            const updateBadge = () => {
+                let n = 0;
+                const status = document.getElementById('statusFilter')?.value;
+                if (status && status !== 'active') n++;
+                const cat = document.getElementById('categoryFilter')?.value;
+                if (cat) n++;
+                if (document.getElementById('filterBid')?.checked) n++;
+                if (document.getElementById('filterBin')?.checked) n++;
+                const minP = document.getElementById('minPrice')?.value;
+                const maxP = document.getElementById('maxPrice')?.value;
+                if (minP && Number(minP) > 0) n++;
+                if (maxP && Number(maxP) > 0) n++;
+                if (document.getElementById('creatorInput')?.value?.trim()) n++;
+                const sort = document.getElementById('sortFilter')?.value;
+                if (sort && sort !== 'time') n++;
+                if (badge) badge.textContent = String(n);
+                toggle.classList.toggle('has-active', n > 0);
+            };
+            updateBadge();
+            // Recompute after any handler that mutates filters - the
+            // sidebar fires applyFilters at the end of each change, and
+            // resetFilters writes the inputs synchronously, so a single
+            // listener on the sidebar is enough for both paths.
+            sidebar.addEventListener('change', updateBadge);
+            sidebar.addEventListener('input', updateBadge);
+            sidebar.addEventListener('click', updateBadge, true);
+        }
+
+        // initFiltersUI and the first render are called from wire() below.
 
 
 
@@ -1238,7 +1763,7 @@ function updatePagination(page, total, itemsCount) {
             };
         }
 
-        // Модальные окна
+        // Modal dialogs.
         function showAuth() {
             document.getElementById('authModal').classList.add('active');
         }
@@ -1265,9 +1790,23 @@ function updatePagination(page, total, itemsCount) {
 
         function showCreateModal() {
             document.getElementById('createModal').classList.add('active');
-            // Сбрасываем тип и загружаем категории если ещё не загружены
+            // Reset auction type and load categories if not yet loaded.
             if (typeof setAuctionType === 'function') setAuctionType('bid');
             if (typeof loadCategories === 'function') loadCategories();
+            // Wire the live "К получению" hints under both price inputs.
+            // Idempotent - attaches the listener once per modal lifetime.
+            if (typeof window.attachPayoutHint === 'function') {
+                window.attachPayoutHint(
+                    document.getElementById('auctionPrice'),
+                    document.getElementById('auctionPricePayout'),
+                    { label: 'Со стартовой цены вы получите' },
+                );
+                window.attachPayoutHint(
+                    document.getElementById('auctionBinPrice'),
+                    document.getElementById('auctionBinPricePayout'),
+                    { label: 'К получению' },
+                );
+            }
         }
 
         function closeCreateModal() {
@@ -1277,18 +1816,19 @@ function updatePagination(page, total, itemsCount) {
             try { clearLotImage(); } catch {}
         }
 
-        function logout() {
-            // Закрываем все WebSocket соединения
+        // Tear down per-page resources before window.logout drops the token
+        // and redirects. The home page keeps a websockets pool keyed by
+        // auction-card id - without an explicit close on logout the sockets
+        // hang until the browser navigates and the server only finds out
+        // about the disconnect on the next ping timeout.
+        window.addEventListener('lotus:logout', () => {
             Object.values(websockets).forEach(ws => {
                 if (ws.pingInterval) clearInterval(ws.pingInterval);
                 ws.close();
             });
             websockets = {};
             reconnectAttempts = {};
-            
-            localStorage.removeItem('token');
-            location.reload();
-        }
+        });
 
         function showSection(e, section) {
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
@@ -1298,7 +1838,7 @@ function updatePagination(page, total, itemsCount) {
                 currentFilters.page = 1;
                 loadAuctions();
             } else if (section === 'my-bids') {
-                alert('Раздел "Мои ставки" в разработке');
+                showToast('В разработке', 'Раздел «Мои ставки» появится скоро', 'warn');
             }
         }
 
@@ -1309,7 +1849,7 @@ function updatePagination(page, total, itemsCount) {
             const password = document.getElementById('loginPassword').value;
 
             try {
-                const response = await fetch(`${API_URL}/api/login`, {
+                const response = await fetch(`${window.API}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -1319,7 +1859,7 @@ function updatePagination(page, total, itemsCount) {
                     const data = await response.json();
                     token = data.token;
                     localStorage.setItem('token', token);
-                    token = localStorage.getItem('token');
+                    token = window.getToken();
 location.reload();
                 } else {
                     const error = await response.json();
@@ -1331,7 +1871,7 @@ location.reload();
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             }
         });
 
@@ -1342,7 +1882,7 @@ location.reload();
             const password = document.getElementById('registerPassword').value;
 
             try {
-                const response = await fetch(`${API_URL}/api/register`, {
+                const response = await fetch(`${window.API}/api/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, email, password })
@@ -1352,7 +1892,12 @@ location.reload();
                     const data = await response.json();
                     token = data.token;
                     localStorage.setItem('token', token);
-                    token = localStorage.getItem('token');
+                    // Surface the post-register hint via localStorage so it
+                    // survives the reload below (init reads + clears it).
+                    try {
+                        localStorage.setItem('flash_verify_email', email);
+                    } catch (_) {}
+                    token = window.getToken();
 location.reload();
                 } else {
                     const error = await response.json();
@@ -1364,7 +1909,7 @@ location.reload();
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             }
         });
 
@@ -1376,7 +1921,7 @@ location.reload();
             const auction_type = window.currentAuctionType || 'bid';
             const categoryEl    = document.getElementById('auctionCategory');
             const categoryParEl = document.getElementById('auctionCategoryParent');
-            // Берём подкатегорию если выбрана, иначе родительскую
+            // Pick the subcategory if selected, otherwise the parent.
             const catVal = (categoryEl && categoryEl.value && categoryEl.style.display !== 'none')
               ? categoryEl.value
               : (categoryParEl ? categoryParEl.value : '');
@@ -1431,14 +1976,14 @@ location.reload();
                 } catch (imgErr) {
                     const msg = imgErr?.message || 'Ошибка загрузки изображения.';
                     if (errorDiv) { errorDiv.textContent = msg; errorDiv.style.display = 'block'; }
-                    else alert(msg);
+                    else showToast('Ошибка', msg, 'bad');
                     return;
                 }
 
                 // 2) create auction
-                const response = await fetch(`${API_URL}/api/auctions`, {
+                const response = await apiFetch(`${window.API}/api/auctions`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title, description, starting_price, duration_minutes, image_url, image_urls, category_id, auction_type, bin_price })
                 });
 
@@ -1452,12 +1997,12 @@ location.reload();
                 } else {
                     const error = await response.json();
                     if (errorDiv) {
-                        errorDiv.textContent = error.detail || 'Ошибка создания аукциона';
+                        errorDiv.textContent = window.formatError(error, 'Ошибка создания аукциона');
                         errorDiv.style.display = 'block';
                     }
                 }
             } catch (e) {
-                alert('Ошибка сети');
+                showToast('Ошибка сети', 'Проверьте соединение', 'bad');
             } finally {
                 if (submitBtn) {
                     submitBtn.disabled = false;
@@ -1466,7 +2011,7 @@ location.reload();
             }
         });
 
-        // Очистка при закрытии страницы
+        // Cleanup on page unload.
         window.addEventListener('beforeunload', () => {
             Object.values(websockets).forEach(ws => {
                 if (ws.pingInterval) clearInterval(ws.pingInterval);
@@ -1475,7 +2020,6 @@ location.reload();
             Object.values(timers).forEach(timer => clearInterval(timer));
         });
 
-        // Запуск
         init();
     
 
@@ -1652,189 +2196,3 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.setAttribute('aria-expanded', adv.classList.contains('open') ? 'true' : 'false');
   }, true);
 
-/* ================================================================
-   NOTIFICATION BELL
-   ================================================================ */
-(function() {
-  const API_URL = 'http://localhost:8000';
-
-  function getToken() { return localStorage.getItem('token'); }
-
-  const btn      = document.getElementById('notifBtn');
-  const badge    = document.getElementById('notifBadge');
-  const dropdown = document.getElementById('notifDropdown');
-  const list     = document.getElementById('notifList');
-  const markAllBtn = document.getElementById('notifMarkAll');
-
-  if (!btn || !dropdown) return;
-
-  let unreadCount = 0;
-  let wsNotif = null;
-  let currentUserId = null;
-  let isOpen = false;
-
-  const ICONS = {
-    bid_outbid:     { emoji: '⚡', cls: 'bid_outbid' },
-    bid_placed:     { emoji: '💰', cls: 'bid_placed' },
-    auction_won:    { emoji: '🏆', cls: 'auction_won' },
-    auction_lost:   { emoji: '😔', cls: 'auction_lost' },
-    auction_sold:   { emoji: '✅', cls: 'auction_sold' },
-    new_lot:       { emoji: '🔖', cls: 'bid_placed' },
-    auction_ending: { emoji: '⏰', cls: 'auction_ending' },
-  };
-
-  function fmtAge(iso) {
-    // Бэкенд отдаёт UTC без 'Z' — добавляем чтобы браузер правильно парсил
-    const utcIso = iso && !iso.endsWith('Z') && !iso.includes('+') ? iso + 'Z' : iso;
-    const diff = Math.floor((Date.now() - new Date(utcIso)) / 1000);
-    if (diff < 60)    return 'только что';
-    if (diff < 3600)  return `${Math.floor(diff / 60)} мин назад`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`;
-    return new Date(utcIso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
-  }
-
-  function esc(str) {
-    return String(str || '').replace(/[&<>"']/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function setCount(n) {
-    unreadCount = Math.max(0, n);
-    if (unreadCount > 0) {
-      badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-      badge.style.display = 'flex';
-      btn.classList.add('has-unread');
-    } else {
-      badge.style.display = 'none';
-      btn.classList.remove('has-unread');
-    }
-  }
-
-  function renderList(items) {
-    if (!items.length) {
-      list.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Уведомлений пока нет</div>`;
-      return;
-    }
-    list.innerHTML = items.map(n => {
-      const ico = ICONS[n.type] || { emoji: '🔔', cls: '' };
-      return `
-        <div class="notif-item ${n.is_read ? '' : 'unread'}" data-id="${n.id}" data-auction="${n.auction_id || ''}">
-          <div class="notif-icon ${ico.cls}">${ico.emoji}</div>
-          <div class="notif-body">
-            <div class="notif-title">${esc(n.title)}</div>
-            <div class="notif-msg">${esc(n.message)}</div>
-            <div class="notif-time">${fmtAge(n.created_at)}</div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  async function apiFetch(url, opts = {}) {
-    const tk = getToken();
-    const headers = { ...(opts.headers || {}) };
-    if (tk) headers['Authorization'] = 'Bearer ' + tk;
-    return fetch(url, { ...opts, headers });
-  }
-
-  async function fetchCount() {
-    if (!getToken()) return;
-    try {
-      const r = await apiFetch(`${API_URL}/api/notifications/unread-count`);
-      if (r.ok) { const d = await r.json(); setCount(d.count ?? 0); }
-    } catch {}
-  }
-
-  async function fetchNotifications() {
-    if (!getToken()) {
-      list.innerHTML = `<div class="notif-empty"><div class="notif-empty-icon">🔔</div>Войдите для уведомлений</div>`;
-      return;
-    }
-    list.innerHTML = `<div class="notif-empty">Загрузка…</div>`;
-    try {
-      const r = await apiFetch(`${API_URL}/api/notifications?limit=30`);
-      if (r.ok) renderList(await r.json());
-      else list.innerHTML = `<div class="notif-empty">Ошибка загрузки</div>`;
-    } catch {
-      list.innerHTML = `<div class="notif-empty">Нет связи с сервером</div>`;
-    }
-  }
-
-  async function markOneRead(id) {
-    try { await apiFetch(`${API_URL}/api/notifications/${id}/read`, { method: 'POST' }); } catch {}
-  }
-
-  async function markAllRead() {
-    try {
-      await apiFetch(`${API_URL}/api/notifications/mark-all-read`, { method: 'POST' });
-      setCount(0);
-      await fetchNotifications();
-    } catch {}
-  }
-
-  /* Open / close */
-  function openDropdown() {
-    isOpen = true;
-    dropdown.classList.add('open');
-    fetchNotifications();
-  }
-  function closeDropdown() {
-    isOpen = false;
-    dropdown.classList.remove('open');
-  }
-
-  btn.addEventListener('click', e => { e.stopPropagation(); isOpen ? closeDropdown() : openDropdown(); });
-  document.addEventListener('click', e => {
-    if (isOpen && !dropdown.contains(e.target) && e.target !== btn) closeDropdown();
-  });
-  markAllBtn.addEventListener('click', e => { e.stopPropagation(); markAllRead(); });
-
-  list.addEventListener('click', async e => {
-    const item = e.target.closest('.notif-item');
-    if (!item) return;
-    const id = item.dataset.id;
-    const auctionId = item.dataset.auction;
-    if (id && item.classList.contains('unread')) {
-      item.classList.remove('unread');
-      setCount(unreadCount - 1);
-      await markOneRead(id);
-    }
-    if (auctionId) { closeDropdown(); window.location.href = `auction.html?id=${auctionId}`; }
-  });
-
-  /* WebSocket — realtime */
-  function connectNotifWS(userId) {
-    if (wsNotif) { try { wsNotif.close(); } catch {} }
-    const tk = getToken();
-    if (!tk) return;
-    wsNotif = new WebSocket(`${API_URL.replace(/^http/i, 'ws')}/ws/notifications/${userId}?token=${encodeURIComponent(tk)}`);
-    wsNotif.onmessage = e => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'notification') {
-          setCount(unreadCount + 1);
-          if (isOpen) fetchNotifications();
-        }
-      } catch {}
-    };
-    wsNotif.onclose = () => setTimeout(() => { if (currentUserId) connectNotifWS(currentUserId); }, 3000);
-  }
-
-  async function initNotifBell() {
-    if (!getToken()) { btn.style.display = 'none'; return; }
-    btn.style.display = 'flex';
-    await fetchCount();
-    try {
-      const r = await apiFetch(`${API_URL}/api/me`);
-      if (r.ok) {
-        const me = await r.json();
-        currentUserId = me.id;
-        if (currentUserId) connectNotifWS(currentUserId);
-      }
-    } catch {}
-    setInterval(fetchCount, 60000);
-  }
-
-  setTimeout(initNotifBell, 800);
-  window.addEventListener('storage', e => { if (e.key === 'token') setTimeout(initNotifBell, 300); });
-  window.initNotifBell = initNotifBell;
-})();
