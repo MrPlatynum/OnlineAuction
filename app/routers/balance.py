@@ -1,26 +1,55 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+"""Money-only operations on the user balance: deposit, withdraw, and
+the paginated transaction ledger. Every mutating endpoint funnels
+through ``services.transactions.apply_balance_delta`` so the balance
+mutation and the matching audit row land atomically and ``balance_after``
+can't drift from the running balance.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import Transaction, User
 from app.schemas import DepositRequest, WithdrawRequest
-from app.services.transactions import add_transaction
-from app.utils.money import money_to_float, to_decimal
-from app.utils.security import get_current_user
+from app.services.balance import get_committed_balance, lock_users_by_id
+from app.services.transactions import apply_balance_delta
+from app.utils.money import MAX_USER_BALANCE, money_to_float, quantize_money, to_decimal
+from app.utils.pagination import total_pages_for
+from app.utils.rate_limit import limiter
+from app.utils.security import get_current_user, require_verified_user
 
 router = APIRouter(prefix="/api", tags=["balance"])
 
+# MAX_USER_BALANCE moved to app/utils/money.py so the settle path in
+# services/auctions.py can validate against the same ceiling. Kept the
+# import alias for any external caller that grew used to importing it
+# from here.
+
 
 @router.post("/deposit")
+@limiter.limit("30/minute")
 async def deposit(
+    request: Request,
     data: DepositRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
-    current_user.balance = round(current_user.balance + amount, 2)
-    add_transaction(db, current_user, "deposit", amount, "Пополнение баланса")
+    # Row-lock the user before reading balance so concurrent /deposit and
+    # /withdraw on the same account serialise instead of racing on stale
+    # in-memory copies and clobbering each other's update.
+    await lock_users_by_id(db, current_user.id)
+    # Project the post-deposit balance only to enforce the cap; the
+    # actual mutation lands inside ``apply_balance_delta`` so the
+    # audit-row balance_after can't drift from user.balance.
+    projected = quantize_money(current_user.balance + amount)
+    if projected > MAX_USER_BALANCE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Максимальный баланс - {MAX_USER_BALANCE:.2f} ₽",
+        )
+    apply_balance_delta(db, current_user, amount, "deposit", "Пополнение баланса")
     await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
@@ -29,16 +58,29 @@ async def deposit(
 
 
 @router.post("/withdraw")
+@limiter.limit("30/minute")
 async def withdraw(
+    request: Request,
     data: WithdrawRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     amount = to_decimal(data.amount)
-    if current_user.balance < amount:
-        raise HTTPException(400, detail=f"Недостаточно средств. Доступно: ${current_user.balance:.2f}")
-    current_user.balance = round(current_user.balance - amount, 2)
-    add_transaction(db, current_user, "withdrawal", amount, "Вывод средств")
+    await lock_users_by_id(db, current_user.id)
+    # Subtract what's locked up as the current leader of active auctions -
+    # otherwise a user could withdraw their balance while top-bidding on
+    # lots, leaving us unable to debit them at completion time.
+    committed = await get_committed_balance(db, current_user.id)
+    available = current_user.balance - committed
+    if available < amount:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Недостаточно средств. Доступно: {available:.2f} ₽ "
+                f"({committed:.2f} ₽ удерживается на активных аукционах)."
+            ),
+        )
+    apply_balance_delta(db, current_user, -amount, "withdrawal", "Вывод средств")
     await db.commit()
     return {
         "balance": money_to_float(current_user.balance),
@@ -70,7 +112,7 @@ async def get_transactions(
         "balance": money_to_float(current_user.balance),
         "total": total,
         "page": page,
-        "total_pages": max(1, (total + page_size - 1) // page_size),
+        "total_pages": total_pages_for(total, page_size),
         "items": [
             {
                 "id": t.id,

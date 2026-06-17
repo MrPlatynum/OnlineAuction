@@ -17,7 +17,7 @@ class Bid(Base):
     __tablename__ = "bids"
     id = Column(Integer, primary_key=True, index=True)
     amount = Column(Numeric(12, 2), nullable=False)
-    timestamp = Column(DateTime, default=utcnow, nullable=False)
+    timestamp = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     auction_id = Column(Integer, ForeignKey("auctions.id"), nullable=False)
     user = relationship("User", back_populates="bids")

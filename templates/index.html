@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AuctionHub — Онлайн-аукцион</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <title>Лотус - Онлайн-аукцион</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.css">
+    <link rel="stylesheet" href="/static/vendor/cropper.min.css">
+  <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/index.css">
 </head>
 <body>
@@ -18,8 +20,8 @@
 <header class="navbar">
   <div class="nav-inner">
     <a class="nav-logo" href="index.html">
-      <div class="nav-logo-icon">🔨</div>
-      <span class="nav-logo-text">AuctionHub</span>
+      <div class="nav-logo-icon"></div>
+      <span class="nav-logo-text">Лотус</span>
     </a>
 
     <div class="nav-divider"></div>
@@ -28,7 +30,7 @@
       <button class="nav-link active" onclick="showSection(event,'auctions')">Аукционы</button>
     </nav>
 
-    <!-- Центральный поиск -->
+    <!-- Centered search -->
     <div class="nav-search" style="position:relative;">
       <div class="search-wrap" id="searchWrap">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-3);flex-shrink:0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -53,8 +55,8 @@
       <a class="nav-user" id="userProfile" style="display:none;" href="profile.html">
         <div class="nav-avatar" id="userAvatarSmall">?</div>
         <div>
-          <div class="nav-user-name" id="userName">—</div>
-          <div class="nav-balance">$<span id="userBalanceSmall">0</span></div>
+          <div class="nav-user-name" id="userName">-</div>
+          <div class="nav-balance"><span id="userBalanceSmall">0</span> ₽</div>
         </div>
       </a>
 
@@ -82,22 +84,133 @@
 <!-- Mobile nav -->
 <div class="mobile-nav" id="mobileNav" onclick="closeMobileNav(event)">
   <div class="mobile-nav-inner">
-    <div style="font-size:15px;font-weight:700;padding:4px 12px 12px;border-bottom:1px solid var(--border);margin-bottom:8px;">AuctionHub</div>
+    <div class="mobile-nav-title">Лотус</div>
     <button class="mobile-nav-link active" onclick="showSection(event,'auctions');closeMobileNavFull()">🏠 Аукционы</button>
-    <button class="mobile-nav-link" href="my-bids.html" onclick="closeMobileNavFull()">🎯 Мои ставки</button>
+    <button class="mobile-nav-link" onclick="window.location.href='my-bids.html'">🎯 Мои ставки</button>
     <button class="mobile-nav-link" onclick="window.location.href='profile.html'">👤 Профиль</button>
   </div>
 </div>
+
+<!-- ================================================================
+     HERO
+     ================================================================ -->
+<section class="hero" id="hero">
+  <div class="hero-bg" aria-hidden="true">
+    <div class="hero-glow"></div>
+    <div class="hero-grid"></div>
+  </div>
+
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      <span class="hero-pulse"></span>
+      Торги в реальном времени
+    </div>
+
+    <h1 class="hero-title">
+      Уникальные лоты.<br>
+      <span class="hero-title-accent">Честные торги.</span>
+    </h1>
+
+    <p class="hero-sub">
+      Платформа для коллекционеров и охотников за сокровищами.
+      Делайте ставки, выигрывайте редкие предметы, выставляйте свои лоты.
+    </p>
+
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="#auctionsContainer" onclick="event.preventDefault(); if(typeof scrollToAuctionsTop==='function') scrollToAuctionsTop(); else document.getElementById('auctionsContainer')?.scrollIntoView({behavior:'smooth'});">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        Смотреть лоты
+      </a>
+      <button class="btn btn-secondary btn-lg" type="button" onclick="(window.currentUser?showCreateModal():showAuth())">
+        Выставить свой лот
+      </button>
+    </div>
+
+    <div class="hero-stats" id="heroStats">
+      <div class="hero-stat">
+        <div class="hero-stat-value" id="statActive">-</div>
+        <div class="hero-stat-label">Активных лотов</div>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">24/7</div>
+        <div class="hero-stat-label">Поддержка</div>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <div class="hero-stat-value">0%</div>
+        <div class="hero-stat-label">Комиссия покупателя</div>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" id="statCommission">7%</div>
+        <div class="hero-stat-label">Комиссия продавца</div>
+      </div>
+    </div>
+
+    <div class="hero-trust">
+      <span class="hero-trust-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Безопасные сделки
+      </span>
+      <span class="hero-trust-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        Проверка лотов
+      </span>
+      <span class="hero-trust-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-3 7h7l-9 13 3-9H4z"/></svg>
+        Мгновенные ставки
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================
+     FEATURED STRIP - ending soon
+     ================================================================ -->
+<section class="featured-strip" id="featuredStrip" hidden>
+  <div class="featured-head">
+    <div class="featured-title-wrap">
+      <span class="featured-flame">🔥</span>
+      <h2 class="featured-title">Скоро завершатся</h2>
+      <span class="featured-sub">Самые горящие лоты - успей сделать ставку</span>
+    </div>
+    <div class="featured-controls">
+      <button type="button" class="featured-arrow" id="featuredPrev" aria-label="Прокрутить назад" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button type="button" class="featured-arrow" id="featuredNext" aria-label="Прокрутить вперёд">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="featured-scroll" id="featuredScroll"></div>
+</section>
 
 <!-- ================================================================
      MAIN PAGE
      ================================================================ -->
 <main class="page-layout">
 
+  <!-- Mobile-only backdrop. Tapping it closes the filter drawer.
+       On desktop it's invisible because the sidebar is permanently
+       visible, no need for any overlay. -->
+  <div class="filter-backdrop" id="filterBackdrop" hidden></div>
+
   <!-- ======= SIDEBAR FILTERS ======= -->
   <aside class="filter-sidebar" id="filterSidebar">
 
-    <!-- Статус -->
+    <!-- Drawer header - only rendered as visible inside the mobile
+         off-canvas mode (CSS hides it on desktop). Carries the title
+         and a close (×) button. -->
+    <div class="fs-drawer-head">
+      <span class="fs-drawer-title">Фильтры</span>
+      <button type="button" class="fs-drawer-close" id="filterCloseBtn" aria-label="Закрыть фильтры">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <!-- Status -->
     <div class="fs-section">
       <div class="fs-label">Статус</div>
       <div class="fs-status-tabs">
@@ -107,52 +220,103 @@
       </div>
     </div>
 
-    <!-- Категории -->
+    <!-- Categories -->
     <div class="fs-section">
       <div class="fs-label">Категория</div>
       <div class="fs-cat-list" id="fsCatList">
         <button class="fs-cat-item active" data-slug="" onclick="selectCategory(this,'',null,'','')">
-          <span>🏷️</span> Все категории
+          Все категории
         </button>
       </div>
     </div>
 
-    <!-- Тип аукциона -->
+    <!-- Auction type -->
     <div class="fs-section">
       <div class="fs-label">Тип аукциона</div>
       <div class="fs-checks">
-        <label class="fs-check"><input type="checkbox" id="filterBid"> 🔨 Торги (BID)</label>
-        <label class="fs-check"><input type="checkbox" id="filterBin"> ⚡ Купить сразу (BIN)</label>
+        <label class="fs-check">
+          <input type="checkbox" id="filterBid">
+          <span class="fs-check-box"><svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg></span>
+          <span class="fs-check-text">Торги</span>
+          <span class="fs-check-tag">BID</span>
+        </label>
+        <label class="fs-check">
+          <input type="checkbox" id="filterBin">
+          <span class="fs-check-box"><svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg></span>
+          <span class="fs-check-text">Купить сразу</span>
+          <span class="fs-check-tag">BIN</span>
+        </label>
       </div>
     </div>
 
-    <!-- Цена -->
+    <!-- Price -->
     <div class="fs-section">
-      <div class="fs-label">Цена ($)</div>
+      <div class="fs-label">Цена (₽)</div>
       <div class="fs-price-row">
-        <input type="number" class="fs-price-input" id="minPrice" placeholder="от">
-        <span class="fs-price-sep">—</span>
-        <input type="number" class="fs-price-input" id="maxPrice" placeholder="до">
+        <div class="fs-num">
+          <input type="number" class="fs-price-input" id="minPrice" placeholder="от" min="0">
+          <div class="fs-num-stepper">
+            <button type="button" class="fs-num-btn" data-step="up" tabindex="-1" aria-label="Увеличить">
+              <svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 4 1 7 4"/></svg>
+            </button>
+            <button type="button" class="fs-num-btn" data-step="down" tabindex="-1" aria-label="Уменьшить">
+              <svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 4 4 7 1"/></svg>
+            </button>
+          </div>
+        </div>
+        <span class="fs-price-sep">-</span>
+        <div class="fs-num">
+          <input type="number" class="fs-price-input" id="maxPrice" placeholder="до" min="0">
+          <div class="fs-num-stepper">
+            <button type="button" class="fs-num-btn" data-step="up" tabindex="-1" aria-label="Увеличить">
+              <svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 4 1 7 4"/></svg>
+            </button>
+            <button type="button" class="fs-num-btn" data-step="down" tabindex="-1" aria-label="Уменьшить">
+              <svg width="8" height="5" viewBox="0 0 8 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 4 4 7 1"/></svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Сортировка -->
+    <!-- Sort -->
     <div class="fs-section">
       <div class="fs-label">Сортировка</div>
-      <select class="fs-select" id="sortFilter">
-        <option value="time">По времени</option>
-        <option value="price_asc">Цена ↑</option>
-        <option value="price_desc">Цена ↓</option>
-      </select>
+      <div class="fs-dropdown" data-target="sortFilter">
+        <button type="button" class="fs-dd-trigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="fs-dd-current">По времени</span>
+          <svg class="fs-dd-chev" width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 1 5 5 9 1"/></svg>
+        </button>
+        <ul class="fs-dd-menu" role="listbox">
+          <li class="fs-dd-opt is-selected" data-value="time" role="option" aria-selected="true">
+            <span class="fs-dd-opt-label">По времени</span>
+            <svg class="fs-dd-tick" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg>
+          </li>
+          <li class="fs-dd-opt" data-value="price_asc" role="option" aria-selected="false">
+            <span class="fs-dd-opt-label">Дешевле</span>
+            <svg class="fs-dd-tick" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg>
+          </li>
+          <li class="fs-dd-opt" data-value="price_desc" role="option" aria-selected="false">
+            <span class="fs-dd-opt-label">Дороже</span>
+            <svg class="fs-dd-tick" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 8 7 12 13 4"/></svg>
+          </li>
+        </ul>
+        <!-- Hidden native select for JS API compatibility -->
+        <select class="fs-dd-native" id="sortFilter" aria-hidden="true" tabindex="-1">
+          <option value="time">По времени</option>
+          <option value="price_asc">Дешевле</option>
+          <option value="price_desc">Дороже</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Автор -->
+    <!-- Creator -->
     <div class="fs-section">
       <div class="fs-label">Автор</div>
       <input type="text" class="fs-input" id="creatorInput" placeholder="@username">
     </div>
 
-    <!-- Кнопки -->
+    <!-- Buttons -->
     <div class="fs-actions">
       <button class="btn btn-primary" style="width:100%;" onclick="applyFilters()">Применить</button>
       <button class="btn btn-ghost" style="width:100%;margin-top:4px;" onclick="resetFilters()">Сбросить фильтры</button>
@@ -168,14 +332,23 @@
         <p class="page-subtitle">Участвуйте в торгах и находите уникальные лоты</p>
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <!-- Mobile-only trigger that opens the off-canvas filter
+             drawer. The badge inside is filled by JS with the number of
+             currently active filters (≥1 means "has-active" class
+             toggled, surfaces the badge). -->
+        <button type="button" class="filter-toggle" id="filterToggleBtn" aria-label="Открыть фильтры">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/></svg>
+          <span>Фильтры</span>
+          <span class="badge" id="filterActiveBadge">0</span>
+        </button>
         <span class="toolbar-count" id="resultInfoInline"></span>
       </div>
     </div>
 
-    <!-- Активные теги фильтров -->
+    <!-- Active filter tags -->
     <div class="filter-tags" id="filterTags"></div>
 
-    <!-- Скрытые элементы для совместимости -->
+    <!-- Hidden elements kept for compatibility -->
     <span style="display:none" id="resultInfo"></span>
     <span style="display:none" id="advancedFilters"></span>
     <button style="display:none" id="applyBtn" type="button"></button>
@@ -184,14 +357,76 @@
     <div id="auctionsContainer" class="auctions-grid"></div>
 
     <div class="pagination" id="pagination" style="display:none;">
-      <button class="pagination-btn" id="prevBtn" onclick="changePage(-1)">← Назад</button>
-      <span class="pagination-info" id="pageInfo">Страница 1 из 1</span>
-      <button class="pagination-btn" id="nextBtn" onclick="changePage(1)">Вперёд →</button>
+      <button class="pagination-btn pagination-arrow" id="prevBtn" onclick="changePage(-1)" aria-label="Предыдущая страница">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="pagination-pages" id="paginationPages"></div>
+      <button class="pagination-btn pagination-arrow" id="nextBtn" onclick="changePage(1)" aria-label="Следующая страница">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      <div class="pagination-jump">
+        <span class="pagination-jump-label">К стр.</span>
+        <input type="number" id="pageJumpInput" class="pagination-jump-input" min="1" placeholder="#" aria-label="Перейти к странице">
+      </div>
+      <span class="pagination-info" id="pageInfo" style="display:none;"></span>
     </div>
   </div>
 
 </main>
 
+<!-- ================================================================
+     FOOTER
+     ================================================================ -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="footer-logo">
+        <div class="nav-logo-icon" style="width:28px;height:28px;"></div>
+        <span class="footer-logo-text">Лотус</span>
+      </div>
+      <p class="footer-tagline">
+        Платформа онлайн-аукционов для коллекционеров.<br>
+        Торгуйтесь честно, побеждайте достойно.
+      </p>
+      <div class="footer-social">
+        <a class="footer-soc" href="#" aria-label="Telegram"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg></a>
+        <a class="footer-soc" href="#" aria-label="GitHub"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57v-2c-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.08-.74.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.5 1 .1-.78.42-1.31.76-1.61-2.66-.3-5.47-1.34-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.11-3.18 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.13 3.18a4.65 4.65 0 0 1 1.23 3.22c0 4.6-2.81 5.62-5.48 5.92.42.36.81 1.1.81 2.22v3.29c0 .31.22.69.83.57A12 12 0 0 0 12 .3z"/></svg></a>
+        <a class="footer-soc" href="#" aria-label="Twitter"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+      </div>
+    </div>
+
+    <div class="footer-cols">
+      <div class="footer-col">
+        <div class="footer-col-title">Платформа</div>
+        <a class="footer-link" href="#auctionsContainer" onclick="event.preventDefault(); if(typeof scrollToAuctionsTop==='function') scrollToAuctionsTop(); else document.getElementById('auctionsContainer')?.scrollIntoView({behavior:'smooth'});">Все аукционы</a>
+        <a class="footer-link" href="my-bids.html">Мои ставки</a>
+        <a class="footer-link" href="profile.html">Профиль</a>
+      </div>
+
+      <div class="footer-col">
+        <div class="footer-col-title">Помощь</div>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Как делать ставки')">Как делать ставки</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Безопасность')">Безопасность</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('FAQ')">FAQ</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Поддержка')">Поддержка</a>
+      </div>
+
+      <div class="footer-col">
+        <div class="footer-col-title">О сервисе</div>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('О нас')">О нас</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Контакты')">Контакты</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Условия')">Условия</a>
+        <a class="footer-link" href="#" onclick="event.preventDefault();comingSoon('Политика')">Политика</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bottom">
+    <div class="footer-bottom-inner">
+      <span class="footer-copy">© 2026 Лотус. Все права защищены.</span>
+    </div>
+  </div>
+</footer>
 
 <!-- FAB (mobile) -->
 <button class="fab" id="fabCreate" type="button" onclick="showCreateModal()">+ Создать</button>
@@ -219,6 +454,9 @@
       <div class="form-group">
         <label class="form-label">Пароль</label>
         <input type="password" class="form-input" id="loginPassword" required>
+      </div>
+      <div style="text-align:right;margin:-6px 0 8px 0;">
+        <a href="forgot-password.html" style="font-size:12px;color:#2dd4bf;text-decoration:none;">Забыли пароль?</a>
       </div>
       <button type="submit" class="btn btn-primary btn-full" style="margin-top:4px;">Войти</button>
     </form>
@@ -260,15 +498,15 @@
         <div class="create-pane">
           <div class="form-group">
             <label class="form-label">Изображения <span style="color:var(--text-3);font-weight:400">(до 5 фото)</span></label>
-            <!-- Превью загруженных -->
+            <!-- Preview of uploaded files -->
             <div class="multi-img-preview" id="multiImgPreview"></div>
-            <!-- Кнопка добавить -->
+            <!-- Add button -->
             <label class="multi-img-add" id="multiImgAddBtn" for="auctionImageFile">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Добавить фото
             </label>
             <input type="file" class="form-input" id="auctionImageFile" accept="image/*" style="display:none;" multiple>
-            <div class="img-hint">Первое фото — обложка. Можно добавить до 5 изображений.</div>
+            <div class="img-hint">Первое фото - обложка. Можно добавить до 5 изображений.</div>
           </div>
         </div>
 
@@ -285,10 +523,10 @@
             <label class="form-label">Категория</label>
             <div class="cat-picker" id="createCatPicker">
               <select class="form-input cat-picker-parent" id="auctionCategoryParent">
-                <option value="">— Выберите категорию —</option>
+                <option value="">- Выберите категорию -</option>
               </select>
               <select class="form-input cat-picker-sub" id="auctionCategory" style="display:none;">
-                <option value="">— Подкатегория —</option>
+                <option value="">- Подкатегория -</option>
               </select>
             </div>
           </div>
@@ -296,21 +534,22 @@
             <label class="form-label">Тип аукциона</label>
             <div class="auction-type-tabs">
               <button type="button" class="type-tab active" data-type="bid" onclick="setAuctionType('bid')">
-                🔨 Торги (BID)
+                Торги (BID)
               </button>
               <button type="button" class="type-tab" data-type="bin" onclick="setAuctionType('bin')">
-                ⚡ Купить сразу (BIN)
+                Купить сразу (BIN)
               </button>
             </div>
-            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки — побеждает наибольшая</div>
+            <div class="img-hint" id="auctionTypeHint">Покупатели делают ставки - побеждает наибольшая</div>
           </div>
 
-          <!-- BID поля -->
+          <!-- BID fields -->
           <div id="bidFields">
             <div class="form-group">
-              <label class="form-label">Стартовая цена ($)</label>
+              <label class="form-label">Стартовая цена (₽)</label>
               <input type="number" class="form-input" id="auctionPrice" min="1" step="0.01" placeholder="например, 100">
               <div class="img-hint">Минимальная ставка, с которой начнутся торги</div>
+              <div class="payout-hint" id="auctionPricePayout" hidden></div>
             </div>
             <div class="form-group">
               <label class="form-label">Длительность</label>
@@ -318,16 +557,17 @@
                 <input type="number" class="form-input" id="auctionDuration" min="1" max="10080" value="60" placeholder="60" style="flex:1;">
                 <span style="font-size:12px;color:var(--text-3);white-space:nowrap;">мин</span>
               </div>
-              <div class="img-hint" id="durationHint">1 час — аукцион завершится через 60 мин</div>
+              <div class="img-hint" id="durationHint">1 час - аукцион завершится через 60 мин</div>
             </div>
           </div>
 
-          <!-- BIN поля -->
+          <!-- BIN fields -->
           <div id="binFields" style="display:none;">
             <div class="form-group">
-              <label class="form-label">Цена «Купить сразу» ($)</label>
+              <label class="form-label">Цена «Купить сразу» (₽)</label>
               <input type="number" class="form-input" id="auctionBinPrice" min="1" step="0.01" placeholder="например, 500">
               <div class="img-hint">Первый покупатель забирает лот по этой цене</div>
+              <div class="payout-hint" id="auctionBinPricePayout" hidden></div>
             </div>
             <div class="form-group">
               <label class="form-label">Длительность <span style="color:var(--text-3);font-weight:400">(необязательно)</span></label>
@@ -349,11 +589,266 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/cropperjs@1.6.2/dist/cropper.min.js"></script>
+<script src="/static/vendor/cropper.min.js"></script>
 
 <!-- ================================================================
-     COMPAT SHIMS — bridge new HTML to existing JS
+     COMPAT SHIMS - bridge new HTML to existing JS
      ================================================================ -->
+  <script src="/static/js/common.js"></script>
   <script src="/static/js/index.js"></script>
+
+  <!-- Hero stat: live count of active auctions -->
+  <script>
+    (function() {
+      const el = document.getElementById('statActive');
+      if (!el) return;
+
+      const animate = (to) => {
+        const dur = 900, t0 = performance.now();
+        const fmt = (n) => n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(n);
+        const tick = (t) => {
+          const k = Math.min(1, (t - t0) / dur);
+          const eased = 1 - Math.pow(1 - k, 3);
+          el.textContent = fmt(Math.round(to * eased));
+          if (k < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      };
+
+      fetch('/api/auctions?status=active&page=1&page_size=1')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && typeof d.total === 'number') animate(d.total); })
+        .catch(() => {});
+    })();
+  </script>
+
+  <!-- Featured strip: ending soon -->
+  <script>
+    (function() {
+      const section  = document.getElementById('featuredStrip');
+      const scroll   = document.getElementById('featuredScroll');
+      const prevBtn  = document.getElementById('featuredPrev');
+      const nextBtn  = document.getElementById('featuredNext');
+      if (!section || !scroll) return;
+
+      const fmt = (sec) => {
+        if (sec <= 0) return 'завершён';
+        const d = Math.floor(sec / 86400);
+        const h = Math.floor((sec % 86400) / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        if (d > 0) return `${d}д ${h}ч`;
+        if (h > 0) return `${h}ч ${String(m).padStart(2,'0')}м`;
+        if (m > 0) return `${m}:${String(s).padStart(2,'0')}`;
+        return `0:${String(s).padStart(2,'0')}`;
+      };
+
+      const urgencyClass = (sec) => {
+        if (sec <= 0) return 'ended';
+        if (sec < 3600) return 'critical';
+        if (sec < 21600) return 'urgent';
+        return 'normal';
+      };
+
+      const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+
+      const fmtPrice = (p) => {
+        const n = Number(p);
+        if (!isFinite(n)) return p;
+        return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+      };
+
+      const updateArrows = () => {
+        const max = scroll.scrollWidth - scroll.clientWidth;
+        prevBtn.disabled = scroll.scrollLeft <= 2;
+        nextBtn.disabled = scroll.scrollLeft >= max - 2;
+      };
+
+      const tick = () => {
+        const now = Date.now();
+        scroll.querySelectorAll('.featured-card').forEach(card => {
+          const end = parseInt(card.dataset.end, 10);
+          if (!end) return;
+          const sec = Math.floor((end - now) / 1000);
+          const t = card.querySelector('.featured-timer-text');
+          if (t) t.textContent = fmt(sec);
+          const b = card.querySelector('.featured-timer');
+          if (b) {
+            b.classList.remove('ended','critical','urgent','normal');
+            b.classList.add(urgencyClass(sec));
+          }
+        });
+      };
+
+      const render = (items) => {
+        if (!items || !items.length) { section.hidden = true; return; }
+        section.hidden = false;
+
+        // Use the server-supplied time_remaining (it computes against UTC correctly).
+        // end_time in the API response is naive-UTC without 'Z', so the browser
+        // parses it as local time and the countdown drifts by the UTC offset.
+        const baseTs = Date.now();
+        scroll.innerHTML = items.map(a => {
+          const remaining = Number.isFinite(a.time_remaining) ? a.time_remaining : 0;
+          const end = baseTs + remaining * 1000;
+          const sec = Math.max(0, remaining);
+          const cls = urgencyClass(sec);
+
+          const cover = (a.image_urls && a.image_urls[0]) || a.image_url;
+          const coverUrl = cover
+            ? (String(cover).startsWith('http') ? cover : (window.location.origin + cover))
+            : null;
+
+          const imgInner = coverUrl
+            ? `<img src="${escapeHtml(coverUrl)}" alt="" loading="lazy">`
+            : `<div class="featured-ph">${a.category && a.category.icon ? a.category.icon : '🏷️'}</div>`;
+
+          const typeBadge = a.auction_type === 'bin'
+            ? `<span class="featured-type bin">⚡ BIN</span>`
+            : `<span class="featured-type bid">🔨 BID</span>`;
+
+          return `
+            <a class="featured-card" href="auction.html?id=${a.id}" data-end="${end}">
+              <div class="featured-img">
+                ${imgInner}
+                <div class="featured-timer ${cls}">
+                  <span class="featured-pulse"></span>
+                  <span class="featured-timer-text">${fmt(sec)}</span>
+                </div>
+                ${typeBadge}
+              </div>
+              <div class="featured-body">
+                <div class="featured-card-title">${escapeHtml(a.title)}</div>
+                <div class="featured-card-meta">
+                  <span class="featured-card-price">${fmtPrice(a.current_price)}</span>
+                  <span class="featured-card-bids">${a.bids_count || 0} ст.</span>
+                </div>
+              </div>
+            </a>
+          `;
+        }).join('');
+
+        requestAnimationFrame(updateArrows);
+      };
+
+      // Scroll arrows
+      prevBtn.addEventListener('click', () => {
+        scroll.scrollBy({ left: -scroll.clientWidth * 0.8, behavior: 'smooth' });
+      });
+      nextBtn.addEventListener('click', () => {
+        scroll.scrollBy({ left:  scroll.clientWidth * 0.8, behavior: 'smooth' });
+      });
+      scroll.addEventListener('scroll', updateArrows, { passive: true });
+      window.addEventListener('resize', updateArrows);
+
+      // Fetch + render
+      fetch('/api/auctions?status=active&sort_by=time&page=1&page_size=12')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && d.items) render(d.items); })
+        .catch(() => { section.hidden = true; });
+
+      // Live countdown
+      setInterval(tick, 1000);
+    })();
+  </script>
+
+  <!-- Custom dropdown (sidebar sort) -->
+  <script>
+    (function() {
+      document.querySelectorAll('.fs-dropdown').forEach(dd => {
+        const trigger = dd.querySelector('.fs-dd-trigger');
+        const menu    = dd.querySelector('.fs-dd-menu');
+        const current = dd.querySelector('.fs-dd-current');
+        const native  = dd.querySelector('.fs-dd-native');
+        const opts    = dd.querySelectorAll('.fs-dd-opt');
+
+        const close = () => {
+          dd.classList.remove('open');
+          trigger.setAttribute('aria-expanded', 'false');
+        };
+        const open = () => {
+          document.querySelectorAll('.fs-dropdown.open').forEach(o => o.classList.remove('open'));
+          dd.classList.add('open');
+          trigger.setAttribute('aria-expanded', 'true');
+        };
+        const select = (value) => {
+          opts.forEach(o => {
+            const sel = o.dataset.value === value;
+            o.classList.toggle('is-selected', sel);
+            o.setAttribute('aria-selected', sel ? 'true' : 'false');
+            if (sel) current.textContent = o.querySelector('.fs-dd-opt-label').textContent;
+          });
+          if (native && native.value !== value) {
+            native.value = value;
+            native.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        };
+
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dd.classList.contains('open') ? close() : open();
+        });
+
+        opts.forEach(o => {
+          o.addEventListener('click', () => { select(o.dataset.value); close(); });
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!dd.contains(e.target)) close();
+        });
+
+        document.addEventListener('keydown', (e) => {
+          if (!dd.classList.contains('open')) return;
+          if (e.key === 'Escape') { close(); trigger.focus(); }
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const list = Array.from(opts);
+            const idx = list.findIndex(o => o.classList.contains('is-selected'));
+            const nextIdx = e.key === 'ArrowDown'
+              ? (idx + 1) % list.length
+              : (idx - 1 + list.length) % list.length;
+            select(list[nextIdx].dataset.value);
+          }
+          if (e.key === 'Enter') close();
+        });
+
+        // Initial sync
+        if (native) select(native.value);
+      });
+    })();
+  </script>
+
+  <!-- Custom number steppers (sidebar price filter) -->
+  <script>
+    (function() {
+      document.querySelectorAll('.fs-num-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const input = btn.closest('.fs-num').querySelector('input[type=number]');
+          if (!input) return;
+          if (btn.dataset.step === 'up') input.stepUp(); else input.stepDown();
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+      });
+    })();
+  </script>
+
+  <!-- Reveal-on-scroll for hero + footer + cards -->
+  <script>
+    (function() {
+      if (!('IntersectionObserver' in window)) return;
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.classList.add('reveal-in');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.08 });
+      document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+    })();
+  </script>
 </body>
 </html>

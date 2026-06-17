@@ -1,7 +1,7 @@
-from enum import Enum
+from enum import StrEnum
 
 
-class NotificationType(str, Enum):
+class NotificationType(StrEnum):
     BID_OUTBID = "bid_outbid"
     BID_PLACED = "bid_placed"
     AUCTION_ENDING = "auction_ending"

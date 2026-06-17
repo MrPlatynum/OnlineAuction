@@ -1,3 +1,10 @@
+"""Credential primitives: password hashing, JWT issuance and decode,
+plus the FastAPI dependency that pulls the current user out of an
+incoming Authorization header. New passwords use Argon2id; legacy
+bcrypt hashes (from before the migration) are verified by ``passlib``
+and re-hashed transparently on the next successful login.
+"""
+
 import hashlib
 import secrets
 from datetime import timedelta
@@ -12,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import (
     ACCESS_TOKEN_EXPIRE_HOURS,
     ALGORITHM,
+    JWT_AUDIENCE,
+    JWT_ISSUER,
     LEGACY_PASSWORD_KEYS,
     SECRET_KEY,
 )
@@ -19,11 +28,57 @@ from app.database import get_db
 from app.models import User
 from app.utils.time import utcnow
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# argon2id is the primary scheme for new hashes; bcrypt stays in the
+# verifier chain so existing accounts still log in. Tunables follow the
+# OWASP cheat sheet (2024) for argon2id: m = 19 MiB, t = 2, p = 1.
+# ``deprecated="auto"`` flags non-primary schemes (i.e. bcrypt) so
+# ``needs_rehash`` returns True on a successful login and the row gets
+# rotated to argon2id transparently.
+pwd_context = CryptContext(
+    schemes=["argon2", "bcrypt"],
+    deprecated="auto",
+    argon2__time_cost=2,
+    argon2__memory_cost=19456,
+    argon2__parallelism=1,
+)
 security = HTTPBearer()
+
+# Defensive cap on raw password input. Pydantic enforces max_length=128
+# on register / change-password, but UserLogin.password is unbounded -
+# without this cap a multi-MB password input would let an attacker
+# spend our CPU on argon2/bcrypt verification.
+PASSWORD_INPUT_LIMIT = 1024
+
+# Precomputed argon2id hash of a constant string used to keep /login
+# timing stable when the supplied username doesn't exist. Without this
+# the handler short-circuits before verify_password and "user-doesn't-
+# exist" returns in microseconds while a real-but-wrong password takes
+# ~50 ms - trivial to distinguish over the network. We verify against
+# this hash instead so both branches spend the same CPU. Eagerly
+# evaluated at import: a lazy global with no lock would race the
+# ~50 ms argon2 cost across the first few concurrent /login misses,
+# making the timing-stability invariant itself non-uniform on a
+# cold process.
+_DUMMY_HASH: str = pwd_context.hash("timing-stability-dummy")
+
+
+def _dummy_password_hash() -> str:
+    return _DUMMY_HASH
+
+
+def consume_password_verify_time(password: str) -> None:
+    """Run the password verifier against a precomputed dummy hash and
+    discard the result. Used by /login when the username doesn't exist
+    so the response time matches the user-exists-but-wrong-password
+    branch."""
+    if len(password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
+        return
+    pwd_context.verify(password, _dummy_password_hash())
 
 
 def hash_password(password: str) -> str:
+    if len(password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
+        raise ValueError("Password input exceeds limit")
     return pwd_context.hash(password)
 
 
@@ -31,9 +86,30 @@ def is_modern_password_hash(hashed_password: str) -> bool:
     return pwd_context.identify(hashed_password) is not None
 
 
+def needs_rehash(hashed_password: str) -> bool:
+    """True if the stored hash should be rotated on the next successful
+    login - either it's the legacy SHA256+key format from before passlib
+    was wired up, or it's a deprecated scheme (bcrypt now that argon2id
+    is primary)."""
+    if not is_modern_password_hash(hashed_password):
+        return True
+    return pwd_context.needs_update(hashed_password)
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    # An over-cap input can never be a valid credential - we never
+    # accept it for hashing - so reject without spending CPU.
+    if len(plain_password.encode("utf-8")) > PASSWORD_INPUT_LIMIT:
+        return False
     if is_modern_password_hash(hashed_password):
         return pwd_context.verify(plain_password, hashed_password)
+    # Legacy SHA256 verification is microsecond-fast; without this argon2
+    # warmup on the dummy hash a /login against a legacy account would
+    # return in µs while a modern-account login takes ~50 ms (argon2)
+    # and an unknown-user login takes ~50 ms (consume_password_verify_time).
+    # The timing split distinguishes "legacy", "modern", and "no such
+    # user" branches over the wire.
+    pwd_context.verify(plain_password, _dummy_password_hash())
     keys_to_check = [SECRET_KEY, *LEGACY_PASSWORD_KEYS]
     for key in keys_to_check:
         legacy_hash = hashlib.sha256((plain_password + key).encode()).hexdigest()
@@ -42,21 +118,162 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return False
 
 
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+def create_access_token(claims: dict) -> str:
+    """Sign a JWT carrying ``claims`` plus a fixed expiry. Callers pass
+    in domain-specific fields (``user_id``, ``tv``, …); this function
+    only adds ``exp`` and the standard ``iss`` / ``aud`` claims so the
+    expiry + audience policy stays in one place."""
+    payload = claims.copy()
+    payload["exp"] = utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    payload["iss"] = JWT_ISSUER
+    payload["aud"] = JWT_AUDIENCE
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_token(token: str):
+def create_user_access_token(user: "User") -> str:
+    """Issue a token bound to the user's current ``token_version``.
+    A future bump (e.g. /change-password) invalidates this token at
+    get_current_user even though it hasn't expired yet."""
+    return create_access_token({"user_id": user.id, "tv": user.token_version})
+
+
+EMAIL_VERIFY_PURPOSE = "email_verify"
+EMAIL_VERIFY_TOKEN_TTL_HOURS = 24
+
+PASSWORD_RESET_PURPOSE = "password_reset"
+PASSWORD_RESET_TOKEN_TTL_HOURS = 1
+PASSWORD_RESET_THROTTLE_SECONDS = 60
+# Floor on the /password-reset/request response time - ensures the three
+# branches (unknown email / throttled existing / fresh existing) cannot be
+# distinguished by latency.
+#
+# Was 100 ms; raised to 500 ms because under DB contention or SMTP
+# back-pressure the fresh-existing branch routinely exceeds 100 ms in
+# production (the outbox INSERT alone can land at 150-200 ms on a
+# busy box), and once a single branch crosses the floor the timing
+# difference between the three states becomes observable again. The
+# UX cost is invisible - the user is staring at a generic
+# "if your email exists we sent a link" page either way.
+PASSWORD_RESET_REQUEST_FLOOR_SECONDS = 0.5
+
+
+def create_email_verify_token(user: "User") -> str:
+    """Issue a stateless JWT carrying ``user.email`` as a claim. If the
+    user later changes their email the token's claim no longer matches
+    the row, so old verification links auto-invalidate without a
+    server-side revocation list. Signed with ``AUCTION_SECRET_KEY``
+    (same as auth tokens), but the ``purpose`` claim makes them
+    distinguishable so an auth token can't be replayed at /verify-email
+    and vice versa."""
+    expire = utcnow() + timedelta(hours=EMAIL_VERIFY_TOKEN_TTL_HOURS)
+    payload = {
+        "user_id": user.id,
+        "email": user.email,
+        "purpose": EMAIL_VERIFY_PURPOSE,
+        "exp": expire,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_password_reset_token(user: "User") -> str:
+    """Issue a stateless JWT carrying ``user.token_version`` so a
+    successful reset (which bumps tv) auto-invalidates any other
+    outstanding reset link for the same account. Signed with
+    ``AUCTION_SECRET_KEY`` (same as auth tokens), distinguished by
+    the ``purpose`` claim so an auth token can't be replayed at
+    /password-reset/confirm and vice versa."""
+    expire = utcnow() + timedelta(hours=PASSWORD_RESET_TOKEN_TTL_HOURS)
+    payload = {
+        "user_id": user.id,
+        "tv": user.token_version,
+        "purpose": PASSWORD_RESET_PURPOSE,
+        "exp": expire,
+        "iss": JWT_ISSUER,
+        "aud": JWT_AUDIENCE,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def _decode_purpose_token(
+    token: str,
+    expected_purpose: str,
+    *,
+    expired_detail: str,
+    invalid_detail: str,
+) -> dict:
+    """Verify a purpose-tagged JWT and return its payload.
+
+    Shared core of ``decode_password_reset_token`` and
+    ``decode_email_verify_token``: both raise 400 (user-facing form
+    error, not session-auth) on expiry / bad signature / wrong
+    purpose. Callers do their own type checks on the domain-specific
+    claims because the failure detail there matches the expiry detail.
+    """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+        )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail=expired_detail) from None
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=400, detail=invalid_detail) from None
+    if payload.get("purpose") != expected_purpose:
+        raise HTTPException(status_code=400, detail=invalid_detail)
+    return payload
+
+
+def decode_password_reset_token(token: str) -> tuple[int, int]:
+    """Returns ``(user_id, token_version)`` from a valid reset JWT."""
+    invalid_detail = "Неверная ссылка для сброса пароля"
+    payload = _decode_purpose_token(
+        token,
+        PASSWORD_RESET_PURPOSE,
+        expired_detail="Ссылка для сброса пароля истекла",
+        invalid_detail=invalid_detail,
+    )
+    user_id = payload.get("user_id")
+    tv = payload.get("tv")
+    if not isinstance(user_id, int) or not isinstance(tv, int):
+        raise HTTPException(status_code=400, detail=invalid_detail)
+    return user_id, tv
+
+
+def decode_email_verify_token(token: str) -> tuple[int, str]:
+    """Returns ``(user_id, email)`` from a valid email-verify JWT."""
+    invalid_detail = "Неверная ссылка для подтверждения email"
+    payload = _decode_purpose_token(
+        token,
+        EMAIL_VERIFY_PURPOSE,
+        expired_detail="Ссылка для подтверждения email истекла",
+        invalid_detail=invalid_detail,
+    )
+    user_id = payload.get("user_id")
+    email = payload.get("email")
+    if not isinstance(user_id, int) or not isinstance(email, str):
+        raise HTTPException(status_code=400, detail=invalid_detail)
+    return user_id, email
+
+
+def decode_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience=JWT_AUDIENCE,
+            issuer=JWT_ISSUER,
+        )
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
+        raise HTTPException(status_code=401, detail="Token expired") from None
     except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token") from None
 
 
 async def get_current_user(
@@ -71,4 +288,29 @@ async def get_current_user(
     user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Tokens issued before a password change / reset carry the old
+    # ``token_version``. ``/password-reset/confirm`` and the change-
+    # password flow bump the column under a row lock so every JWT
+    # signed off the old value (still-active browser sessions, queued
+    # email links) decodes here, mismatches, and 401s. A token without
+    # the ``tv`` claim at all (forged or pre-rollout legacy) must also
+    # 401 - otherwise it silently matches the ``token_version=0``
+    # default that every fresh account starts with.
+    token_version = payload.get("tv")
+    if token_version is None or token_version != user.token_version:
+        raise HTTPException(status_code=401, detail="Token invalidated")
     return user
+
+
+async def require_verified_user(
+    current_user: "User" = Depends(get_current_user),
+) -> "User":
+    """Gate for write actions that require a confirmed email: place bid,
+    buy now, create auction. Verified users pass through unchanged;
+    unverified get a 403 with a hint pointing at the resend endpoint."""
+    if not current_user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Подтвердите email прежде чем выполнить это действие",
+        )
+    return current_user
